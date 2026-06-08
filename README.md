@@ -9,4 +9,8 @@ A collection of TiDB demo repositories showcasing various use cases and applicat
 - [TiDB Agent](https://github.com/bernard-kavanagh/tidb-agent) — General-purpose TiDB agent demo
 - [EV Charger Anomaly Detection](https://github.com/bernard-kavanagh/ev_charger_anomaly_detection) — Anomaly detection for EV charging stations using TiDB
 - [TiDB Fraud Detection](https://github.com/bernard-kavanagh/tidb_fraud_detection) — Real-time fraud detection powered by TiDB
-- [Mem9 Agent Demo](https://github.com/stephenlthorn/mem9-demo) — Agent Memory Demo on mem9 
+- [Mem9 Agent Demo](https://github.com/stephenlthorn/mem9-demo) — Agent Memory Demo on mem9
+- [Mem9 AI Coding](https://github.com/stephenlthorn/mem9-ai-coding) — Persistent AI coding memory on TiDB Cloud Zero, showing how Claude Code + the mem9 plugin remembers developer context across sessions
+- [TiDB POV Kit (Self-Service)](https://github.com/stephenlthorn/tidb-pov-kit-self-service) — Self-service proof-of-value kit for running TiDB POCs
+- [Finance Fraud Detection](https://github.com/stephenlthorn/FinanceFraud) — TiDB Cloud demo combining hybrid search (BM25 + vector) and recursive-CTE graph fraud detection in a Streamlit app
+- [AI 30-Minute Demo](https://github.com/stephenlthorn/ai-30-min-demo) — FastAPI booth deck for a 30-minute AI demo on TiDB
