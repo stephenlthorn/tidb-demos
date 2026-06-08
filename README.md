@@ -14,3 +14,4 @@ A collection of TiDB demo repositories showcasing various use cases and applicat
 - [TiDB POV Kit (Self-Service)](https://github.com/stephenlthorn/tidb-pov-kit-self-service) — Self-service proof-of-value kit for running TiDB POCs
 - [Finance Fraud Detection](https://github.com/stephenlthorn/FinanceFraud) — TiDB Cloud demo combining hybrid search (BM25 + vector) and recursive-CTE graph fraud detection in a Streamlit app
 - [AI 30-Minute Demo](https://github.com/stephenlthorn/ai-30-min-demo) — FastAPI booth deck for a 30-minute AI demo on TiDB
+- [HTAP: Real-Time OLTP + OLAP Without ETL](htap-realtime-oltp-olap/) — Concurrent OLTP (TiKV row store) and OLAP (TiFlash columnar store) from a single TiDB cluster with zero ETL lag
