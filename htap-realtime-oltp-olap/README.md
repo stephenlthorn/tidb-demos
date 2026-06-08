@@ -4,11 +4,11 @@ Demonstrates TiDB's Hybrid Transactional/Analytical Processing (HTAP) architectu
 
 ## Why This Demo Exists
 
-Multiple prospects asked the same question this week:
+Multiple prospects asked the same question:
 
 > *"We use Aurora for OLTP and Redshift for analytics. The ETL pipeline introduces 15–30 minutes of lag and requires a separate cluster. Can TiDB replace both?"*
 
-Intuit's SE team (Henry Venturelli) made an explicit request: **"end-to-end OLTP-to-OLAP demo"** — their Anti-Fraud ODS runs 65,000 QPS with a hybrid pre-aggregation model (<90 days runtime, >180 days pre-aggregated). Croatian Telecom, Peregrine, Candescent, and Writer all hit the same architectural wall.
+This comes up repeatedly with accounts running high-QPS transactional workloads that also need real-time analytics — fraud detection, financial reporting, operational dashboards — where ETL lag is unacceptable.
 
 This demo answers that question with running code.
 
@@ -128,12 +128,12 @@ ETL pipelines:     0
 
 **"How fresh is the OLAP data?"**
 - TiFlash replication lag is typically < 1 second under normal write load
-- For Intuit's use case (pre-aggregation hybrid), queries < 90 days old hit TiFlash directly
+- For pre-aggregation hybrid models, queries within a short retention window hit TiFlash directly with no ETL
 
-**"Does this work at Intuit scale (65,000 QPS)?"**
+**"Does this scale to tens of thousands of QPS?"**
 - TiDB scales TiKV and TiFlash nodes independently
 - More TiFlash nodes → higher OLAP throughput without touching OLTP
-- Intuit runs 42 TiDB + 15 TiKV nodes in production
+- Production deployments commonly run dozens of TiDB + TiKV nodes
 
 **"What about CockroachDB / YugabyteDB?"**
 - Neither has a native columnar store
