@@ -1,0 +1,153 @@
+{
+  "version": "2026.1",
+  "title": "PingCAP SE Onboarding — Agent-Native Re-Sequence",
+  "note": "TiDB X and the agent-native (sys9) stack are front-loaded. Self-hosted DBA / Kubernetes content is demoted to electives by SE-vs-Support scope discipline. Every URL here is a real, existing asset; nothing is invented.",
+  "xp": { "admin": 10, "concept": 20, "lab": 30, "cert": 100, "challenge": 200, "activity": 50, "elective": 15 },
+  "levels": [
+    { "name": "Trial",        "min": 0 },
+    { "name": "Starter",      "min": 150 },
+    { "name": "Essential",    "min": 400 },
+    { "name": "Dedicated",    "min": 800 },
+    { "name": "BYOC",         "min": 1300 },
+    { "name": "Agent-Native", "min": 1900 }
+  ],
+  "badges": {
+    "cloud":      { "label": "Cloud Native",     "need": 4, "desc": "TiDB X architecture and the four tiers" },
+    "vector":     { "label": "Vector",           "need": 3, "desc": "HNSW vector search and embeddings" },
+    "search":     { "label": "Search",           "need": 3, "desc": "BM25 full-text and hybrid ranking" },
+    "agent":      { "label": "Agent-Native",     "need": 4, "desc": "sys9 stack: mem9, drive9, db9" },
+    "htap":       { "label": "HTAP",             "need": 3, "desc": "TiKV + TiFlash, no ETL" },
+    "migration":  { "label": "Migration",        "need": 2, "desc": "MySQL to TiDB, CDC, dual-write" },
+    "poc":        { "label": "POC Closer",       "need": 1, "desc": "Ran a full POC against the JEP motion" },
+    "slayer":     { "label": "Competitor Slayer","need": 1, "desc": "Cleared the objection gauntlet" }
+  },
+  "weeks": [
+    {
+      "id": 1, "title": "Orientation + The Thesis", "tag": "Cloud-native from day one",
+      "tasks": [
+        { "t": "NA/EMEA Day 1 Onboarding Checklist", "type": "admin", "note": "From HR email" },
+        { "t": "Schedule 1:1 with Onboarding Buddy", "type": "admin", "note": "Ask your manager" },
+        { "t": "Get added to key internal meetings + Jira + Zoom license", "type": "admin", "note": "Lark approvals; 3 Jira projects: NA POC, TiDBCloud-OnCall, FRM" },
+        { "t": "Complete SOC2 Security Training", "type": "admin", "url": "https://docs.google.com/document/d/1wrDVVhCDezyevi_rzeFgC8_9KfzlkLLFsAShBxQFyrE/edit" },
+        { "t": "Activate Salesforce, ChatGPT, and Chorus", "type": "admin", "note": "Kevin Lu provides access" },
+        { "t": "READ: Every user is an agent + four-systems-to-one", "type": "concept", "pillar": "agent", "url": "https://www.pingcap.com/ai/", "note": "The thesis the whole ramp hangs on: vector + OLTP + FTS + OLAP behind one ACID boundary" },
+        { "t": "Introduction to TiDB", "type": "concept", "url": "https://employees.edu.pingcap.com/plus/catalog/courses/203" },
+        { "t": "Lab: Introduction to TiDB Cloud Starter", "type": "lab", "pillar": "cloud", "url": "https://labs.tidb.io/labs/demo_203" },
+        { "t": "Lab: Seamless Scale-Out and Scale-In", "type": "lab", "url": "https://labs.tidb.io/labs/demo_009a" },
+        { "t": "Lab: Zero Downtime Under AZ Failure", "type": "lab", "url": "https://labs.tidb.io/labs/demo_001" },
+        { "t": "Cert: PingCAP Certified TiDB Practitioner", "type": "cert", "url": "https://employees.edu.pingcap.com/plus/my/courses/288" }
+      ]
+    },
+    {
+      "id": 2, "title": "TiDB X + The Tiers", "tag": "Moved up from Week 9 — this is what you sell",
+      "tasks": [
+        { "t": "Request SE Team AWS / Azure / GCP envs", "type": "admin", "note": "pch.pingcap.net -> na-emea-presales" },
+        { "t": "Request SE Team TiDB Cloud access", "type": "admin", "note": "Manager or Lijia Xu" },
+        { "t": "TiDB X Architecture: object storage source of truth, compute/storage decoupled, isolated background tasks, 5-10x scaling", "type": "concept", "pillar": "cloud", "url": "https://pingcap.feishu.cn/wiki/F0DmwqcQrizMAfkQZ7yc17Jdnqe" },
+        { "t": "Tiers: Starter (serverless, scale-to-zero, pay-per-RU), Essential, Dedicated, BYOC", "type": "concept", "pillar": "cloud", "url": "https://docs.pingcap.com/tidbcloud/" },
+        { "t": "TiDB Cloud Zero auto-provisioning (per-agent isolation)", "type": "concept", "pillar": "cloud", "url": "https://docs.pingcap.com/tidbcloud/" },
+        { "t": "Request Units (RU) economics: read bytes + write bytes + SQL CPU", "type": "concept", "pillar": "cloud", "url": "https://docs.pingcap.com/tidbcloud/" },
+        { "t": "TiDB Essentials", "type": "concept", "url": "https://employees.edu.pingcap.com/plus/catalog/courses/190" },
+        { "t": "Learn SQL with TiDB", "type": "concept", "url": "https://employees.edu.pingcap.com/plus/my/courses/235" },
+        { "t": "Lab: Zero Downtime Online Upgrade with TiProxy", "type": "lab", "url": "https://labs.tidb.io/labs/demo_005" },
+        { "t": "Review pricing documents", "type": "admin", "url": "https://docs.google.com/spreadsheets/d/1m3J-ZR0RK3Vc-y_uhINZB3owtB-SvOIA-ejSVGTN864/edit" },
+        { "t": "Create 30/60/90 Day Plan with Manager", "type": "admin" }
+      ]
+    },
+    {
+      "id": 3, "title": "AI Capability Pillars", "tag": "Taught as a module, not bolted-on labs",
+      "tasks": [
+        { "t": "Vector search: HNSW, up to 16,383 dims, cosine / L2 / inner product (on TiFlash)", "type": "concept", "pillar": "vector", "url": "https://docs.pingcap.com/tidbcloud/vector-search-overview" },
+        { "t": "Auto-embedding: generate vectors in-query, no API key in app code", "type": "concept", "pillar": "vector", "url": "https://docs.pingcap.com/tidbcloud/ai-feature-concepts/" },
+        { "t": "Full-text search: BM25 / tantivy on TiFlash (eventually consistent on search path)", "type": "concept", "pillar": "search", "url": "https://docs.pingcap.com/tidbcloud/ai-feature-concepts/" },
+        { "t": "Hybrid search + ranking: vector + keyword merged with RRF", "type": "concept", "pillar": "search", "url": "https://docs.pingcap.com/tidbcloud/ai-feature-concepts/" },
+        { "t": "Lab: Build Vector Search Apps Using Jupyter", "type": "lab", "pillar": "vector", "url": "https://labs.tidb.io/labs/demo_408" },
+        { "t": "Lab: Build RAG and Text2SQL AI Apps (OpenAI)", "type": "lab", "pillar": "search", "url": "https://labs.tidb.io/labs/demo_409" },
+        { "t": "Lab: Build RAG and Text2SQL AI Apps (Amazon Bedrock)", "type": "lab", "pillar": "search", "url": "https://labs.tidb.io/labs/demo_421" },
+        { "t": "Lab: Use TiDB as Unified Storage for AI Apps (OpenAI)", "type": "lab", "pillar": "vector", "url": "https://labs.tidb.io/labs/demo_423" }
+      ]
+    },
+    {
+      "id": 4, "title": "The Agent-Native Stack: sys9", "tag": "NEW — mem9 / drive9 / db9, and the sales framing",
+      "tasks": [
+        { "t": "sys9 overview: the agent-native toolbox", "type": "concept", "pillar": "agent", "url": "https://sys9.ai", "note": "Umbrella for mem9, drive9, db9 — all on TiDB Cloud" },
+        { "t": "mem9: cognitive memory — hybrid recall (RRF), stateless plugins, multi-tenant, server-side auto-embedding", "type": "concept", "pillar": "agent", "url": "https://mem9.ai", "note": "Integrates Claude Code, OpenClaw, OpenCode, Codex, Dify; Go mnemo-server" },
+        { "t": "drive9: workspace memory — files, revisions, extracted text, provenance, task state", "type": "concept", "pillar": "agent", "url": "https://www.pingcap.com/blog/ai-agent-memory-runtime-production-agents/" },
+        { "t": "db9: serverless Postgres for agents (Postgres-wire, NOT TiDB MySQL-wire — verify engine claims before repeating)", "type": "concept", "pillar": "agent", "url": "https://db9.ai" },
+        { "t": "Agent-memory SALES framing: a context window is transport, not a memory strategy; memory is runtime infra", "type": "concept", "pillar": "agent", "url": "https://www.pingcap.com/blog/ai-agent-memory-runtime-production-agents/", "note": "Ties to the 55%-weighted AI ecosystem content MBO" },
+        { "t": "Lab: Build GraphRAG + Tool-Calling Agent (OpenAI)", "type": "lab", "pillar": "agent", "url": "https://labs.tidb.io/labs/demo_410" },
+        { "t": "Lab: Use TiDB as Unified Storage for AI Apps (Bedrock)", "type": "lab", "url": "https://labs.tidb.io/labs/demo_422" },
+        { "t": "Clone the demo arsenal and run the HTAP demo", "type": "lab", "pillar": "htap", "url": "https://github.com/stephenlthorn/tidb-demos", "note": "Also review mem9-demo and db9-agent" }
+      ]
+    },
+    {
+      "id": 5, "title": "Operational Depth for Cloud SEs", "tag": "Duplicate course 231 removed",
+      "tasks": [
+        { "t": "Query Optimization", "type": "concept", "url": "https://employees.edu.pingcap.com/plus/my/courses/282" },
+        { "t": "EXPLAIN ANALYZE, stats health, covering indexes, AUTO_RANDOM vs hot regions", "type": "concept", "url": "https://docs.pingcap.com/tidbcloud/" },
+        { "t": "TiDB Specific Features and Transaction Control", "type": "concept", "url": "https://employees.edu.pingcap.com/plus/my/courses/231", "note": "Was duplicated in old Week 5 as 'TiDB for MySQL Users' (same URL). Kept once." },
+        { "t": "Lab: Managing Runaway Queries (v8.5+)", "type": "lab", "url": "https://labs.tidb.io/labs/demo_008" },
+        { "t": "Lab: Pause and Resume DDL Execution (v7.5+)", "type": "lab", "url": "https://labs.tidb.io/labs/demo_014" },
+        { "t": "SQL Tuning Labs 1-6 (indexes, partitions, optimizer, stats, SPM)", "type": "lab", "pillar": "htap", "url": "https://labs.tidb.io/labs/dba_307_lab_ff0" },
+        { "t": "Cert: PingCAP Certified TiDB Associate", "type": "cert", "url": "https://employees.edu.pingcap.com/plus/my/courses/237" }
+      ]
+    },
+    {
+      "id": 6, "title": "HTAP, CDC, Migration (Cloud-First)", "tag": "Consolidation story with running code",
+      "tasks": [
+        { "t": "Introduction to TiCDC", "type": "concept", "pillar": "migration", "url": "https://employees.edu.pingcap.com/learner/courseinfo/id:149" },
+        { "t": "Partitioning in TiDB", "type": "concept", "url": "https://employees.edu.pingcap.com/learner/courseinfo/id:179" },
+        { "t": "Online DDL", "type": "concept", "url": "https://employees.edu.pingcap.com/learner/courseinfo/id:140" },
+        { "t": "Lab: Migrate from MySQL to TiDB Using DM", "type": "lab", "pillar": "migration", "url": "https://labs.tidb.io/labs/demo_011" },
+        { "t": "Lab: Replicating Change Events Using TiCDC", "type": "lab", "pillar": "migration", "url": "https://labs.tidb.io/labs/dba_303_lab_ff10" },
+        { "t": "HTAP routing: TiFlash, MPP, when OLAP vs OLTP", "type": "concept", "pillar": "htap", "url": "https://docs.pingcap.com/tidbcloud/" },
+        { "t": "Run the HTAP demo end-to-end and deliver its talking points out loud", "type": "activity", "pillar": "htap", "url": "https://github.com/stephenlthorn/tidb-demos/tree/main/htap-realtime-oltp-olap" }
+      ]
+    },
+    {
+      "id": 7, "title": "Competitive + Objection Mastery", "tag": "Where deals are won or lost",
+      "tasks": [
+        { "t": "Competitive matrix: pgvector, Pinecone, Redis, Aurora, CockroachDB/Yugabyte", "type": "concept", "pillar": "slayer", "url": "https://www.pingcap.com/" },
+        { "t": "Clear the Objection Trainer gauntlet (all core objections passed)", "type": "activity", "pillar": "slayer", "note": "Use the Claude-powered objection trainer artifact" },
+        { "t": "Placement Driver (internals literacy)", "type": "concept", "url": "https://employees.edu.pingcap.com/learner/courseinfo/id:136" },
+        { "t": "Lab: Scalability Deep Dive — Rebalance Speed", "type": "lab", "url": "https://labs.tidb.io/labs/demo_013" },
+        { "t": "Lab: Scalability Deep Dive — SQL Layer Scaling In", "type": "lab", "url": "https://labs.tidb.io/labs/demo_016" },
+        { "t": "Lab: TiKV MVCC In-Memory Engine + TiProxy", "type": "lab", "url": "https://labs.tidb.io/labs/demo_017" }
+      ]
+    },
+    {
+      "id": 8, "title": "SE Challenge (Capstone Boss Fight)", "tag": "A full POC against the JEP / MEDDPICC motion",
+      "tasks": [
+        { "t": "Review POC Leadership Framework", "type": "admin", "url": "https://docs.google.com/document/d/10cNm2ggv5rndwKKAkEUFdfG02stB37wiwDqLd333rhc/edit" },
+        { "t": "Review the required default set of Deal Documents", "type": "admin", "url": "https://drive.google.com/drive/folders/1-JnAdUaTmJYnN9kMkiN-9guFe0RmXe6X" },
+        { "t": "SE Challenge Prep", "type": "admin" },
+        { "t": "SE Challenge Delivery — named EB, written success criteria, MEDDPICC power map", "type": "challenge", "pillar": "poc", "note": "Graded against the SE POC reference v1.1" }
+      ]
+    },
+    {
+      "id": 9, "title": "Field Integration", "tag": "Weeks 9-12: shadow, BYOC, certify",
+      "tasks": [
+        { "t": "Support an ongoing POC", "type": "admin" },
+        { "t": "Shadow Manager on Calls", "type": "admin" },
+        { "t": "Left Seat / Right Seat with Manager on Calls", "type": "admin" },
+        { "t": "BYOC deep dive: regulated industries, PrivateLink, IAM roles, ~3-4h deploy", "type": "concept", "pillar": "cloud", "url": "https://docs.pingcap.com/tidbcloud/" },
+        { "t": "AWS SA Class", "type": "concept" },
+        { "t": "AWS Solutions Architect Cert", "type": "cert" }
+      ]
+    },
+    {
+      "id": 0, "title": "Electives (Self-Hosted / Support Track)", "tag": "Scope discipline: SEs sell Cloud; Support Engineers run self-hosted ops",
+      "tasks": [
+        { "t": "TiUP self-hosted deploy chain (Admin Labs 1-4)", "type": "elective", "url": "https://labs.tidb.io/labs/dba_303_lab_ff0" },
+        { "t": "Lightning / Dumpling / Backup-Restore / sync-diff / DM labs", "type": "elective", "url": "https://labs.tidb.io/labs/dba_303_lab_ff5" },
+        { "t": "Resource Control with Mixed Workloads", "type": "elective", "url": "https://labs.tidb.io/labs/demo_006" },
+        { "t": "Backup and Restores with TiDB", "type": "elective", "url": "https://employees.edu.pingcap.com/plus/my/courses/146" },
+        { "t": "Amazon Zone Failover (OP training)", "type": "elective", "url": "https://employees.edu.pingcap.com/plus/my/courses/155" },
+        { "t": "Importing Data / Data Import tech discussion", "type": "elective", "url": "https://employees.edu.pingcap.com/learner/courseinfo/id:148" },
+        { "t": "TiDB Transactions (deep)", "type": "elective", "url": "https://employees.edu.pingcap.com/learner/courseinfo/id:138" },
+        { "t": "Kubernetes the Hard Way", "type": "elective", "url": "https://github.com/kelseyhightower/kubernetes-the-hard-way" },
+        { "t": "CKA Class", "type": "elective", "url": "https://learn.acloud.guru/course/certified-kubernetes-administrator/overview" }
+      ]
+    }
+  ]
+}

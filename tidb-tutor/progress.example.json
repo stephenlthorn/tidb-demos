@@ -1,0 +1,9 @@
+{
+  "trainee": "",
+  "started": "2026-01-01",
+  "current_week": 3,
+  "done": [],
+  "notes": {
+    "week-03": "Kept forgetting the eventual-consistency caveat on FTS; revisit before customer calls."
+  }
+}

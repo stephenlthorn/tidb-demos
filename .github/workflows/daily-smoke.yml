@@ -1,0 +1,97 @@
+name: Onboarding Tutor — Daily Smoke Test
+
+on:
+  schedule:
+    # 08:00 UTC = 04:00 ET / 01:00 PT — results are there when you start your day
+    - cron: '0 8 * * *'
+  # Also run on any push that touches the tutor folder
+  push:
+    paths:
+      - 'tidb-tutor/**'
+  # And let anyone trigger it manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  smoke-test:
+    name: Smoke test (automated)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: tidb-tutor/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r tidb-tutor/requirements.txt
+
+      # ── Non-cluster checks (always run) ────────────────────────────────────
+      - name: File integrity + curriculum + scripts + knowledge accuracy
+        working-directory: tidb-tutor
+        run: python test_suite.py --quick
+
+      # ── URL reachability (full run, no cluster) ────────────────────────────
+      # Runs in a separate step so a dead lab URL doesn't block the file checks.
+      # Set SKIP_URL_CHECK secret to 'true' to disable temporarily (flaky DNS, etc.)
+      - name: URL reachability (labs.tidb.io + public docs)
+        working-directory: tidb-tutor
+        if: ${{ secrets.SKIP_URL_CHECK != 'true' }}
+        run: python test_suite.py
+        # Note: test_suite.py --quick skips URLs; running without --quick checks them.
+        # This step may warn on 403s from HEAD-blocked servers — that is expected.
+        continue-on-error: false
+
+      # ── Cluster checks (only when secrets are configured) ─────────────────
+      # To enable: add TIDB_HOST, TIDB_USER, TIDB_PASSWORD as repo secrets.
+      # The cluster should be a dedicated smoke-test Starter cluster, not a
+      # production or shared SE environment.
+      - name: Cluster connectivity + RU collector
+        working-directory: tidb-tutor
+        if: ${{ secrets.TIDB_HOST != '' }}
+        env:
+          TIDB_HOST:     ${{ secrets.TIDB_HOST }}
+          TIDB_PORT:     '4000'
+          TIDB_USER:     ${{ secrets.TIDB_USER }}
+          TIDB_PASSWORD: ${{ secrets.TIDB_PASSWORD }}
+          TIDB_DB:       'onboarding_ci'
+          TIDB_SSL:      'true'
+        run: |
+          echo "Running cluster connectivity check..."
+          python verify.py --ping
+          echo "Running RU collector smoke..."
+          python ru_collector.py
+
+      # ── Emit JSON report as artifact (last 30 days, viewable in Actions UI) ─
+      - name: Save JSON report
+        working-directory: tidb-tutor
+        if: always()
+        run: python test_suite.py --quick --json > ../smoke-report.json 2>/dev/null || true
+
+      - name: Upload smoke report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-report-${{ github.run_number }}
+          path: smoke-report.json
+          retention-days: 30
+
+  # ── Summary job so the badge stays meaningful ───────────────────────────────
+  notify-on-failure:
+    name: Notify on failure
+    needs: smoke-test
+    runs-on: ubuntu-latest
+    if: failure()
+    steps:
+      - name: Print failure summary
+        run: |
+          echo "::error::Onboarding tutor smoke test failed."
+          echo "Check the smoke-report artifact in the Actions run for details."
+          echo "Common causes:"
+          echo "  - A labs.tidb.io URL returned 404 (lab was removed or moved)"
+          echo "  - A knowledge file was edited and introduced an accuracy violation"
+          echo "  - A Python script was edited and broke syntax"
