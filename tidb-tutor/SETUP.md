@@ -12,7 +12,7 @@ Follow these steps exactly once. After this you just set the env vars and go.
 
 1. Go to **https://tidbcloud.com** and sign in with your PingCAP SSO.
 2. Click **Create Cluster**.
-3. Select **Serverless** (the free tier). Leave the defaults — us-east-1 is fine.
+3. Select **Serverless** (the free tier). Leave the defaults - us-east-1 is fine.
 4. Name it something like `se-onboarding`. Click **Create**.
 
 The cluster is ready in about 30 seconds.
@@ -24,13 +24,13 @@ The cluster is ready in about 30 seconds.
 1. In the TiDB Cloud console, click your cluster name.
 2. Click **Connect** in the top right.
 3. Select **General** as the connection type.
-4. Choose **MySQL CLI** or **Python** from the dropdown — both show the same values.
+4. Choose **MySQL CLI** or **Python** from the dropdown - both show the same values.
 
 You need four values:
-- **Host** — looks like `gateway01.us-east-1.prod.aws.tidbcloud.com`
-- **Port** — always `4000` for TiDB Cloud
-- **User** — looks like `xxxxxxxx.root` (has a prefix, **not** just `root`)
-- **Password** — you will be asked to generate one if you haven't already; click "Generate"
+- **Host** - looks like `gateway01.us-east-1.prod.aws.tidbcloud.com`
+- **Port** - always `4000` for TiDB Cloud
+- **User** - looks like `xxxxxxxx.root` (has a prefix, **not** just `root`)
+- **Password** - you will be asked to generate one if you haven't already; click "Generate"
 
 **Copy the password immediately.** TiDB Cloud only shows it once.
 
@@ -53,7 +53,7 @@ export TIDB_SSL="true"
 fails or hangs.
 
 To avoid re-exporting every session, add these to your shell profile (`~/.zshrc` or
-`~/.bash_profile`). Keep the file private — your password is in it.
+`~/.bash_profile`). Keep the file private - your password is in it.
 
 ---
 
@@ -86,7 +86,7 @@ If you see `PING FAILED`, the three most common causes are:
 | `Name or service not known` | TIDB_HOST is wrong or not exported in this shell |
 | `Access denied for user` | TIDB_USER must include the prefix (e.g. `abc123.root`, not `root`) |
 | `SSL connection error` | Make sure TIDB_SSL=true is set |
-| Connection hangs | Missing TIDB_SSL=true — TiDB Cloud requires TLS |
+| Connection hangs | Missing TIDB_SSL=true - TiDB Cloud requires TLS |
 
 If none of those fix it, paste the exact error to the tutor and it will help you diagnose.
 

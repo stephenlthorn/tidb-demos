@@ -1,6 +1,6 @@
 {
   "version": "2026.2",
-  "title": "PingCAP SE Onboarding — Agent-Native Re-Sequence",
+  "title": "PingCAP SE Onboarding - Agent-Native Re-Sequence",
   "note": "TiDB X and the agent-native (sys9) stack are front-loaded. Self-hosted DBA / Kubernetes content is demoted to electives by SE-vs-Support scope discipline. employees.edu URLs replaced with docs.pingcap.com and labs.tidb.io equivalents. Cert portal URLs now on labs.tidb.io/exams.",
   "xp": { "admin": 10, "concept": 20, "lab": 30, "cert": 100, "challenge": 200, "activity": 50, "elective": 15 },
   "levels": [
@@ -41,7 +41,7 @@
       ]
     },
     {
-      "id": 2, "title": "TiDB X + The Tiers", "tag": "Moved up from Week 9 — this is what you sell",
+      "id": 2, "title": "TiDB X + The Tiers", "tag": "Moved up from Week 9 - this is what you sell",
       "tasks": [
         { "t": "Request SE Team AWS / Azure / GCP envs", "type": "admin", "note": "pch.pingcap.net -> na-emea-presales" },
         { "t": "Request SE Team TiDB Cloud access", "type": "admin", "note": "Manager or Lijia Xu" },
@@ -70,12 +70,12 @@
       ]
     },
     {
-      "id": 4, "title": "The Agent-Native Stack: sys9", "tag": "NEW — mem9 / drive9 / db9, and the sales framing",
+      "id": 4, "title": "The Agent-Native Stack: sys9", "tag": "NEW - mem9 / drive9 / db9, and the sales framing",
       "tasks": [
-        { "t": "sys9 overview: the agent-native toolbox", "type": "concept", "pillar": "agent", "url": "https://sys9.ai", "note": "Umbrella for mem9, drive9, db9 — all on TiDB Cloud" },
-        { "t": "mem9: cognitive memory — hybrid recall (RRF), stateless plugins, multi-tenant, server-side auto-embedding", "type": "concept", "pillar": "agent", "url": "https://mem9.ai", "note": "Integrates Claude Code, OpenClaw, OpenCode, Codex, Dify; Go mnemo-server" },
-        { "t": "drive9: workspace memory — files, revisions, extracted text, provenance, task state", "type": "concept", "pillar": "agent", "url": "https://www.pingcap.com/blog/ai-agent-memory-runtime-production-agents/" },
-        { "t": "db9: serverless Postgres for agents (Postgres-wire, NOT TiDB MySQL-wire — verify engine claims before repeating)", "type": "concept", "pillar": "agent", "url": "https://db9.ai" },
+        { "t": "sys9 overview: the agent-native toolbox", "type": "concept", "pillar": "agent", "url": "https://sys9.ai", "note": "Umbrella for mem9, drive9, db9 - all on TiDB Cloud" },
+        { "t": "mem9: cognitive memory - hybrid recall (RRF), stateless plugins, multi-tenant, server-side auto-embedding", "type": "concept", "pillar": "agent", "url": "https://mem9.ai", "note": "Integrates Claude Code, OpenClaw, OpenCode, Codex, Dify; Go mnemo-server" },
+        { "t": "drive9: workspace memory - files, revisions, extracted text, provenance, task state", "type": "concept", "pillar": "agent", "url": "https://www.pingcap.com/blog/ai-agent-memory-runtime-production-agents/" },
+        { "t": "db9: serverless Postgres for agents (Postgres-wire, NOT TiDB MySQL-wire - verify engine claims before repeating)", "type": "concept", "pillar": "agent", "url": "https://db9.ai" },
         { "t": "Agent-memory SALES framing: a context window is transport, not a memory strategy; memory is runtime infra", "type": "concept", "pillar": "agent", "url": "https://www.pingcap.com/blog/ai-agent-memory-runtime-production-agents/", "note": "Ties to the 55%-weighted AI ecosystem content MBO" },
         { "t": "Lab: Build GraphRAG + Tool-Calling Agent (OpenAI)", "type": "lab", "pillar": "agent", "url": "https://labs.tidb.io/labs/demo_410" },
         { "t": "Lab: Use TiDB as Unified Storage for AI Apps (Bedrock)", "type": "lab", "url": "https://labs.tidb.io/labs/demo_422" },
@@ -109,11 +109,11 @@
     {
       "id": 7, "title": "Competitive + Objection Mastery", "tag": "Where deals are won or lost",
       "tasks": [
-        { "t": "Competitive matrix: pgvector, Pinecone, Redis, Aurora, CockroachDB/Yugabyte", "type": "concept", "pillar": "slayer", "url": "https://www.pingcap.com/" },
+        { "t": "Competitive matrix: pgvector, Pinecone, Redis, Aurora, CockroachDB/Yugabyte", "type": "concept", "pillar": "slayer", "note": "URL TBD - ask manager for the internal Feishu battlecard link" },
         { "t": "Clear the Objection Trainer gauntlet (all core objections passed)", "type": "activity", "pillar": "slayer", "note": "Use the Claude-powered objection trainer artifact" },
         { "t": "Placement Driver (internals literacy)", "type": "concept", "url": "https://docs.pingcap.com/tidb/stable/pd-scheduling-best-practices" },
-        { "t": "Lab: Scalability Deep Dive — Rebalance Speed", "type": "lab", "url": "https://labs.tidb.io/labs/demo_013" },
-        { "t": "Lab: Scalability Deep Dive — SQL Layer Scaling In", "type": "lab", "url": "https://labs.tidb.io/labs/demo_016" },
+        { "t": "Lab: Scalability Deep Dive - Rebalance Speed", "type": "lab", "url": "https://labs.tidb.io/labs/demo_013" },
+        { "t": "Lab: Scalability Deep Dive - SQL Layer Scaling In", "type": "lab", "url": "https://labs.tidb.io/labs/demo_016" },
         { "t": "Lab: TiKV MVCC In-Memory Engine + TiProxy", "type": "lab", "url": "https://labs.tidb.io/labs/demo_017" }
       ]
     },
@@ -123,7 +123,7 @@
         { "t": "Review POC Leadership Framework", "type": "admin", "url": "https://docs.google.com/document/d/10cNm2ggv5rndwKKAkEUFdfG02stB37wiwDqLd333rhc/edit" },
         { "t": "Review the required default set of Deal Documents", "type": "admin", "url": "https://drive.google.com/drive/folders/1-JnAdUaTmJYnN9kMkiN-9guFe0RmXe6X" },
         { "t": "SE Challenge Prep", "type": "admin" },
-        { "t": "SE Challenge Delivery — named EB, written success criteria, MEDDPICC power map", "type": "challenge", "pillar": "poc", "note": "Graded against the SE POC reference v1.1" }
+        { "t": "SE Challenge Delivery - named EB, written success criteria, MEDDPICC power map", "type": "challenge", "pillar": "poc", "note": "Graded against the SE POC reference v1.1" }
       ]
     },
     {
