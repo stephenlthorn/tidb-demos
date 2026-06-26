@@ -30,8 +30,7 @@
         { "t": "Get added to key internal meetings + Jira + Zoom license", "type": "admin", "note": "Lark approvals; 3 Jira projects: NA POC, TiDBCloud-OnCall, FRM" },
         { "t": "Complete SOC2 Security Training", "type": "admin", "url": "https://docs.google.com/document/d/1wrDVVhCDezyevi_rzeFgC8_9KfzlkLLFsAShBxQFyrE/edit" },
         { "t": "Activate Salesforce, ChatGPT, and Chorus", "type": "admin", "note": "Kevin Lu provides access" },
-        { "t": "READ: Every user is an agent + four-systems-to-one", "type": "concept", "pillar": "agent", "url": "https://www.pingcap.com/blog/database-consolidation-for-ai-agents/", "note": "The thesis the whole ramp hangs on: OLTP + OLAP + vector + FTS in one ACID boundary. Pair with ai-native-database blog for the agents-as-users framing." },
-        { "t": "READ: Why agents need databases, not just context windows", "type": "concept", "pillar": "agent", "url": "https://www.pingcap.com/blog/ai-native-database/", "note": "Good primer on agent memory before Week 4's sys9 deep dive" },
+        { "t": "READ: Why agents need databases, not just context windows", "type": "concept", "pillar": "agent", "url": "https://www.pingcap.com/blog/ai-native-database/", "note": "The thesis: OLTP + OLAP + vector + FTS in one ACID boundary. 95% of new TiDB Cloud instances created by agents, not humans." },
         { "t": "READ: Why context windows aren't a memory strategy", "type": "concept", "pillar": "agent", "url": "https://www.pingcap.com/blog/ai-agent-memory-runtime-production-agents/", "note": "Deeper dive - ties directly to Week 4 sys9 content" },
         { "t": "Introduction to TiDB", "type": "concept", "url": "https://docs.pingcap.com/tidb/stable/overview" },
         { "t": "Lab: Introduction to TiDB Cloud Starter", "type": "lab", "pillar": "cloud", "url": "https://labs.tidb.io/labs/demo_203" },
@@ -109,7 +108,7 @@
     {
       "id": 7, "title": "Competitive + Objection Mastery", "tag": "Where deals are won or lost",
       "tasks": [
-        { "t": "Competitive matrix: pgvector, Pinecone, Redis, Aurora, CockroachDB/Yugabyte", "type": "concept", "pillar": "slayer", "note": "URL TBD - ask manager for the internal Feishu battlecard link" },
+        { "t": "Competitive matrix: Aurora, RDS MySQL, Postgres/pgvector, DynamoDB, Oracle", "type": "concept", "pillar": "slayer", "note": "See lessons/week-07-competitive.md - full head-to-head breakdowns and objection responses" },
         { "t": "Clear the Objection Trainer gauntlet (all core objections passed)", "type": "activity", "pillar": "slayer", "note": "Use the Claude-powered objection trainer artifact" },
         { "t": "Placement Driver (internals literacy)", "type": "concept", "url": "https://docs.pingcap.com/tidb/stable/pd-scheduling-best-practices" },
         { "t": "Lab: Scalability Deep Dive - Rebalance Speed", "type": "lab", "url": "https://labs.tidb.io/labs/demo_013" },

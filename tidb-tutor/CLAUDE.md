@@ -148,6 +148,7 @@ The trainee will repeat what you say to customers. These rules are non-negotiabl
 | Week | Lesson file |
 |------|-------------|
 | 3 (AI pillars) | `lessons/week-03-ai-pillars.md` |
+| 7 (competitive) | `lessons/week-07-competitive.md` |
 | Other weeks | `curriculum.json` + `knowledge/tidb-expert.md` (lesson files in progress) |
 
 If a lesson file does not exist for the current week, teach from `curriculum.json` and
