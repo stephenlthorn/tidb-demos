@@ -36,13 +36,21 @@ matching `lessons/week-NN-*.md`, checks your cluster with `verify.py --ping`, an
 |------|------|
 | `CLAUDE.md` | The tutor's operating manual: how to run a session, how to verify, accuracy rules. |
 | `curriculum.json` | The re-sequenced SE schedule (shared with the rest of onboarding). |
-| `lessons/week-03-ai-pillars.md` | A complete example lesson (vector, full-text, hybrid search). |
+| `lessons/week-02-planes-and-tiers.md` | Control plane vs data plane, where data lives per tier, encryption and key custody. |
+| `lessons/week-02-cloud-vs-self-hosted.md` | Cloud vs self-managed tradeoffs, and the exit-ramp argument. |
+| `lessons/week-03-ai-pillars.md` | Vector, full-text, and hybrid search (the reference lesson format). |
+| `lessons/week-06-ddl-dml-cdc.md` | DDL vs DML, online schema change, metadata locks vs table locks, DDL in CDC. |
+| `lessons/week-07-competitive.md` | Aurora, RDS, MySQL, Postgres+pgvector, DynamoDB, Oracle. |
+| `lessons/week-07-competitive-part2.md` | Spanner, SingleStore, Snowflake. Corrects the part 1 positioning line. |
 | `verify.py` | Runs SQL against your cluster so the tutor checks your work instead of doing it. |
 | `progress.example.json` | The shape of the per-trainee progress file. |
 
-Currently one lesson (Week 3) is written out as the reference format. The remaining weeks are
-defined in `curriculum.json`; the tutor can teach them from the curriculum and docs today, and
-we will flesh out a lesson file per week in that same format.
+Six lessons are written out. The remaining weeks are defined in `curriculum.json`; the tutor can
+teach them from the curriculum and docs today, and we will flesh out a lesson file per week in
+that same format.
+
+Teach the two Week 2 lessons in the order listed, and `week-07-competitive.md` before
+`week-07-competitive-part2.md` - part 2 corrects a positioning claim in part 1.
 
 ## Optional: persist progress in mem9 (agent-native onboarding)
 
@@ -56,3 +64,10 @@ tool then *is* an agent-memory-on-TiDB demo, which is exactly what you will be s
 Vector + full-text search run on TiFlash (Raft Learner replica, eventually consistent on the
 search path), not a separate "TiCI" component. db9 is positioned as serverless Postgres, not
 TiDB's MySQL-wire engine. Verify proof-point numbers before quoting them.
+
+Two competitive claims need care. "The only MySQL-compatible database that does OLTP, OLAP,
+vector, and full-text" is **not** safe against SingleStore, which is MySQL wire-compatible and has
+all four; Spanner now has vector, full-text, and a columnar engine as well.
+`lessons/week-07-competitive-part2.md` has the corrected positioning line. Separately, tier names
+and preview status drift - the docs currently list Starter, Essential, Premium, and Dedicated, so
+pull the lineup live rather than quoting it from these files.

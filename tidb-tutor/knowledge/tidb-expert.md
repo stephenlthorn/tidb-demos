@@ -75,10 +75,32 @@ tasks isolated from query traffic. Enables 5-10x faster scaling than previous ar
 
 | Tier | Model | Use case |
 |------|-------|----------|
-| Starter | Serverless, pay-per-RU, scales to zero | Dev, POCs, agent workloads starting out |
+| Starter | Serverless, pay-per-RU, scales to zero. **Multi-tenant.** | Dev, POCs, agent workloads starting out |
 | Essential | Provisioned + autoscaling | Growing apps, consistent performance |
-| Dedicated | Fixed node counts, full control | Serious production, HTAP, large-scale |
-| BYOC | TiDB in customer's own VPC | Regulated industries (fintech, healthcare) |
+| Premium | Workload-aware auto-scaling | Mission-critical, unlimited scale |
+| Dedicated | Fixed node counts, full control. Isolated VPC/VMs/k8s/storage. | Serious production, HTAP, large-scale |
+| BYOC | TiDB **data plane** in customer's own cloud account | Regulated industries (fintech, healthcare) |
+
+**Do not quote this table as current.** Tier names, positioning, and preview status change, and
+Essential and Premium have been in public preview. Pull the live lineup from
+`docs.pingcap.com/tidbcloud/tidb-cloud-intro/` before naming a tier to a customer.
+
+### Control plane vs data plane
+
+- **Control plane** (Central Services, deployed independently, reachable over the internet):
+  console/dashboard UI, billing and metering, alerting, metadata about which clusters exist.
+- **Data plane** (per resource, all in the same VPC): TiDB, TiKV, and TiFlash nodes plus
+  auxiliary nodes (TiDB Operator, logging). This is where customer data lives.
+- **BYOC relocates the data plane into the customer's cloud account. The control plane stays with
+  PingCAP.** This is the most commonly botched point in customer conversations.
+- **Encryption at rest is dual-layer**: the cloud provider's storage encryption plus a TiDB Cloud
+  layer using either CMEK (customer-managed keys) or escrow keys that TiDB Cloud manages.
+  Dedicated always uses dual-layer. Per-tier defaults change - verify at
+  `docs.pingcap.com/tidbcloud/security-concepts/`.
+- **Network isolation options**: IP access list, VPC peering, private endpoints (AWS PrivateLink,
+  Azure Private Link, Google Cloud Private Service Connect, Alibaba Cloud).
+
+Full teaching material: `lessons/week-02-planes-and-tiers.md`.
 
 **BYOC specifics**: PrivateLink, 13 static IAM roles, ~3-4 hour initial deploy.
 Data never leaves the customer's cloud account. Biggest SE closer for regulated deals.
@@ -246,6 +268,34 @@ high-write tables. This is the #1 migration gotcha from single-node MySQL.
 **Hot regions**: PD detects via the hot-region scheduler and rebalances. Check Key Visualizer
 in TiDB Cloud dashboard — a bright stripe = hot region.
 
+**Online DDL**: asynchronous schema change through intermediate states,
+`none` → `delete only` → `write only` → `write/delete reorganization` → `public`. Inspect with
+`ADMIN SHOW DDL JOBS`; `STATE` of `synced` means propagated to all instances, `done` means executed
+on the owner node only. DML keeps working throughout.
+
+**Metadata lock** (`tidb_enable_metadata_lock`, added v6.3.0, default on from v6.5.0): coordinates
+DML/DDL priority during a metadata change by making **DDL wait for transactions holding old
+metadata to commit**. Guarantees metadata versions in use differ by at most one version. Without
+it, transactions spanning a DDL fail with `Information schema is changed`. **It does not block
+DML** - trainees get this backwards constantly. Caveat to disclose: a pathologically long
+transaction can delay a schema change.
+
+**Table locks** (`LOCK TABLES` / `UNLOCK TABLES`): gated by the `enable-table-lock` **config file**
+parameter, **disabled by default**, and **experimental - not recommended for production**. Not
+settable from SQL, so unavailable on managed tiers. Differs from MySQL: other sessions' writes
+error immediately instead of blocking, `LOCK TABLES` errors rather than waiting, it works
+cluster-wide, and `BEGIN` does not implicitly release held locks. Cannot lock tables in
+`INFORMATION_SCHEMA`, `PERFORMANCE_SCHEMA`, `METRICS_SCHEMA`, or `mysql`. `READ LOCAL` is syntax
+compatibility only and unsupported.
+
+**DDL through TiCDC**: allow-list based; non-listed DDLs are ignored. A DDL dropping the **last
+valid index** (`DROP INDEX`, `DROP PRIMARY KEY`) is not replicated **and subsequent replication
+fails**. `RENAME TABLE` swapping two names in one statement is unsupported, and a rename that
+crosses the changefeed filter boundary errors and exits replication. With a TiDB downstream,
+create/add index DDLs run asynchronously and can leave later DDLs queued.
+
+Full teaching material: `lessons/week-06-ddl-dml-cdc.md`.
+
 ---
 
 ## Competitive matrix
@@ -259,6 +309,20 @@ in TiDB Cloud dashboard — a bright stripe = hot region.
 | ACID distributed | YES | YES | NO | YES |
 | Horizontal scale | YES | NO | YES | YES |
 | Multi-tenancy (millions) | YES | NO | partial | NO |
+
+**Positioning correction - read before any competitive conversation.** The line "the only
+MySQL-compatible database that does OLTP, OLAP, vector, and full-text behind one ACID boundary" is
+**not safe**. SingleStore is MySQL wire-compatible with rowstore + columnstore (Universal Storage),
+vector search (IVF/HNSW/PQ), and full-text search - it matches every clause. Spanner now has vector
+search (ScaNN), full-text search, and a columnar engine, though it is not MySQL compatible. Use the
+defensible version instead:
+
+> "TiDB brings OLTP, real-time analytics, vector, and full-text search behind one ACID boundary, on
+> the MySQL wire protocol, as open source you can also run yourself."
+
+The differentiators that survive against SingleStore, Spanner, and Snowflake are **MySQL wire +
+Apache 2.0 open source + self-hostable + agent-scale multi-tenancy (Cloud Zero)**, not the
+capability checklist. Full treatment: `lessons/week-07-competitive-part2.md`.
 
 **Key objection responses**:
 - **"We use pgvector"**: pgvector does not scale horizontally. At agent scale (millions of
