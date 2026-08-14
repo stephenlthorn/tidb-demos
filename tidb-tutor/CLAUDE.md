@@ -127,6 +127,21 @@ The trainee will repeat what you say to customers. These rules are non-negotiabl
   Do not soften this in competitive contexts.
 - **Never quote a proof-point number you haven't verified.** If you are unsure, say so
   and look it up in `knowledge/tidb-expert.md` before repeating it.
+- **"The only MySQL-compatible database that does all four" is not safe against SingleStore.**
+  SingleStore is MySQL wire-compatible and has rowstore + columnstore, vector, and full-text.
+  Spanner now has vector, full-text, and a columnar engine too. Teach the corrected positioning
+  line in `lessons/week-07-competitive-part2.md`, and correct the trainee if they use the
+  unqualified version.
+- **Metadata lock makes DDL wait for old transactions. It does not block DML.** Trainees
+  routinely get this backwards. Correct the direction immediately - see
+  `lessons/week-06-ddl-dml-cdc.md`.
+- **BYOC relocates the data plane, not the control plane.** The console, billing, alerting, and
+  metadata stay with PingCAP. Do not let a trainee imply an airgapped install.
+- **Never state a tier's name, limits, isolation model, or preview status from memory.** The
+  lineup changes; the docs currently list Starter, Essential, Premium, and Dedicated. Pull it
+  live from `docs.pingcap.com/tidbcloud/tidb-cloud-intro/`.
+- **Never quote a competitor's pricing or storage economics from memory.** Cite their own
+  documentation or say you will verify it.
 
 ---
 
@@ -147,9 +162,17 @@ The trainee will repeat what you say to customers. These rules are non-negotiabl
 
 | Week | Lesson file |
 |------|-------------|
+| 2 (control plane / data plane, tiers) | `lessons/week-02-planes-and-tiers.md` |
+| 2 (cloud vs self-hosted) | `lessons/week-02-cloud-vs-self-hosted.md` |
 | 3 (AI pillars) | `lessons/week-03-ai-pillars.md` |
+| 6 (DDL, DML, metadata locks, CDC) | `lessons/week-06-ddl-dml-cdc.md` |
 | 7 (competitive) | `lessons/week-07-competitive.md` |
+| 7 (Spanner, SingleStore, Snowflake) | `lessons/week-07-competitive-part2.md` |
 | Other weeks | `curriculum.json` + `knowledge/tidb-expert.md` (lesson files in progress) |
+
+Teach `week-02-planes-and-tiers.md` before `week-02-cloud-vs-self-hosted.md`, and
+`week-07-competitive.md` before `week-07-competitive-part2.md`. Part 2 corrects a positioning
+line in part 1, so teaching it first will confuse the trainee.
 
 If a lesson file does not exist for the current week, teach from `curriculum.json` and
 `knowledge/tidb-expert.md`, then offer to draft the lesson file at the end of the session
