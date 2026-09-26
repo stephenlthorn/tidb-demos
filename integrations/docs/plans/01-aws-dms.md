@@ -112,7 +112,13 @@
   1. `pnpm lab run aws-dms` runner should already have exited or been Ctrl-C'd.
   2. `cd demos/aws-dms/infra/terraform && terraform destroy -auto-approve` - destroys the DMS replication instance, endpoints, task, Aurora PostgreSQL cluster, and the VPC/subnets/security groups/IAM role created for this demo.
   3. Delete the TiDB Cloud Dedicated cluster from the TiDB Cloud console (Terraform-managed only if Task 2 wires the TiDB Cloud Terraform provider; otherwise this is a manual console step, documented explicitly in `README.md`).
-  4. Confirm nothing is still billing: `aws dms describe-replication-instances --query 'ReplicationInstances[].ReplicationInstanceIdentifier'` returns an empty list; `aws rds describe-db-clusters --query 'DBClusters[].DBClusterIdentifier'` returns an empty list (or does not include this demo's cluster identifier); the TiDB Cloud console's cluster list no longer shows the demo cluster.
+  4. Confirm nothing is still billing, in this exact order:
+     - `aws dms describe-replication-instances --query 'ReplicationInstances[].ReplicationInstanceIdentifier'` returns an empty list.
+     - `aws dms describe-replication-tasks --query 'ReplicationTasks[].ReplicationTaskIdentifier'` returns an empty list (a task can outlive its instance in some failure modes).
+     - `aws rds describe-db-clusters --query 'DBClusters[].DBClusterIdentifier'` returns an empty list (or does not include this demo's cluster identifier).
+     - `aws rds describe-db-cluster-snapshots --query 'DBClusterSnapshots[].DBClusterSnapshotIdentifier'` returns no snapshot for this demo (Terraform's `skip_final_snapshot = true`, set in Task 2, should prevent one, but confirm - a lingering snapshot bills storage even after the cluster is gone).
+     - `aws logs describe-log-groups --log-group-name-prefix /aws/dms` shows no log group referencing this task's replication instance id (CloudWatch Logs for DMS are not deleted by `terraform destroy` unless explicitly managed as a resource; delete manually with `aws logs delete-log-group` if present).
+     - The TiDB Cloud console's cluster list no longer shows the demo cluster.
 
 ## 6. File structure
 
@@ -121,29 +127,39 @@ demos/aws-dms/
   manifest.json                 DemoManifestSchema instance (id aws-dms, number 1); see Task 1
   package.json                  @lab/demo-aws-dms, deps @lab/contract + @lab/runner-kit (workspace:*), pg, @aws-sdk/client-database-migration-service, @aws-sdk/client-cloudwatch
   tsconfig.json                 extends ../../tsconfig.base.json
-  README.md                     what it proves, prerequisites, run, record, teardown, cost notes (Task 10)
-  TALK-TRACK.md                 presenter script per phase, discovery questions, objections (Task 11)
+  README.md                     what it proves, prerequisites, run, record, teardown, cost notes (Task 12)
+  TALK-TRACK.md                 presenter script per phase, discovery questions, objections (Task 12)
   .env.example                  standard TIDB_* block plus PG_HOST/PG_PORT/PG_USER/PG_PASSWORD/PG_DATABASE, DMS_REPLICATION_INSTANCE_ARN, DMS_TASK_ARN, DMS_TASK_ID, AWS_REGION
+  infra/terraform/versions.tf   terraform + provider version pins (Task 2)
   infra/terraform/main.tf       Aurora PostgreSQL, DMS replication instance/endpoints/task, VPC, security groups, IAM (Task 2)
   infra/terraform/variables.tf  region, instance classes, CIDR blocks, TiDB Cloud connection details as inputs
   infra/terraform/outputs.tf    Aurora endpoint, DMS ARNs, security group id
+  infra/terraform/table-mappings.json  DMS table-mappings selection + transformation rules referenced by main.tf (Task 2)
   infra/sql/schema.sql           PostgreSQL source DDL (Task 3)
   infra/sql/schema-tidb.sql      Hand-written TiDB target DDL matching schema.sql (Task 3)
   runner/main.ts                 Entry point: wires phases, controls, emitter (Task 9)
-  runner/src/checksum.ts          Pure per-table checksum SQL builder (Task 4, TDD)
+  runner/src/checksum.ts          Pure per-table checksum SQL builder + canonical row encoding (Task 4, TDD)
   runner/src/row-count-diff.ts    Pure row-count-diff calculation (Task 4, TDD)
   runner/src/freshness.ts         Pure freshness-from-timestamps calculation (Task 5, TDD)
   runner/src/cutover-timer.ts     Pure elapsed-time-to-downtime-seconds calculation (Task 5, TDD)
-  runner/src/dms-poller.ts        I/O adapter: DescribeTableStatistics polling (Task 6, manual live-run)
-  runner/src/cloudwatch-poller.ts I/O adapter: GetMetricData for CDCLatencySource/Target (Task 6, manual live-run)
-  runner/src/pg-client.ts         I/O adapter: Aurora PostgreSQL connection + heartbeat insert (Task 7, manual live-run)
-  runner/src/load-generator.ts    I/O adapter: baseline + burst write load against Aurora PostgreSQL (Task 7, manual live-run)
+  runner/src/table-stats.ts       Pure DescribeTableStatistics response parsing to per-table progress (Task 6, TDD)
+  runner/src/cloudwatch-query.ts  Pure GetMetricData request builder + response parsing (Task 6, TDD)
+  runner/src/cutover-state.ts     Pure cutover state machine (running -> draining -> verified -> flipped) (Task 7, TDD)
+  runner/src/workload.ts          Pure workload-generator rate schedule (baseline/burst) (Task 7, TDD)
+  runner/src/dms-poller.ts        I/O adapter: DescribeTableStatistics polling (Task 8, manual live-run)
+  runner/src/cloudwatch-poller.ts I/O adapter: GetMetricData for CDCLatencySource/Target (Task 8, manual live-run)
+  runner/src/pg-client.ts         I/O adapter: Aurora PostgreSQL connection + heartbeat insert (Task 9, manual live-run)
+  runner/src/load-generator.ts    I/O adapter: baseline + burst write load against Aurora PostgreSQL (Task 9, manual live-run)
   test/manifest.test.ts           Parses manifest.json with DemoManifestSchema (Task 1)
   test/checksum.test.ts           Vitest for runner/src/checksum.ts (Task 4)
   test/row-count-diff.test.ts     Vitest for runner/src/row-count-diff.ts (Task 4)
   test/freshness.test.ts          Vitest for runner/src/freshness.ts (Task 5)
   test/cutover-timer.test.ts      Vitest for runner/src/cutover-timer.ts (Task 5)
-  traces/featured.json            Recorded run, committed after capture (Task 12)
+  test/table-stats.test.ts        Vitest for runner/src/table-stats.ts (Task 6)
+  test/cloudwatch-query.test.ts   Vitest for runner/src/cloudwatch-query.ts (Task 6)
+  test/cutover-state.test.ts      Vitest for runner/src/cutover-state.ts (Task 7)
+  test/workload.test.ts           Vitest for runner/src/workload.ts (Task 7)
+  traces/featured.json            Recorded run, committed after capture (Task 13)
 ```
 
 ## 7. Tasks
@@ -232,7 +248,8 @@ describe('aws-dms manifest', () => {
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "start": "node --import tsx runner/main.ts"
   },
   "dependencies": {
     "@lab/contract": "workspace:*",
@@ -263,13 +280,454 @@ describe('aws-dms manifest', () => {
 
 ### Task 2: Infrastructure (manual live-run, I/O-heavy Terraform, no unit tests)
 
-- [ ] Write `demos/aws-dms/infra/terraform/variables.tf` with inputs: `aws_region`, `aurora_instance_class` (default `db.t4g.medium`, smallest supported for logical replication CDC), `dms_instance_class` (default `dms.t3.large` per Section 4), `vpc_cidr`, `tidb_cloud_cidr_or_privatelink_service_name`.
-- [ ] Write `demos/aws-dms/infra/terraform/main.tf` provisioning: a VPC with 2 private subnets + 1 public subnet + NAT gateway (per the network options in Section 4), an Aurora PostgreSQL cluster (`engine = "aurora-postgresql"`, cluster parameter group with `rds.logical_replication = 1`), a DMS replication instance (`dms.t3.large`, in the private subnets), a DMS source endpoint pointing at the Aurora cluster, and IAM roles DMS requires (`dms-vpc-role`, `dms-cloudwatch-logs-role`).
-- [ ] Write `demos/aws-dms/infra/terraform/outputs.tf` exporting the Aurora writer endpoint, the DMS replication instance ARN, and the security group ID to add to the TiDB Cloud traffic filter.
-- [ ] Manual live-run: `cd demos/aws-dms/infra/terraform && terraform init && terraform apply` - expected output: `Apply complete!` with `aurora_endpoint`, `dms_replication_instance_arn` in the outputs.
-- [ ] Manual step (console, not Terraform in this pass - mark as a documented manual step in README per Section 5): create the TiDB Cloud Dedicated cluster, note its host/port, add the DMS replication instance's public and private IPs to its traffic filter, and download its CA certificate per [Connect AWS DMS to TiDB Cloud](https://docs.pingcap.com/tidbcloud/tidb-cloud-connect-aws-dms/).
-- [ ] Manual live-run: in the AWS DMS console, create the TiDB target endpoint (MySQL engine, SSL mode `verify-full` if public endpoint or `none` if private, extra connection attribute `Initstmt=SET FOREIGN_KEY_CHECKS=0;`), then click **Run test** - expected: connection test status **successful**.
-- [ ] Manual live-run: create the DMS migration task (source: Aurora endpoint, target: TiDB endpoint, migration type **Migrate existing data and replicate ongoing changes**, table mappings scoped to the `lab` schema only, **Turn on validation** enabled) - expected: task status becomes **Ready**.
+This task provisions a dedicated VPC rather than the account's default VPC, because DMS needs private subnets for the replication instance and Aurora needs a DB subnet group spanning at least two AZs; a dedicated VPC keeps this demo's security groups and routing fully isolated from anything else in the account, and `terraform destroy` cleanly removes all of it. If an existing default VPC with at least two private subnets is available and preferred, `variables.tf` accepts `existing_vpc_id`/`existing_subnet_ids` to skip VPC creation (see the `vpc` module toggle below); the default path in `main.tf` still creates a new VPC because that is safer for a repeatable demo environment that gets destroyed and recreated often.
+
+- [ ] Write `demos/aws-dms/infra/terraform/versions.tf`:
+
+```hcl
+terraform {
+  required_version = ">= 1.7.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = var.aws_region
+}
+```
+
+- [ ] Write `demos/aws-dms/infra/terraform/variables.tf`:
+
+```hcl
+variable "aws_region" {
+  description = "AWS region for all resources in this demo. Must match the TiDB Cloud Dedicated cluster's region."
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "name_prefix" {
+  description = "Prefix applied to every resource name created by this demo, to make teardown and cost attribution unambiguous."
+  type        = string
+  default     = "tidb-lab-aws-dms"
+}
+
+variable "vpc_cidr" {
+  description = "CIDR block for the demo VPC."
+  type        = string
+  default     = "10.42.0.0/16"
+}
+
+variable "private_subnet_cidrs" {
+  description = "CIDR blocks for the two private subnets (Aurora + DMS replication instance)."
+  type        = list(string)
+  default     = ["10.42.1.0/24", "10.42.2.0/24"]
+}
+
+variable "public_subnet_cidr" {
+  description = "CIDR block for the single public subnet (NAT gateway only; nothing in this demo is publicly reachable)."
+  type        = string
+  default     = "10.42.0.0/24"
+}
+
+variable "availability_zones" {
+  description = "Two AZs in aws_region; Aurora and the DMS subnet group both need >= 2 AZs."
+  type        = list(string)
+  default     = ["us-east-1a", "us-east-1b"]
+}
+
+variable "aurora_engine_version" {
+  description = "Aurora PostgreSQL engine version. Must be >= 2.2 (PostgreSQL 10.6-compatible) for CDC support (Section 4)."
+  type        = string
+  default     = "15.4"
+}
+
+variable "aurora_instance_class" {
+  description = "Instance class for the single Aurora writer instance. db.t4g.medium is the smallest class this demo has validated for logical-replication CDC without falling behind under the demo's load profile."
+  type        = string
+  default     = "db.t4g.medium"
+}
+
+variable "aurora_master_username" {
+  type    = string
+  default = "labadmin"
+}
+
+variable "aurora_master_password" {
+  description = "Master password for the Aurora cluster. Pass via TF_VAR_aurora_master_password or a .tfvars file that is gitignored; never commit a literal value."
+  type        = string
+  sensitive   = true
+}
+
+variable "aurora_database_name" {
+  type    = string
+  default = "lab"
+}
+
+variable "dms_instance_class" {
+  description = "DMS replication instance class. dms.t3.large (2 vCPU / 8 GiB) is the minimum PingCAP recommends to avoid OOM during full load (Section 4)."
+  type        = string
+  default     = "dms.t3.large"
+}
+
+variable "dms_allocated_storage_gb" {
+  type    = number
+  default = 50
+}
+
+variable "tidb_host" {
+  description = "TiDB Cloud Dedicated cluster host, created out of band per Task 2's manual step. Used only to compute the security group egress rule and is not itself provisioned by Terraform."
+  type        = string
+}
+
+variable "tidb_port" {
+  type    = number
+  default = 4000
+}
+
+variable "tidb_traffic_filter_cidr" {
+  description = "CIDR to add to the TiDB Cloud Dedicated cluster's traffic filter, computed from this VPC's private subnets and passed to the manual traffic-filter step in the README; not applied by Terraform (TiDB Cloud Terraform provider is optional, see the note below the outputs)."
+  type        = string
+  default     = null
+}
+```
+
+- [ ] Write `demos/aws-dms/infra/terraform/main.tf`:
+
+```hcl
+data "aws_caller_identity" "current" {}
+
+resource "aws_vpc" "this" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+  tags = { Name = "${var.name_prefix}-vpc" }
+}
+
+resource "aws_internet_gateway" "this" {
+  vpc_id = aws_vpc.this.id
+  tags   = { Name = "${var.name_prefix}-igw" }
+}
+
+resource "aws_subnet" "public" {
+  vpc_id                  = aws_vpc.this.id
+  cidr_block              = var.public_subnet_cidr
+  availability_zone       = var.availability_zones[0]
+  map_public_ip_on_launch = true
+  tags                    = { Name = "${var.name_prefix}-public" }
+}
+
+resource "aws_subnet" "private" {
+  count             = length(var.private_subnet_cidrs)
+  vpc_id            = aws_vpc.this.id
+  cidr_block        = var.private_subnet_cidrs[count.index]
+  availability_zone = var.availability_zones[count.index]
+  tags              = { Name = "${var.name_prefix}-private-${count.index}" }
+}
+
+resource "aws_eip" "nat" {
+  domain = "vpc"
+  tags   = { Name = "${var.name_prefix}-nat-eip" }
+}
+
+resource "aws_nat_gateway" "this" {
+  allocation_id = aws_eip.nat.id
+  subnet_id     = aws_subnet.public.id
+  tags          = { Name = "${var.name_prefix}-nat" }
+  depends_on    = [aws_internet_gateway.this]
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.this.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.this.id
+  }
+  tags = { Name = "${var.name_prefix}-public-rt" }
+}
+
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.this.id
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.this.id
+  }
+  tags = { Name = "${var.name_prefix}-private-rt" }
+}
+
+resource "aws_route_table_association" "public" {
+  subnet_id      = aws_subnet.public.id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_route_table_association" "private" {
+  count          = length(aws_subnet.private)
+  subnet_id      = aws_subnet.private[count.index].id
+  route_table_id = aws_route_table.private.id
+}
+
+resource "aws_security_group" "aurora" {
+  name        = "${var.name_prefix}-aurora-sg"
+  description = "Aurora PostgreSQL source: inbound 5432 from DMS and the runner's egress, outbound to NAT for patching only."
+  vpc_id      = aws_vpc.this.id
+
+  ingress {
+    description     = "PostgreSQL from DMS replication instance"
+    from_port        = 5432
+    to_port          = 5432
+    protocol         = "tcp"
+    security_groups  = [aws_security_group.dms.id]
+  }
+
+  ingress {
+    description = "PostgreSQL from the demo runner (public egress via NAT for local development)"
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = { Name = "${var.name_prefix}-aurora-sg" }
+}
+
+resource "aws_security_group" "dms" {
+  name        = "${var.name_prefix}-dms-sg"
+  description = "DMS replication instance: outbound to Aurora (5432) and TiDB Cloud (4000), inbound none required."
+  vpc_id      = aws_vpc.this.id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = { Name = "${var.name_prefix}-dms-sg" }
+}
+
+resource "aws_db_subnet_group" "aurora" {
+  name       = "${var.name_prefix}-aurora-subnets"
+  subnet_ids = aws_subnet.private[*].id
+  tags       = { Name = "${var.name_prefix}-aurora-subnets" }
+}
+
+resource "aws_rds_cluster_parameter_group" "aurora_logical_replication" {
+  name        = "${var.name_prefix}-aurora-pg-cpg"
+  family      = "aurora-postgresql15"
+  description = "Enables logical replication so DMS CDC can use pglogical or test_decoding (Section 4)."
+
+  parameter {
+    name         = "rds.logical_replication"
+    value        = "1"
+    apply_method = "pending-reboot"
+  }
+}
+
+resource "aws_rds_cluster" "aurora" {
+  cluster_identifier              = "${var.name_prefix}-aurora"
+  engine                          = "aurora-postgresql"
+  engine_version                  = var.aurora_engine_version
+  master_username                 = var.aurora_master_username
+  master_password                 = var.aurora_master_password
+  database_name                   = var.aurora_database_name
+  db_subnet_group_name            = aws_db_subnet_group.aurora.name
+  vpc_security_group_ids          = [aws_security_group.aurora.id]
+  db_cluster_parameter_group_name = aws_rds_cluster_parameter_group.aurora_logical_replication.name
+  skip_final_snapshot             = true
+  apply_immediately                = true
+}
+
+resource "aws_rds_cluster_instance" "aurora_writer" {
+  identifier           = "${var.name_prefix}-aurora-writer"
+  cluster_identifier   = aws_rds_cluster.aurora.id
+  engine               = aws_rds_cluster.aurora.engine
+  engine_version       = aws_rds_cluster.aurora.engine_version
+  instance_class       = var.aurora_instance_class
+  publicly_accessible  = false
+  apply_immediately    = true
+}
+
+resource "aws_dms_replication_subnet_group" "this" {
+  replication_subnet_group_id          = "${var.name_prefix}-dms-subnets"
+  replication_subnet_group_description = "Private subnets for the DMS replication instance."
+  subnet_ids                           = aws_subnet.private[*].id
+}
+
+resource "aws_dms_replication_instance" "this" {
+  replication_instance_id     = "${var.name_prefix}-repl"
+  replication_instance_class  = var.dms_instance_class
+  allocated_storage           = var.dms_allocated_storage_gb
+  vpc_security_group_ids      = [aws_security_group.dms.id]
+  replication_subnet_group_id = aws_dms_replication_subnet_group.this.id
+  publicly_accessible         = false
+  multi_az                    = false
+  depends_on                  = [aws_iam_role_policy_attachment.dms_vpc_role, aws_iam_role_policy_attachment.dms_cloudwatch_logs_role]
+}
+
+resource "aws_dms_endpoint" "source_aurora" {
+  endpoint_id   = "${var.name_prefix}-source-aurora"
+  endpoint_type = "source"
+  engine_name   = "aurora-postgresql"
+  server_name   = aws_rds_cluster.aurora.endpoint
+  port          = 5432
+  username      = var.aurora_master_username
+  password      = var.aurora_master_password
+  database_name = var.aurora_database_name
+}
+
+resource "aws_dms_endpoint" "target_tidb" {
+  endpoint_id                 = "${var.name_prefix}-target-tidb"
+  endpoint_type               = "target"
+  engine_name                 = "mysql"
+  server_name                 = var.tidb_host
+  port                        = var.tidb_port
+  username                    = "root"
+  password                    = "REPLACE_BEFORE_APPLY"
+  database_name               = var.aurora_database_name
+  ssl_mode                    = "verify-full"
+  extra_connection_attributes = "Initstmt=SET FOREIGN_KEY_CHECKS=0;"
+
+  lifecycle {
+    ignore_changes = [password]
+  }
+}
+
+resource "aws_dms_replication_task" "this" {
+  replication_task_id      = "${var.name_prefix}-task"
+  replication_instance_arn = aws_dms_replication_instance.this.replication_instance_arn
+  source_endpoint_arn      = aws_dms_endpoint.source_aurora.endpoint_arn
+  target_endpoint_arn      = aws_dms_endpoint.target_tidb.endpoint_arn
+  migration_type           = "full-load-and-cdc"
+  table_mappings           = file("${path.module}/table-mappings.json")
+
+  replication_task_settings = jsonencode({
+    ValidationSettings = {
+      EnableValidation = true
+      ThreadCount       = 5
+    }
+    Logging = {
+      EnableLogging = true
+    }
+  })
+}
+
+resource "aws_iam_role" "dms_vpc_role" {
+  name = "dms-vpc-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "dms.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "dms_vpc_role" {
+  role       = aws_iam_role.dms_vpc_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonDMSVPCManagementRole"
+}
+
+resource "aws_iam_role" "dms_cloudwatch_logs_role" {
+  name = "dms-cloudwatch-logs-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "dms.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "dms_cloudwatch_logs_role" {
+  role       = aws_iam_role.dms_cloudwatch_logs_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonDMSCloudWatchLogsRole"
+}
+```
+
+Notes on this file:
+
+- The IAM roles `dms-vpc-role` and `dms-cloudwatch-logs-role` are fixed names DMS looks for by convention in an account (Section 4); if a previous DMS setup in this account already created them, `terraform apply` fails with "already exists" and the fix is `terraform import aws_iam_role.dms_vpc_role dms-vpc-role` (and the same for the CloudWatch logs role) before re-applying, not renaming the resource.
+- `aws_dms_endpoint.target_tidb.password` is a placeholder; replace it with the TiDB Cloud Dedicated cluster's root (or a dedicated migration user's) password via `TF_VAR`-style injection before `terraform apply`, and never commit the real value - the `lifecycle.ignore_changes` block exists so a manual console password rotation is not clobbered by a later `apply`.
+- `table_mappings` is loaded from a sibling JSON file instead of being inlined, so it can be edited without touching HCL.
+
+- [ ] Write `demos/aws-dms/infra/terraform/table-mappings.json`:
+
+```json
+{
+  "rules": [
+    {
+      "rule-type": "selection",
+      "rule-id": "1",
+      "rule-name": "select-lab-schema",
+      "object-locator": { "schema-name": "public", "table-name": "%" },
+      "rule-action": "include"
+    },
+    {
+      "rule-type": "transformation",
+      "rule-id": "2",
+      "rule-name": "rename-schema-to-lab",
+      "rule-target": "schema",
+      "object-locator": { "schema-name": "public" },
+      "rule-action": "rename",
+      "value": "lab"
+    }
+  ]
+}
+```
+
+- [ ] Write `demos/aws-dms/infra/terraform/outputs.tf`:
+
+```hcl
+output "aurora_cluster_endpoint" {
+  value = aws_rds_cluster.aurora.endpoint
+}
+
+output "aurora_cluster_reader_endpoint" {
+  value = aws_rds_cluster.aurora.reader_endpoint
+}
+
+output "dms_replication_instance_arn" {
+  value = aws_dms_replication_instance.this.replication_instance_arn
+}
+
+output "dms_replication_task_arn" {
+  value = aws_dms_replication_task.this.replication_task_arn
+}
+
+output "dms_replication_task_id" {
+  value = aws_dms_replication_task.this.replication_task_id
+}
+
+output "dms_security_group_id" {
+  value       = aws_security_group.dms.id
+  description = "Add this security group's associated ENI IPs (or the NAT gateway's public IP, if using a public TiDB Cloud endpoint) to the TiDB Cloud Dedicated cluster's traffic filter."
+}
+
+output "vpc_id" {
+  value = aws_vpc.this.id
+}
+```
+
+TiDB Cloud itself is not created by this Terraform (the TiDB Cloud Terraform provider exists and can manage a Dedicated cluster, but wiring it is out of scope for this pass to keep the demo's blast radius to AWS-only credentials); the cluster is created manually per the next step, and its host is fed back into `variables.tf`'s `tidb_host` for the `aws_dms_endpoint.target_tidb` resource above.
+
+- [ ] Manual live-run: `cd demos/aws-dms/infra/terraform && terraform init` - expected output ends with `Terraform has been successfully initialized!`.
+- [ ] Manual step (console, not Terraform in this pass - mark as a documented manual step in README per Section 5): create the TiDB Cloud Dedicated cluster in the same AWS region as `var.aws_region`, note its host/port, and set `TF_VAR_tidb_host` before applying.
+- [ ] Manual live-run: `TF_VAR_aurora_master_password="$(openssl rand -base64 24)" TF_VAR_tidb_host="<tidb-cloud-host>" terraform apply` - expected output: `Apply complete!` with `aurora_cluster_endpoint`, `dms_replication_instance_arn`, `dms_security_group_id` in the outputs.
+- [ ] Manual live-run: add the DMS security group's ENI IP (or NAT gateway public IP for a public TiDB Cloud endpoint) to the TiDB Cloud Dedicated cluster's traffic filter, and download its CA certificate, per [Connect AWS DMS to TiDB Cloud](https://docs.pingcap.com/tidbcloud/tidb-cloud-connect-aws-dms/).
+- [ ] Manual live-run: update the TiDB endpoint's real password: `aws dms modify-endpoint --endpoint-arn "$(terraform output -raw dms_replication_instance_arn | sed 's/repl-instance/endpoint/')" --password "<tidb-password>"` (or re-apply Terraform with the real password piped through `TF_VAR`), then in the AWS DMS console select the TiDB target endpoint and click **Run test** - expected: connection test status **successful**.
+- [ ] Manual live-run: confirm the migration task is ready: `aws dms describe-replication-tasks --filters Name=replication-task-id,Values=$(terraform output -raw dms_replication_task_id) --query 'ReplicationTasks[0].Status'` - expected: `"ready"`.
 - [ ] Commit: `git add demos/aws-dms/infra/terraform && git commit -m "aws-dms: add Terraform for Aurora PostgreSQL and DMS"`
 
 ### Task 3: Schema (manual live-run, DDL has no pure logic to unit test)
@@ -333,30 +791,121 @@ CREATE TABLE heartbeat (
 );
 ```
 
+Column-by-column type mapping applied above (Section 4's source table, restated per column for this schema):
+
+| PostgreSQL column | PostgreSQL type | TiDB column | TiDB type | Why |
+|---|---|---|---|---|
+| `accounts.account_id` | `SERIAL` | `account_id` | `INT AUTO_INCREMENT` | DMS migrates the underlying `INT4`, not the sequence; auto-increment is hand-added. |
+| `accounts.external_ref` | `UUID` | `external_ref` | `VARCHAR(36)` | DMS's internal UUID mapping is `STRING`; 36 chars fits the canonical hyphenated form exactly. |
+| `accounts.display_name` | `TEXT` | `display_name` | `TEXT` | Direct MySQL-compatible equivalent. |
+| `accounts.is_active` | `BOOLEAN` | `is_active` | `BOOLEAN` (TiDB alias for `TINYINT(1)`) | DMS's internal boolean mapping is a 5-char string; hand-declaring avoids trusting that default. |
+| `accounts.risk_tags` | `TEXT[]` (array) | `risk_tags` | `TEXT` | DMS's internal array mapping is `NCLOB` (migrated as text); TiDB has no native array type, so the demo stores it as a comma-joined string and documents this as a known lossy conversion, not silently. |
+| `accounts.metadata` | `JSONB` | `metadata` | `JSON` | DMS's internal JSONB mapping is also `NCLOB`; hand-declared as TiDB's native `JSON` type since MySQL/TiDB support it directly. |
+| `accounts.opened_at` | `TIMESTAMPTZ` | `opened_at` | `DATETIME` | Zone is not preserved by DMS; the runner and load generator always write/read in UTC so the demo's own comparison stays correct without relying on zone data DMS drops. |
+| `orders.amount` | `NUMERIC(18,2)` | `amount` | `NUMERIC(18,2)` | Explicit precision/scale on both sides avoids the default-`NUMERIC(28,6)` truncation risk documented in Section 4. |
+| `orders.currency` | `CHAR(3)` | `currency` | `CHAR(3)` | Direct equivalent. |
+| `orders.placed_at` | `TIMESTAMPTZ` | `placed_at` | `DATETIME` | Same UTC-normalization note as `opened_at`. |
+
 - [ ] Manual live-run: `psql "$PG_CONN_STRING" -f demos/aws-dms/infra/sql/schema.sql` - expected output: three `CREATE TABLE` confirmations.
 - [ ] Manual live-run: `mysql -h "$TIDB_HOST" -P "$TIDB_PORT" -u "$TIDB_USER" -p"$TIDB_PASSWORD" "$TIDB_DATABASE" < demos/aws-dms/infra/sql/schema-tidb.sql` - expected: no output on success (or `Query OK` per statement with `-v`).
 - [ ] Commit: `git add demos/aws-dms/infra/sql && git commit -m "aws-dms: add PostgreSQL source and TiDB target DDL"`
 
-### Task 4: Pure logic - checksum and row-count-diff
+### Task 4: Pure logic - checksum with canonical row encoding, and row-count-diff
+
+The checksum must produce the **same number** on PostgreSQL and TiDB for the same logical rows, even though the two engines format values differently (PostgreSQL's `NUMERIC` prints trailing zeros differently than MySQL/TiDB's, timestamps carry a time zone on one side and not the other, booleans print as `t`/`f` on PostgreSQL versus `1`/`0` on TiDB). The canonical row encoding fixes this by normalizing every value to one text form before hashing:
+
+- **Ordering:** rows are implicitly ordered by primary key ascending (both `SELECT` statements below add `ORDER BY <pk>` so `CONCAT_WS`-per-row hashing is deterministic per row; the checksum itself is a `SUM()` so cross-row order does not actually affect the aggregate, but the per-row encoding order of columns must match exactly between the two queries).
+- **NULL handling:** every column is wrapped so `NULL` normalizes to the fixed 4-character token `\N` (matching the MySQL `LOAD DATA` NULL convention) rather than an empty string, so `NULL` and `''` never collide.
+- **Timestamps:** both queries convert to UTC and format as `YYYY-MM-DD HH:MM:SS` with no time zone suffix (PostgreSQL: `to_char(col AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')`; TiDB: the column is already zone-naive `DATETIME` written in UTC by the runner, so `DATE_FORMAT(col, '%Y-%m-%d %H:%i:%s')` is sufficient).
+- **Numeric scale:** `NUMERIC(p,s)` columns are cast to a fixed-scale text form on both sides (`CAST(col AS NUMERIC(18,2))::text` on PostgreSQL, `CAST(col AS DECIMAL(18,2))` on TiDB) so trailing-zero formatting differences never cause a mismatch.
+- **Booleans:** normalized to `'0'`/`'1'` text on both sides (`CASE WHEN col THEN '1' ELSE '0' END` on PostgreSQL; TiDB's `BOOLEAN` already prints as `0`/`1` from `CAST(col AS CHAR)`).
+- **JSON:** normalized with each engine's own canonical-JSON function so key order and whitespace do not cause false mismatches (PostgreSQL: `jsonb_col::jsonb::text` - `jsonb` already normalizes whitespace and key type coercion, though it does not sort object keys, so this demo's `metadata` column is written by the load generator with keys always inserted in the same fixed order to keep the comparison valid; TiDB: `CAST(col AS JSON)` similarly re-serializes canonically for the same fixed key order).
 
 - [ ] Write `demos/aws-dms/test/checksum.test.ts`:
 
 ```ts
 import { describe, expect, it } from 'vitest';
-import { buildChecksumQuery } from '../runner/src/checksum';
+import { buildChecksumQuery, normalizedColumnExpression } from '../runner/src/checksum';
+
+describe('normalizedColumnExpression', () => {
+  it('wraps a boolean column with dialect-specific 0/1 normalization and NULL handling', () => {
+    expect(normalizedColumnExpression({ dialect: 'postgres', column: 'is_active', type: 'boolean' })).toBe(
+      "COALESCE(CASE WHEN is_active THEN '1' ELSE '0' END, '\\N')",
+    );
+    expect(normalizedColumnExpression({ dialect: 'mysql', column: 'is_active', type: 'boolean' })).toBe(
+      "COALESCE(CAST(is_active AS CHAR), '\\N')",
+    );
+  });
+
+  it('wraps a timestamp column normalized to UTC with no zone suffix', () => {
+    expect(normalizedColumnExpression({ dialect: 'postgres', column: 'opened_at', type: 'timestamptz' })).toBe(
+      "COALESCE(to_char(opened_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'), '\\N')",
+    );
+    expect(normalizedColumnExpression({ dialect: 'mysql', column: 'opened_at', type: 'timestamptz' })).toBe(
+      "COALESCE(DATE_FORMAT(opened_at, '%Y-%m-%d %H:%i:%s'), '\\N')",
+    );
+  });
+
+  it('wraps a numeric column with a fixed precision/scale cast', () => {
+    expect(normalizedColumnExpression({ dialect: 'postgres', column: 'amount', type: 'numeric', precision: 18, scale: 2 })).toBe(
+      "COALESCE(CAST(amount AS NUMERIC(18,2))::text, '\\N')",
+    );
+    expect(normalizedColumnExpression({ dialect: 'mysql', column: 'amount', type: 'numeric', precision: 18, scale: 2 })).toBe(
+      "COALESCE(CAST(CAST(amount AS DECIMAL(18,2)) AS CHAR), '\\N')",
+    );
+  });
+
+  it('wraps a plain text/json/uuid column with a simple NULL-safe cast', () => {
+    expect(normalizedColumnExpression({ dialect: 'postgres', column: 'metadata', type: 'json' })).toBe(
+      "COALESCE(metadata::jsonb::text, '\\N')",
+    );
+    expect(normalizedColumnExpression({ dialect: 'mysql', column: 'metadata', type: 'json' })).toBe(
+      "COALESCE(CAST(metadata AS JSON), '\\N')",
+    );
+    expect(normalizedColumnExpression({ dialect: 'postgres', column: 'external_ref', type: 'text' })).toBe(
+      "COALESCE(external_ref::text, '\\N')",
+    );
+  });
+});
 
 describe('buildChecksumQuery', () => {
-  it('builds a postgres checksum query summing a CRC32-style hash of concatenated columns', () => {
-    const query = buildChecksumQuery({ dialect: 'postgres', table: 'orders', columns: ['order_id', 'amount', 'status'] });
+  it('builds a postgres checksum query over normalized, order-by-pk columns', () => {
+    const query = buildChecksumQuery({
+      dialect: 'postgres',
+      table: 'orders',
+      primaryKey: 'order_id',
+      columns: [
+        { column: 'order_id', type: 'text' },
+        { column: 'amount', type: 'numeric', precision: 18, scale: 2 },
+        { column: 'status', type: 'text' },
+      ],
+    });
     expect(query).toBe(
-      "SELECT COALESCE(SUM(('x' || substr(md5(CONCAT_WS('|', order_id, amount, status)), 1, 8))::bit(32)::bigint), 0) AS checksum FROM orders",
+      "SELECT COALESCE(SUM(('x' || substr(md5(CONCAT_WS('|', " +
+        "COALESCE(order_id::text, '\\N'), " +
+        "COALESCE(CAST(amount AS NUMERIC(18,2))::text, '\\N'), " +
+        "COALESCE(status::text, '\\N'))), 1, 8))::bit(32)::bigint), 0) AS checksum " +
+        'FROM orders ORDER BY order_id',
     );
   });
 
   it('builds a mysql-compatible checksum query using the same hash shape', () => {
-    const query = buildChecksumQuery({ dialect: 'mysql', table: 'orders', columns: ['order_id', 'amount', 'status'] });
+    const query = buildChecksumQuery({
+      dialect: 'mysql',
+      table: 'orders',
+      primaryKey: 'order_id',
+      columns: [
+        { column: 'order_id', type: 'text' },
+        { column: 'amount', type: 'numeric', precision: 18, scale: 2 },
+        { column: 'status', type: 'text' },
+      ],
+    });
     expect(query).toBe(
-      "SELECT COALESCE(SUM(CONV(SUBSTRING(MD5(CONCAT_WS('|', order_id, amount, status)), 1, 8), 16, 10)), 0) AS checksum FROM orders",
+      "SELECT COALESCE(SUM(CONV(SUBSTRING(MD5(CONCAT_WS('|', " +
+        "COALESCE(CAST(order_id AS CHAR), '\\N'), " +
+        "COALESCE(CAST(CAST(amount AS DECIMAL(18,2)) AS CHAR), '\\N'), " +
+        "COALESCE(CAST(status AS CHAR), '\\N'))), 1, 8), 16, 10)), 0) AS checksum " +
+        'FROM orders ORDER BY order_id',
     );
   });
 });
@@ -368,18 +917,81 @@ describe('buildChecksumQuery', () => {
 ```ts
 export type ChecksumDialect = 'postgres' | 'mysql';
 
+export type ColumnType = 'text' | 'boolean' | 'timestamptz' | 'numeric' | 'json';
+
+export type ChecksumColumn = {
+  readonly column: string;
+  readonly type: ColumnType;
+  readonly precision?: number;
+  readonly scale?: number;
+};
+
+export type NormalizedColumnOptions = ChecksumColumn & {
+  readonly dialect: ChecksumDialect;
+};
+
+const NULL_TOKEN = "'\\N'";
+
+export const normalizedColumnExpression = (options: NormalizedColumnOptions): string => {
+  const { dialect, column, type, precision, scale } = options;
+
+  if (type === 'boolean') {
+    const raw =
+      dialect === 'postgres'
+        ? `CASE WHEN ${column} THEN '1' ELSE '0' END`
+        : `CAST(${column} AS CHAR)`;
+    return `COALESCE(${raw}, ${NULL_TOKEN})`;
+  }
+
+  if (type === 'timestamptz') {
+    const raw =
+      dialect === 'postgres'
+        ? `to_char(${column} AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')`
+        : `DATE_FORMAT(${column}, '%Y-%m-%d %H:%i:%s')`;
+    return `COALESCE(${raw}, ${NULL_TOKEN})`;
+  }
+
+  if (type === 'numeric') {
+    const p = precision ?? 18;
+    const s = scale ?? 2;
+    const raw =
+      dialect === 'postgres'
+        ? `CAST(${column} AS NUMERIC(${p},${s}))::text`
+        : `CAST(CAST(${column} AS DECIMAL(${p},${s})) AS CHAR)`;
+    return `COALESCE(${raw}, ${NULL_TOKEN})`;
+  }
+
+  if (type === 'json') {
+    const raw = dialect === 'postgres' ? `${column}::jsonb::text` : `CAST(${column} AS JSON)`;
+    return `COALESCE(${raw}, ${NULL_TOKEN})`;
+  }
+
+  const raw = dialect === 'postgres' ? `${column}::text` : `CAST(${column} AS CHAR)`;
+  return `COALESCE(${raw}, ${NULL_TOKEN})`;
+};
+
 export type ChecksumQueryOptions = {
   readonly dialect: ChecksumDialect;
   readonly table: string;
-  readonly columns: readonly string[];
+  readonly primaryKey: string;
+  readonly columns: readonly ChecksumColumn[];
 };
 
 export const buildChecksumQuery = (options: ChecksumQueryOptions): string => {
-  const columnList = options.columns.join(', ');
-  if (options.dialect === 'postgres') {
-    return `SELECT COALESCE(SUM(('x' || substr(md5(CONCAT_WS('|', ${columnList})), 1, 8))::bit(32)::bigint), 0) AS checksum FROM ${options.table}`;
-  }
-  return `SELECT COALESCE(SUM(CONV(SUBSTRING(MD5(CONCAT_WS('|', ${columnList})), 1, 8), 16, 10)), 0) AS checksum FROM ${options.table}`;
+  const normalizedColumns = options.columns
+    .map((column) => normalizedColumnExpression({ ...column, dialect: options.dialect }))
+    .join(', ');
+  const concatExpression = `CONCAT_WS('|', ${normalizedColumns})`;
+
+  const hashExpression =
+    options.dialect === 'postgres'
+      ? `('x' || substr(md5(${concatExpression}), 1, 8))::bit(32)::bigint`
+      : `CONV(SUBSTRING(MD5(${concatExpression}), 1, 8), 16, 10)`;
+
+  return (
+    `SELECT COALESCE(SUM(${hashExpression}), 0) AS checksum ` +
+    `FROM ${options.table} ORDER BY ${options.primaryKey}`
+  );
 };
 ```
 
@@ -416,7 +1028,7 @@ export const rowCountDiff = (options: RowCountDiffOptions): number =>
 ```
 
 - [ ] Run: `cd demos/aws-dms && pnpm vitest run test/row-count-diff.test.ts` - expected PASS.
-- [ ] Commit: `git add demos/aws-dms/runner/src/checksum.ts demos/aws-dms/runner/src/row-count-diff.ts demos/aws-dms/test/checksum.test.ts demos/aws-dms/test/row-count-diff.test.ts && git commit -m "aws-dms: add checksum and row-count-diff pure logic"`
+- [ ] Commit: `git add demos/aws-dms/runner/src/checksum.ts demos/aws-dms/runner/src/row-count-diff.ts demos/aws-dms/test/checksum.test.ts demos/aws-dms/test/row-count-diff.test.ts && git commit -m "aws-dms: add checksum canonical encoding and row-count-diff pure logic"`
 
 ### Task 5: Pure logic - freshness and cutover timer
 
@@ -484,42 +1096,1079 @@ export const cutoverDowntimeSeconds = (options: CutoverTimerOptions): number =>
 - [ ] Run: `cd demos/aws-dms && pnpm vitest run test/cutover-timer.test.ts` - expected PASS.
 - [ ] Commit: `git add demos/aws-dms/runner/src/freshness.ts demos/aws-dms/runner/src/cutover-timer.ts demos/aws-dms/test/freshness.test.ts demos/aws-dms/test/cutover-timer.test.ts && git commit -m "aws-dms: add freshness and cutover-timer pure logic"`
 
-### Task 6: I/O adapters - DMS and CloudWatch pollers (manual live-run)
+### Task 6: Pure logic - DescribeTableStatistics parsing and CloudWatch GetMetricData
 
-- [ ] Write `demos/aws-dms/runner/src/dms-poller.ts`, an adapter around `@aws-sdk/client-database-migration-service`'s `DescribeTableStatisticsCommand`, returning `{ tableName, fullLoadRows, appliedInserts, appliedUpdates, appliedDeletes, validationFailedRecords, tableState }` per table. Before writing the field access, confirm the exact response field names and casing against the live API response captured below (the UNVERIFIED item in Section 4).
-- [ ] Manual live-run: `aws dms describe-table-statistics --replication-task-arn "$DMS_TASK_ARN" --region "$AWS_REGION"` - expected output: a JSON array under `TableStatistics` with fields including `FullLoadRows`, `AppliedInserts`, `AppliedUpdates`, `AppliedDeletes`, `ValidationState`, `TableState`; copy the exact field names from this output into `dms-poller.ts` (do not guess ahead of this step).
-- [ ] Write `demos/aws-dms/runner/src/cloudwatch-poller.ts`, an adapter around `@aws-sdk/client-cloudwatch`'s `GetMetricDataCommand` for the `AWS/DMS` namespace, metrics `CDCLatencySource` and `CDCLatencyTarget`.
-- [ ] Manual live-run: `aws cloudwatch list-metrics --namespace AWS/DMS --metric-name CDCLatencySource --region "$AWS_REGION"` - expected output: a `Metrics` array whose `Dimensions` show the exact dimension names (`ReplicationInstanceIdentifier`, `ReplicationTaskIdentifier`, or both) to use in `GetMetricData`; copy those dimension names into `cloudwatch-poller.ts`.
-- [ ] Manual live-run: `aws cloudwatch get-metric-data --metric-data-queries file://demos/aws-dms/infra/cloudwatch-query.json --start-time "$(date -u -v-10M +%Y-%m-%dT%H:%M:%SZ)" --end-time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --region "$AWS_REGION"` - expected output: `MetricDataResults` with non-empty `Values` once the task is in CDC.
-- [ ] Commit: `git add demos/aws-dms/runner/src/dms-poller.ts demos/aws-dms/runner/src/cloudwatch-poller.ts && git commit -m "aws-dms: add DMS and CloudWatch polling adapters"`
+`runner/src/table-stats.ts` parses the AWS DMS `DescribeTableStatistics` response shape into a per-table progress record the emitter can turn into metrics. The field names below (`FullLoadRows`, `AppliedInserts`, `AppliedUpdates`, `AppliedDeletes`, `ValidationFailedRecords`, `TableState`) are the **UNVERIFIED** item from Section 4 - they match the AWS SDK v3 `TableStatistics` shape from general API familiarity, but Task 8's manual live-run step must confirm them against a real response before this parser is trusted in a recording.
 
-### Task 7: I/O adapters - PostgreSQL client, load generator, heartbeat (manual live-run)
+- [ ] Write `demos/aws-dms/test/table-stats.test.ts`:
 
-- [ ] Write `demos/aws-dms/runner/src/pg-client.ts`, wrapping `pg.Pool` configured from `PG_HOST`/`PG_PORT`/`PG_USER`/`PG_PASSWORD`/`PG_DATABASE`, exposing `insertHeartbeat()`, `countRows(table)`, and `runChecksum(table, columns)` using `buildChecksumQuery({ dialect: 'postgres', ... })`.
-- [ ] Write `demos/aws-dms/runner/src/load-generator.ts`, using `every` from `@lab/runner-kit` to insert a baseline rate of `accounts`/`orders` rows against `pg-client.ts` each tick, with a `burst()` method that raises the rate for 30 seconds when the `burst-writes` control fires.
-- [ ] Manual live-run: `PG_HOST=... PG_PORT=... PG_USER=... PG_PASSWORD=... PG_DATABASE=... node --import tsx -e "import('./demos/aws-dms/runner/src/pg-client.ts').then(m => m.createPgClient().insertHeartbeat()).then(console.log)"` - expected output: the inserted heartbeat row's `heartbeat_id` and `inserted_at`.
+```ts
+import { describe, expect, it } from 'vitest';
+import { parseTableStatistics, tableProgressPercent } from '../runner/src/table-stats';
+
+const sampleResponse = {
+  TableStatistics: [
+    {
+      TableName: 'orders',
+      SchemaName: 'lab',
+      FullLoadRows: 8000,
+      AppliedInserts: 120,
+      AppliedUpdates: 4,
+      AppliedDeletes: 0,
+      ValidationFailedRecords: 0,
+      TableState: 'Table completed',
+    },
+    {
+      TableName: 'accounts',
+      SchemaName: 'lab',
+      FullLoadRows: 500,
+      AppliedInserts: 2,
+      AppliedUpdates: 0,
+      AppliedDeletes: 0,
+      ValidationFailedRecords: 1,
+      TableState: 'Full load',
+    },
+  ],
+};
+
+describe('parseTableStatistics', () => {
+  it('extracts a normalized per-table progress record for every table', () => {
+    const parsed = parseTableStatistics(sampleResponse);
+    expect(parsed).toEqual([
+      {
+        tableName: 'orders',
+        fullLoadRows: 8000,
+        appliedInserts: 120,
+        appliedUpdates: 4,
+        appliedDeletes: 0,
+        validationFailedRecords: 0,
+        tableState: 'Table completed',
+        isFullLoadComplete: true,
+      },
+      {
+        tableName: 'accounts',
+        fullLoadRows: 500,
+        appliedInserts: 2,
+        appliedUpdates: 0,
+        appliedDeletes: 0,
+        validationFailedRecords: 1,
+        tableState: 'Full load',
+        isFullLoadComplete: false,
+      },
+    ]);
+  });
+
+  it('returns an empty array for a response with no TableStatistics field', () => {
+    expect(parseTableStatistics({})).toEqual([]);
+  });
+
+  it('defaults missing numeric fields to zero rather than throwing', () => {
+    const parsed = parseTableStatistics({ TableStatistics: [{ TableName: 'heartbeat', TableState: 'Table completed' }] });
+    expect(parsed[0]).toEqual({
+      tableName: 'heartbeat',
+      fullLoadRows: 0,
+      appliedInserts: 0,
+      appliedUpdates: 0,
+      appliedDeletes: 0,
+      validationFailedRecords: 0,
+      tableState: 'Table completed',
+      isFullLoadComplete: true,
+    });
+  });
+});
+
+describe('tableProgressPercent', () => {
+  it('computes percent complete against a known source row count', () => {
+    expect(tableProgressPercent({ fullLoadRows: 250, sourceRowCount: 1000 })).toBe(25);
+  });
+
+  it('caps at 100 when fullLoadRows exceeds sourceRowCount (late-arriving CDC rows during full load)', () => {
+    expect(tableProgressPercent({ fullLoadRows: 1050, sourceRowCount: 1000 })).toBe(100);
+  });
+
+  it('returns 0 when sourceRowCount is 0 rather than dividing by zero', () => {
+    expect(tableProgressPercent({ fullLoadRows: 0, sourceRowCount: 0 })).toBe(0);
+  });
+});
+```
+
+- [ ] Run: `cd demos/aws-dms && pnpm vitest run test/table-stats.test.ts` - expected FAIL (`runner/src/table-stats.ts` does not exist).
+- [ ] Write `demos/aws-dms/runner/src/table-stats.ts`:
+
+```ts
+export type TableProgress = {
+  readonly tableName: string;
+  readonly fullLoadRows: number;
+  readonly appliedInserts: number;
+  readonly appliedUpdates: number;
+  readonly appliedDeletes: number;
+  readonly validationFailedRecords: number;
+  readonly tableState: string;
+  readonly isFullLoadComplete: boolean;
+};
+
+type RawTableStatistic = {
+  readonly TableName?: string;
+  readonly FullLoadRows?: number;
+  readonly AppliedInserts?: number;
+  readonly AppliedUpdates?: number;
+  readonly AppliedDeletes?: number;
+  readonly ValidationFailedRecords?: number;
+  readonly TableState?: string;
+};
+
+type RawDescribeTableStatisticsResponse = {
+  readonly TableStatistics?: readonly RawTableStatistic[];
+};
+
+const FULL_LOAD_COMPLETE_STATES = new Set(['Table completed']);
+
+export const parseTableStatistics = (response: RawDescribeTableStatisticsResponse): readonly TableProgress[] =>
+  (response.TableStatistics ?? []).map((raw) => ({
+    tableName: raw.TableName ?? '',
+    fullLoadRows: raw.FullLoadRows ?? 0,
+    appliedInserts: raw.AppliedInserts ?? 0,
+    appliedUpdates: raw.AppliedUpdates ?? 0,
+    appliedDeletes: raw.AppliedDeletes ?? 0,
+    validationFailedRecords: raw.ValidationFailedRecords ?? 0,
+    tableState: raw.TableState ?? '',
+    isFullLoadComplete: FULL_LOAD_COMPLETE_STATES.has(raw.TableState ?? ''),
+  }));
+
+export type TableProgressPercentOptions = {
+  readonly fullLoadRows: number;
+  readonly sourceRowCount: number;
+};
+
+export const tableProgressPercent = (options: TableProgressPercentOptions): number => {
+  if (options.sourceRowCount === 0) return 0;
+  return Math.min(100, Math.round((options.fullLoadRows / options.sourceRowCount) * 100));
+};
+```
+
+- [ ] Run: `cd demos/aws-dms && pnpm vitest run test/table-stats.test.ts` - expected PASS.
+- [ ] Write `demos/aws-dms/test/cloudwatch-query.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { buildCdcLatencyQuery, parseGetMetricDataResponse } from '../runner/src/cloudwatch-query';
+
+describe('buildCdcLatencyQuery', () => {
+  it('builds a GetMetricData request for both CDC latency metrics scoped to one replication task', () => {
+    const request = buildCdcLatencyQuery({
+      replicationInstanceId: 'tidb-lab-aws-dms-repl',
+      replicationTaskId: 'tidb-lab-aws-dms-task',
+      startTime: new Date('2026-01-01T00:00:00Z'),
+      endTime: new Date('2026-01-01T00:05:00Z'),
+    });
+    expect(request).toEqual({
+      StartTime: new Date('2026-01-01T00:00:00Z'),
+      EndTime: new Date('2026-01-01T00:05:00Z'),
+      MetricDataQueries: [
+        {
+          Id: 'cdc_latency_source',
+          MetricStat: {
+            Metric: {
+              Namespace: 'AWS/DMS',
+              MetricName: 'CDCLatencySource',
+              Dimensions: [
+                { Name: 'ReplicationInstanceIdentifier', Value: 'tidb-lab-aws-dms-repl' },
+                { Name: 'ReplicationTaskIdentifier', Value: 'tidb-lab-aws-dms-task' },
+              ],
+            },
+            Period: 60,
+            Stat: 'Average',
+          },
+          ReturnData: true,
+        },
+        {
+          Id: 'cdc_latency_target',
+          MetricStat: {
+            Metric: {
+              Namespace: 'AWS/DMS',
+              MetricName: 'CDCLatencyTarget',
+              Dimensions: [
+                { Name: 'ReplicationInstanceIdentifier', Value: 'tidb-lab-aws-dms-repl' },
+                { Name: 'ReplicationTaskIdentifier', Value: 'tidb-lab-aws-dms-task' },
+              ],
+            },
+            Period: 60,
+            Stat: 'Average',
+          },
+          ReturnData: true,
+        },
+      ],
+    });
+  });
+});
+
+describe('parseGetMetricDataResponse', () => {
+  it('extracts the most recent datapoint per metric id', () => {
+    const parsed = parseGetMetricDataResponse({
+      MetricDataResults: [
+        { Id: 'cdc_latency_source', Timestamps: [new Date('2026-01-01T00:04:00Z'), new Date('2026-01-01T00:03:00Z')], Values: [2, 5] },
+        { Id: 'cdc_latency_target', Timestamps: [new Date('2026-01-01T00:04:00Z')], Values: [3] },
+      ],
+    });
+    expect(parsed).toEqual({ cdc_latency_source: 2, cdc_latency_target: 3 });
+  });
+
+  it('omits a metric id with no datapoints instead of defaulting to zero', () => {
+    const parsed = parseGetMetricDataResponse({
+      MetricDataResults: [{ Id: 'cdc_latency_source', Timestamps: [], Values: [] }],
+    });
+    expect(parsed).toEqual({});
+  });
+
+  it('returns an empty object for a response with no MetricDataResults field', () => {
+    expect(parseGetMetricDataResponse({})).toEqual({});
+  });
+});
+```
+
+- [ ] Run: `cd demos/aws-dms && pnpm vitest run test/cloudwatch-query.test.ts` - expected FAIL (`runner/src/cloudwatch-query.ts` does not exist).
+- [ ] Write `demos/aws-dms/runner/src/cloudwatch-query.ts`:
+
+```ts
+export type CdcLatencyQueryOptions = {
+  readonly replicationInstanceId: string;
+  readonly replicationTaskId: string;
+  readonly startTime: Date;
+  readonly endTime: Date;
+};
+
+type MetricDataQuery = {
+  readonly Id: string;
+  readonly MetricStat: {
+    readonly Metric: {
+      readonly Namespace: string;
+      readonly MetricName: string;
+      readonly Dimensions: readonly { readonly Name: string; readonly Value: string }[];
+    };
+    readonly Period: number;
+    readonly Stat: string;
+  };
+  readonly ReturnData: boolean;
+};
+
+export type GetMetricDataRequest = {
+  readonly StartTime: Date;
+  readonly EndTime: Date;
+  readonly MetricDataQueries: readonly MetricDataQuery[];
+};
+
+const buildMetricQuery = (options: {
+  readonly id: string;
+  readonly metricName: string;
+  readonly replicationInstanceId: string;
+  readonly replicationTaskId: string;
+}): MetricDataQuery => ({
+  Id: options.id,
+  MetricStat: {
+    Metric: {
+      Namespace: 'AWS/DMS',
+      MetricName: options.metricName,
+      Dimensions: [
+        { Name: 'ReplicationInstanceIdentifier', Value: options.replicationInstanceId },
+        { Name: 'ReplicationTaskIdentifier', Value: options.replicationTaskId },
+      ],
+    },
+    Period: 60,
+    Stat: 'Average',
+  },
+  ReturnData: true,
+});
+
+export const buildCdcLatencyQuery = (options: CdcLatencyQueryOptions): GetMetricDataRequest => ({
+  StartTime: options.startTime,
+  EndTime: options.endTime,
+  MetricDataQueries: [
+    buildMetricQuery({
+      id: 'cdc_latency_source',
+      metricName: 'CDCLatencySource',
+      replicationInstanceId: options.replicationInstanceId,
+      replicationTaskId: options.replicationTaskId,
+    }),
+    buildMetricQuery({
+      id: 'cdc_latency_target',
+      metricName: 'CDCLatencyTarget',
+      replicationInstanceId: options.replicationInstanceId,
+      replicationTaskId: options.replicationTaskId,
+    }),
+  ],
+});
+
+type RawMetricDataResult = {
+  readonly Id?: string;
+  readonly Timestamps?: readonly Date[];
+  readonly Values?: readonly number[];
+};
+
+type RawGetMetricDataResponse = {
+  readonly MetricDataResults?: readonly RawMetricDataResult[];
+};
+
+export type LatestMetricValues = Readonly<Record<string, number>>;
+
+export const parseGetMetricDataResponse = (response: RawGetMetricDataResponse): LatestMetricValues => {
+  const results: Record<string, number> = {};
+  for (const result of response.MetricDataResults ?? []) {
+    const timestamps = result.Timestamps ?? [];
+    const values = result.Values ?? [];
+    if (result.Id === undefined || timestamps.length === 0 || values.length === 0) continue;
+    let latestIndex = 0;
+    for (let i = 1; i < timestamps.length; i += 1) {
+      if (timestamps[i].getTime() > timestamps[latestIndex].getTime()) latestIndex = i;
+    }
+    results[result.Id] = values[latestIndex];
+  }
+  return results;
+};
+```
+
+- [ ] Run: `cd demos/aws-dms && pnpm vitest run test/cloudwatch-query.test.ts` - expected PASS.
+- [ ] Commit: `git add demos/aws-dms/runner/src/table-stats.ts demos/aws-dms/runner/src/cloudwatch-query.ts demos/aws-dms/test/table-stats.test.ts demos/aws-dms/test/cloudwatch-query.test.ts && git commit -m "aws-dms: add DescribeTableStatistics and GetMetricData pure parsers"`
+
+### Task 7: Pure logic - cutover state machine and workload generator schedule
+
+The cutover state machine has four states: `running` (load generator active, CDC live) to `draining` (load generator stopped, waiting for CDC latency to hit zero) to `verified` (row-count-match and checksum-match both passed) to `flipped` (app connection string pointed at TiDB). Each transition has a guard so an invalid call is rejected rather than silently corrupting state - this matters because the runner's `start-cutover` control, a stale retry, or a UI double-click must not be able to skip verification.
+
+- [ ] Write `demos/aws-dms/test/cutover-state.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { createCutoverStateMachine } from '../runner/src/cutover-state';
+
+describe('createCutoverStateMachine', () => {
+  it('starts in the running state', () => {
+    const machine = createCutoverStateMachine();
+    expect(machine.getState()).toBe('running');
+  });
+
+  it('advances running -> draining -> verified -> flipped in order', () => {
+    const machine = createCutoverStateMachine();
+    expect(machine.beginDraining()).toEqual({ ok: true, state: 'draining' });
+    expect(machine.markVerified()).toEqual({ ok: true, state: 'verified' });
+    expect(machine.markFlipped()).toEqual({ ok: true, state: 'flipped' });
+    expect(machine.getState()).toBe('flipped');
+  });
+
+  it('rejects markVerified before beginDraining', () => {
+    const machine = createCutoverStateMachine();
+    expect(machine.markVerified()).toEqual({
+      ok: false,
+      state: 'running',
+      reason: 'cannot markVerified from running, expected draining',
+    });
+  });
+
+  it('rejects markFlipped before markVerified', () => {
+    const machine = createCutoverStateMachine();
+    machine.beginDraining();
+    expect(machine.markFlipped()).toEqual({
+      ok: false,
+      state: 'draining',
+      reason: 'cannot markFlipped from draining, expected verified',
+    });
+  });
+
+  it('rejects a second beginDraining once already draining', () => {
+    const machine = createCutoverStateMachine();
+    machine.beginDraining();
+    expect(machine.beginDraining()).toEqual({
+      ok: false,
+      state: 'draining',
+      reason: 'cannot beginDraining from draining, expected running',
+    });
+  });
+
+  it('rejects any transition once flipped (terminal state)', () => {
+    const machine = createCutoverStateMachine();
+    machine.beginDraining();
+    machine.markVerified();
+    machine.markFlipped();
+    expect(machine.beginDraining()).toEqual({
+      ok: false,
+      state: 'flipped',
+      reason: 'cannot beginDraining from flipped, expected running',
+    });
+  });
+});
+```
+
+- [ ] Run: `cd demos/aws-dms && pnpm vitest run test/cutover-state.test.ts` - expected FAIL (`runner/src/cutover-state.ts` does not exist).
+- [ ] Write `demos/aws-dms/runner/src/cutover-state.ts`:
+
+```ts
+export type CutoverState = 'running' | 'draining' | 'verified' | 'flipped';
+
+export type TransitionResult =
+  | { readonly ok: true; readonly state: CutoverState }
+  | { readonly ok: false; readonly state: CutoverState; readonly reason: string };
+
+export type CutoverStateMachine = {
+  readonly getState: () => CutoverState;
+  readonly beginDraining: () => TransitionResult;
+  readonly markVerified: () => TransitionResult;
+  readonly markFlipped: () => TransitionResult;
+};
+
+const attemptTransition = (
+  current: CutoverState,
+  requiredFrom: CutoverState,
+  next: CutoverState,
+  actionName: string,
+): { readonly next: CutoverState; readonly result: TransitionResult } => {
+  if (current !== requiredFrom) {
+    return {
+      next: current,
+      result: { ok: false, state: current, reason: `cannot ${actionName} from ${current}, expected ${requiredFrom}` },
+    };
+  }
+  return { next, result: { ok: true, state: next } };
+};
+
+export const createCutoverStateMachine = (): CutoverStateMachine => {
+  let state: CutoverState = 'running';
+
+  const beginDraining = (): TransitionResult => {
+    const { next, result } = attemptTransition(state, 'running', 'draining', 'beginDraining');
+    state = next;
+    return result;
+  };
+
+  const markVerified = (): TransitionResult => {
+    const { next, result } = attemptTransition(state, 'draining', 'verified', 'markVerified');
+    state = next;
+    return result;
+  };
+
+  const markFlipped = (): TransitionResult => {
+    const { next, result } = attemptTransition(state, 'verified', 'flipped', 'markFlipped');
+    state = next;
+    return result;
+  };
+
+  return { getState: () => state, beginDraining, markVerified, markFlipped };
+};
+```
+
+- [ ] Run: `cd demos/aws-dms && pnpm vitest run test/cutover-state.test.ts` - expected PASS.
+- [ ] Write `demos/aws-dms/test/workload.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { currentWriteRate, isBurstActive } from '../runner/src/workload';
+
+describe('currentWriteRate', () => {
+  it('returns the baseline rate when no burst is active', () => {
+    expect(
+      currentWriteRate({ baselineRowsPerTick: 5, burstUntilMs: undefined, burstMultiplier: 10, nowMs: 1000 }),
+    ).toBe(5);
+  });
+
+  it('returns the multiplied rate while a burst window is active', () => {
+    expect(
+      currentWriteRate({ baselineRowsPerTick: 5, burstUntilMs: 5000, burstMultiplier: 10, nowMs: 1000 }),
+    ).toBe(50);
+  });
+
+  it('returns the baseline rate once the burst window has elapsed', () => {
+    expect(
+      currentWriteRate({ baselineRowsPerTick: 5, burstUntilMs: 5000, burstMultiplier: 10, nowMs: 6000 }),
+    ).toBe(5);
+  });
+
+  it('treats the exact burst end tick as no longer bursting', () => {
+    expect(
+      currentWriteRate({ baselineRowsPerTick: 5, burstUntilMs: 5000, burstMultiplier: 10, nowMs: 5000 }),
+    ).toBe(5);
+  });
+});
+
+describe('isBurstActive', () => {
+  it('is false with no burst window set', () => {
+    expect(isBurstActive({ burstUntilMs: undefined, nowMs: 1000 })).toBe(false);
+  });
+
+  it('is true strictly before the burst window ends', () => {
+    expect(isBurstActive({ burstUntilMs: 5000, nowMs: 4999 })).toBe(true);
+  });
+
+  it('is false at or after the burst window ends', () => {
+    expect(isBurstActive({ burstUntilMs: 5000, nowMs: 5000 })).toBe(false);
+  });
+});
+```
+
+- [ ] Run: `cd demos/aws-dms && pnpm vitest run test/workload.test.ts` - expected FAIL (`runner/src/workload.ts` does not exist).
+- [ ] Write `demos/aws-dms/runner/src/workload.ts`:
+
+```ts
+export type IsBurstActiveOptions = {
+  readonly burstUntilMs: number | undefined;
+  readonly nowMs: number;
+};
+
+export const isBurstActive = (options: IsBurstActiveOptions): boolean =>
+  options.burstUntilMs !== undefined && options.nowMs < options.burstUntilMs;
+
+export type CurrentWriteRateOptions = {
+  readonly baselineRowsPerTick: number;
+  readonly burstUntilMs: number | undefined;
+  readonly burstMultiplier: number;
+  readonly nowMs: number;
+};
+
+export const currentWriteRate = (options: CurrentWriteRateOptions): number =>
+  isBurstActive({ burstUntilMs: options.burstUntilMs, nowMs: options.nowMs })
+    ? options.baselineRowsPerTick * options.burstMultiplier
+    : options.baselineRowsPerTick;
+```
+
+- [ ] Run: `cd demos/aws-dms && pnpm vitest run test/workload.test.ts` - expected PASS.
+- [ ] Commit: `git add demos/aws-dms/runner/src/cutover-state.ts demos/aws-dms/runner/src/workload.ts demos/aws-dms/test/cutover-state.test.ts demos/aws-dms/test/workload.test.ts && git commit -m "aws-dms: add cutover state machine and workload rate schedule pure logic"`
+
+### Task 8: I/O adapters - DMS and CloudWatch pollers (manual live-run)
+
+- [ ] Manual live-run, capture a real response before trusting the parser: `aws dms describe-table-statistics --replication-task-arn "$DMS_TASK_ARN" --region "$AWS_REGION" | tee /tmp/dms-table-stats-sample.json` - expected output: a JSON object with a `TableStatistics` array; compare every field name used in `runner/src/table-stats.ts` (`FullLoadRows`, `AppliedInserts`, `AppliedUpdates`, `AppliedDeletes`, `ValidationFailedRecords`, `TableState`) against this real output. If any field name or casing differs, fix `table-stats.ts` and its test now, before wiring the adapter below - do not guess ahead of this step (this closes the Section 4 **UNVERIFIED** item).
+- [ ] Write `demos/aws-dms/runner/src/dms-poller.ts`:
+
+```ts
+import {
+  DatabaseMigrationServiceClient,
+  DescribeTableStatisticsCommand,
+} from '@aws-sdk/client-database-migration-service';
+import { parseTableStatistics, type TableProgress } from './table-stats';
+
+export type DmsPoller = {
+  readonly pollTableStatistics: () => Promise<readonly TableProgress[]>;
+};
+
+export type CreateDmsPollerOptions = {
+  readonly region: string;
+  readonly replicationTaskArn: string;
+};
+
+export const createDmsPoller = (options: CreateDmsPollerOptions): DmsPoller => {
+  const client = new DatabaseMigrationServiceClient({ region: options.region });
+
+  const pollTableStatistics = async (): Promise<readonly TableProgress[]> => {
+    const response = await client.send(
+      new DescribeTableStatisticsCommand({ ReplicationTaskArn: options.replicationTaskArn }),
+    );
+    return parseTableStatistics(response);
+  };
+
+  return { pollTableStatistics };
+};
+```
+
+- [ ] Manual live-run, capture the CloudWatch dimension names before trusting the query builder: `aws cloudwatch list-metrics --namespace AWS/DMS --metric-name CDCLatencySource --region "$AWS_REGION"` - expected output: a `Metrics` array whose `Dimensions` show the exact dimension names (`ReplicationInstanceIdentifier`, `ReplicationTaskIdentifier`, or both) in use; compare against `buildCdcLatencyQuery` in `runner/src/cloudwatch-query.ts` and fix the dimension names/order there and in its test if they differ (this closes the second Section 4 **UNVERIFIED** item).
+- [ ] Manual live-run: `aws cloudwatch get-metric-data --metric-data-queries file://demos/aws-dms/infra/cloudwatch-query-sample.json --start-time "$(date -u -v-10M +%Y-%m-%dT%H:%M:%SZ)" --end-time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --region "$AWS_REGION"` - expected output: `MetricDataResults` with non-empty `Values` once the task is in CDC; save this response as `/tmp/dms-metric-data-sample.json` and compare its shape against `parseGetMetricDataResponse`.
+- [ ] Write `demos/aws-dms/infra/cloudwatch-query-sample.json` (a static copy of `buildCdcLatencyQuery`'s output, used only for the manual CLI verification step above, kept in sync by hand since the CLI does not import TypeScript):
+
+```json
+[
+  {
+    "Id": "cdc_latency_source",
+    "MetricStat": {
+      "Metric": {
+        "Namespace": "AWS/DMS",
+        "MetricName": "CDCLatencySource",
+        "Dimensions": [
+          { "Name": "ReplicationInstanceIdentifier", "Value": "tidb-lab-aws-dms-repl" },
+          { "Name": "ReplicationTaskIdentifier", "Value": "tidb-lab-aws-dms-task" }
+        ]
+      },
+      "Period": 60,
+      "Stat": "Average"
+    },
+    "ReturnData": true
+  },
+  {
+    "Id": "cdc_latency_target",
+    "MetricStat": {
+      "Metric": {
+        "Namespace": "AWS/DMS",
+        "MetricName": "CDCLatencyTarget",
+        "Dimensions": [
+          { "Name": "ReplicationInstanceIdentifier", "Value": "tidb-lab-aws-dms-repl" },
+          { "Name": "ReplicationTaskIdentifier", "Value": "tidb-lab-aws-dms-task" }
+        ]
+      },
+      "Period": 60,
+      "Stat": "Average"
+    },
+    "ReturnData": true
+  }
+]
+```
+
+- [ ] Write `demos/aws-dms/runner/src/cloudwatch-poller.ts`:
+
+```ts
+import { CloudWatchClient, GetMetricDataCommand } from '@aws-sdk/client-cloudwatch';
+import { buildCdcLatencyQuery, parseGetMetricDataResponse, type LatestMetricValues } from './cloudwatch-query';
+
+export type CloudwatchPoller = {
+  readonly pollCdcLatency: () => Promise<LatestMetricValues>;
+};
+
+export type CreateCloudwatchPollerOptions = {
+  readonly region: string;
+  readonly replicationInstanceId: string;
+  readonly replicationTaskId: string;
+  readonly windowMs: number;
+};
+
+export const createCloudwatchPoller = (options: CreateCloudwatchPollerOptions): CloudwatchPoller => {
+  const client = new CloudWatchClient({ region: options.region });
+
+  const pollCdcLatency = async (): Promise<LatestMetricValues> => {
+    const endTime = new Date();
+    const startTime = new Date(endTime.getTime() - options.windowMs);
+    const request = buildCdcLatencyQuery({
+      replicationInstanceId: options.replicationInstanceId,
+      replicationTaskId: options.replicationTaskId,
+      startTime,
+      endTime,
+    });
+    const response = await client.send(new GetMetricDataCommand(request));
+    return parseGetMetricDataResponse(response);
+  };
+
+  return { pollCdcLatency };
+};
+```
+
+- [ ] Manual live-run: `AWS_REGION=... DMS_TASK_ARN=... node --import tsx -e "import('./demos/aws-dms/runner/src/dms-poller.ts').then(m => m.createDmsPoller({region: process.env.AWS_REGION, replicationTaskArn: process.env.DMS_TASK_ARN}).pollTableStatistics()).then(console.log)"` - expected output: an array of `TableProgress` objects matching the shape asserted in `test/table-stats.test.ts`.
+- [ ] Commit: `git add demos/aws-dms/runner/src/dms-poller.ts demos/aws-dms/runner/src/cloudwatch-poller.ts demos/aws-dms/infra/cloudwatch-query-sample.json && git commit -m "aws-dms: add DMS and CloudWatch polling adapters"`
+
+### Task 9: I/O adapters - PostgreSQL client, load generator, heartbeat (manual live-run)
+
+- [ ] Write `demos/aws-dms/runner/src/pg-client.ts`:
+
+```ts
+import { Pool } from 'pg';
+import { buildChecksumQuery, type ChecksumColumn } from './checksum';
+
+export type PgClient = {
+  readonly insertHeartbeat: () => Promise<{ readonly heartbeatId: number; readonly insertedAtMs: number }>;
+  readonly countRows: (table: string) => Promise<number>;
+  readonly runChecksum: (options: { readonly table: string; readonly primaryKey: string; readonly columns: readonly ChecksumColumn[] }) => Promise<number>;
+  readonly insertAccountsAndOrders: (rowsPerTick: number) => Promise<void>;
+  readonly close: () => Promise<void>;
+};
+
+export const createPgClient = (env: NodeJS.ProcessEnv = process.env): PgClient => {
+  const pool = new Pool({
+    host: env.PG_HOST,
+    port: Number(env.PG_PORT ?? 5432),
+    user: env.PG_USER,
+    password: env.PG_PASSWORD,
+    database: env.PG_DATABASE,
+  });
+
+  const insertHeartbeat = async (): Promise<{ readonly heartbeatId: number; readonly insertedAtMs: number }> => {
+    const result = await pool.query<{ heartbeat_id: number; inserted_at: Date }>(
+      'INSERT INTO heartbeat (inserted_at) VALUES (now()) RETURNING heartbeat_id, inserted_at',
+    );
+    const row = result.rows[0];
+    return { heartbeatId: row.heartbeat_id, insertedAtMs: row.inserted_at.getTime() };
+  };
+
+  const countRows = async (table: string): Promise<number> => {
+    const result = await pool.query<{ count: string }>(`SELECT COUNT(*) AS count FROM ${table}`);
+    return Number(result.rows[0].count);
+  };
+
+  const runChecksum = async (options: {
+    readonly table: string;
+    readonly primaryKey: string;
+    readonly columns: readonly ChecksumColumn[];
+  }): Promise<number> => {
+    const query = buildChecksumQuery({ dialect: 'postgres', table: options.table, primaryKey: options.primaryKey, columns: options.columns });
+    const result = await pool.query<{ checksum: string }>(query);
+    return Number(result.rows[0].checksum);
+  };
+
+  const insertAccountsAndOrders = async (rowsPerTick: number): Promise<void> => {
+    await pool.query(
+      `INSERT INTO accounts (display_name, is_active, risk_tags, metadata)
+       SELECT 'acct-' || g, true, '{}', '{}'::jsonb FROM generate_series(1, $1) AS g`,
+      [Math.max(1, Math.floor(rowsPerTick / 5))],
+    );
+    await pool.query(
+      `INSERT INTO orders (account_id, amount, currency, status)
+       SELECT (SELECT account_id FROM accounts ORDER BY random() LIMIT 1), (random() * 500)::numeric(18,2), 'USD', 'placed'
+       FROM generate_series(1, $1) AS g`,
+      [rowsPerTick],
+    );
+  };
+
+  const close = async (): Promise<void> => {
+    await pool.end();
+  };
+
+  return { insertHeartbeat, countRows, runChecksum, insertAccountsAndOrders, close };
+};
+```
+
+- [ ] Write `demos/aws-dms/runner/src/load-generator.ts`:
+
+```ts
+import { every } from '@lab/runner-kit';
+import { currentWriteRate } from './workload';
+import type { PgClient } from './pg-client';
+
+export type LoadGenerator = {
+  readonly start: (signal: AbortSignal) => Promise<void>;
+  readonly burst: () => void;
+  readonly stop: () => void;
+};
+
+export type CreateLoadGeneratorOptions = {
+  readonly pgClient: PgClient;
+  readonly baselineRowsPerTick: number;
+  readonly burstMultiplier: number;
+  readonly burstDurationMs: number;
+  readonly onTick?: (rowsInserted: number) => void;
+};
+
+export const createLoadGenerator = (options: CreateLoadGeneratorOptions): LoadGenerator => {
+  let burstUntilMs: number | undefined;
+  let stopped = false;
+
+  const burst = (): void => {
+    burstUntilMs = Date.now() + options.burstDurationMs;
+  };
+
+  const stop = (): void => {
+    stopped = true;
+  };
+
+  const start = async (signal: AbortSignal): Promise<void> => {
+    await every({
+      intervalMs: 1000,
+      signal,
+      task: async () => {
+        if (stopped) return;
+        const rate = currentWriteRate({
+          baselineRowsPerTick: options.baselineRowsPerTick,
+          burstUntilMs,
+          burstMultiplier: options.burstMultiplier,
+          nowMs: Date.now(),
+        });
+        await options.pgClient.insertAccountsAndOrders(rate);
+        options.onTick?.(rate);
+      },
+    });
+  };
+
+  return { start, burst, stop };
+};
+```
+
+- [ ] Manual live-run: `PG_HOST=... PG_PORT=... PG_USER=... PG_PASSWORD=... PG_DATABASE=... node --import tsx -e "import('./demos/aws-dms/runner/src/pg-client.ts').then(m => m.createPgClient().insertHeartbeat()).then(console.log)"` - expected output: the inserted heartbeat row's `heartbeatId` and `insertedAtMs`.
 - [ ] Manual live-run: same pattern calling `countRows('orders')` - expected output: a number matching `psql -c 'SELECT COUNT(*) FROM orders'` run independently.
+- [ ] Manual live-run: same pattern calling `runChecksum({ table: 'orders', primaryKey: 'order_id', columns: [{ column: 'order_id', type: 'text' }, { column: 'amount', type: 'numeric', precision: 18, scale: 2 }, { column: 'status', type: 'text' }] })` - expected output: a single integer; re-run the equivalent `buildChecksumQuery({ dialect: 'mysql', ... })` output against TiDB once rows exist there (Task 10) and confirm the two integers are equal for a fully-synced table.
 - [ ] Commit: `git add demos/aws-dms/runner/src/pg-client.ts demos/aws-dms/runner/src/load-generator.ts && git commit -m "aws-dms: add PostgreSQL client and load generator adapters"`
 
-### Task 8: Runner main and control wiring
+### Task 10: Runner main and control wiring
 
-- [ ] Write `demos/aws-dms/runner/main.ts` wiring `createEmitter`, `onControl`, `every` (1000ms tick), the DMS poller, CloudWatch poller, PostgreSQL client, TiDB pool from `createTidbPool`, and the phase sequence from Section 2: `provision` (health checks) to `schema` (log the DDL mapping) to `full-load` (poll `DescribeTableStatistics` until `TableState` is `Table completed` for all tables) to `cdc-live` (poll CDC metrics, start the load generator) to `validate` (on `run-validation` control: row-count-diff and checksum-match checks) to `cutover` (on `start-cutover` control: stop load generator, poll `cdc_latency_target_s` until it reports 0 for three consecutive ticks, re-run validate, then emit `cutover_downtime_s` and a `log` confirming the app's new TiDB connection accepted a write).
+- [ ] Write `demos/aws-dms/runner/main.ts`:
+
+```ts
+import { createEmitter, onControl, createTidbPool, every } from '@lab/runner-kit';
+import { createDmsPoller } from './src/dms-poller';
+import { createCloudwatchPoller } from './src/cloudwatch-poller';
+import { createPgClient } from './src/pg-client';
+import { createLoadGenerator } from './src/load-generator';
+import { createCutoverStateMachine } from './src/cutover-state';
+import { rowCountDiff } from './src/row-count-diff';
+import { freshnessMs } from './src/freshness';
+import { cutoverDowntimeSeconds } from './src/cutover-timer';
+import { tableProgressPercent } from './src/table-stats';
+
+const env = process.env;
+const emitter = createEmitter();
+const tidbPool = createTidbPool(env);
+const pgClient = createPgClient(env);
+const dmsPoller = createDmsPoller({ region: env.AWS_REGION ?? 'us-east-1', replicationTaskArn: env.DMS_TASK_ARN ?? '' });
+const cloudwatchPoller = createCloudwatchPoller({
+  region: env.AWS_REGION ?? 'us-east-1',
+  replicationInstanceId: env.DMS_REPLICATION_INSTANCE_ID ?? '',
+  replicationTaskId: env.DMS_TASK_ID ?? '',
+  windowMs: 10 * 60 * 1000,
+});
+const loadGenerator = createLoadGenerator({
+  pgClient,
+  baselineRowsPerTick: 5,
+  burstMultiplier: 10,
+  burstDurationMs: 30_000,
+  onTick: (rows) => emitter.metric('full_load_rows_sec', rows),
+});
+const cutover = createCutoverStateMachine();
+const controller = new AbortController();
+
+const orderColumns = [
+  { column: 'order_id', type: 'text' as const },
+  { column: 'amount', type: 'numeric' as const, precision: 18, scale: 2 },
+  { column: 'status', type: 'text' as const },
+];
+
+let sourceRowCountsAtPhaseStart: Record<string, number> = {};
+let lastTableStatsTickMs = Date.now();
+let lastAppliedTotal = 0;
+
+const runValidation = async (): Promise<{ readonly rowDiff: number; readonly checksumMatch: boolean }> => {
+  const pgCount = await pgClient.countRows('orders');
+  const [tidbCountRows] = await tidbPool.query('SELECT COUNT(*) AS count FROM orders');
+  const tidbCount = Number((tidbCountRows as { count: number }[])[0].count);
+  const rowDiff = rowCountDiff({ sourceCount: pgCount, targetCount: tidbCount });
+  emitter.metric('row_count_diff', rowDiff);
+  emitter.check('row-count-match', rowDiff === 0 ? 'pass' : 'fail');
+
+  const pgChecksum = await pgClient.runChecksum({ table: 'orders', primaryKey: 'order_id', columns: orderColumns });
+  const [tidbChecksumRows] = await tidbPool.query(
+    "SELECT COALESCE(SUM(CONV(SUBSTRING(MD5(CONCAT_WS('|', COALESCE(CAST(order_id AS CHAR), '\\\\N'), COALESCE(CAST(CAST(amount AS DECIMAL(18,2)) AS CHAR), '\\\\N'), COALESCE(CAST(status AS CHAR), '\\\\N'))), 1, 8), 16, 10)), 0) AS checksum FROM orders ORDER BY order_id",
+  );
+  const tidbChecksum = Number((tidbChecksumRows as { checksum: number }[])[0].checksum);
+  const checksumMatch = pgChecksum === tidbChecksum;
+  emitter.check('checksum-match', checksumMatch ? 'pass' : 'fail');
+
+  return { rowDiff, checksumMatch };
+};
+
+onControl(async (id) => {
+  if (id === 'burst-writes') loadGenerator.burst();
+
+  if (id === 'run-validation') {
+    await runValidation();
+  }
+
+  if (id === 'start-cutover') {
+    loadGenerator.stop();
+    const stoppedAtMs = Date.now();
+    cutover.beginDraining();
+    emitter.phase('cutover');
+
+    await every({
+      intervalMs: 2000,
+      signal: controller.signal,
+      task: async () => {
+        if (cutover.getState() !== 'draining') return;
+        const latest = await cloudwatchPoller.pollCdcLatency();
+        const targetLatency = latest.cdc_latency_target ?? Number.POSITIVE_INFINITY;
+        emitter.metric('cdc_latency_target_s', targetLatency);
+        if (targetLatency === 0) {
+          const { rowDiff, checksumMatch } = await runValidation();
+          if (rowDiff === 0 && checksumMatch) {
+            cutover.markVerified();
+            emitter.check('cutover-clean', 'pass');
+          }
+        }
+      },
+    });
+
+    if (cutover.getState() === 'verified') {
+      await tidbPool.query('SELECT 1');
+      cutover.markFlipped();
+      const confirmedAtMs = Date.now();
+      emitter.metric('cutover_downtime_s', cutoverDowntimeSeconds({ stoppedAtMs, confirmedAtMs }));
+      emitter.log('info', 'cutover complete, app connection flipped to TiDB');
+    }
+  }
+});
+
+const runTableStatsTick = async (): Promise<void> => {
+  const progress = await dmsPoller.pollTableStatistics();
+  const nowMs = Date.now();
+  const tickSeconds = (nowMs - lastTableStatsTickMs) / 1000;
+  lastTableStatsTickMs = nowMs;
+
+  let appliedTotal = 0;
+  for (const table of progress) {
+    if (sourceRowCountsAtPhaseStart[table.tableName] === undefined) {
+      sourceRowCountsAtPhaseStart[table.tableName] = table.fullLoadRows || 1;
+    }
+    emitter.metric(
+      'full_load_pct',
+      tableProgressPercent({ fullLoadRows: table.fullLoadRows, sourceRowCount: sourceRowCountsAtPhaseStart[table.tableName] }),
+    );
+    emitter.metric('validation_failed_rows', table.validationFailedRecords);
+    appliedTotal += table.appliedInserts + table.appliedUpdates + table.appliedDeletes;
+  }
+  if (tickSeconds > 0) {
+    emitter.metric('cdc_apply_rows_sec', (appliedTotal - lastAppliedTotal) / tickSeconds);
+  }
+  lastAppliedTotal = appliedTotal;
+};
+
+const runCdcLatencyTick = async (): Promise<void> => {
+  const latest = await cloudwatchPoller.pollCdcLatency();
+  if (latest.cdc_latency_source !== undefined) emitter.metric('cdc_latency_source_s', latest.cdc_latency_source);
+  if (latest.cdc_latency_target !== undefined) emitter.metric('cdc_latency_target_s', latest.cdc_latency_target);
+};
+
+const runHeartbeatTick = async (): Promise<void> => {
+  const { heartbeatId, insertedAtMs } = await pgClient.insertHeartbeat();
+  const started = Date.now();
+  const deadlineMs = started + 5000;
+  while (Date.now() < deadlineMs) {
+    const [rows] = await tidbPool.query('SELECT heartbeat_id FROM heartbeat WHERE heartbeat_id = ?', [heartbeatId]);
+    if ((rows as unknown[]).length > 0) {
+      emitter.metric('heartbeat_freshness_ms', freshnessMs({ insertedAtMs, visibleAtMs: Date.now() }));
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+};
+
+emitter.phase('provision');
+void loadGenerator.start(controller.signal);
+void every({ intervalMs: 1000, task: runTableStatsTick, signal: controller.signal });
+void every({ intervalMs: 5000, task: runCdcLatencyTick, signal: controller.signal });
+void every({ intervalMs: 1000, task: runHeartbeatTick, signal: controller.signal });
+```
+
 - [ ] Manual live-run: `pnpm lab run aws-dms --record` with the Terraform infra from Task 2 up and DMS task running - expected: the relay's `/health` returns `{"ok":true,"demo":"aws-dms"}`, and `curl -N http://localhost:7070/events` streams `phase` events advancing through all six phases without a `log` event at `error` level.
 - [ ] Manual live-run: `curl -X POST http://localhost:7070/control/burst-writes` during the `cdc-live` phase - expected: `cdc_apply_rows_sec` visibly rises in the next few `metric` events.
 - [ ] Manual live-run: `curl -X POST http://localhost:7070/control/run-validation` - expected: `check` events for `row-count-match` and `checksum-match` both reach `pass`.
 - [ ] Manual live-run: `curl -X POST http://localhost:7070/control/start-cutover` - expected: `cdc_latency_target_s` reaches `0`, `check` event `cutover-clean` reaches `pass`, and a final `metric` event for `cutover_downtime_s` is emitted.
 - [ ] Commit: `git add demos/aws-dms/runner/main.ts && git commit -m "aws-dms: wire runner phases and controls"`
 
-### Task 9: Validation and public-content gate
+### Task 11: README and TALK-TRACK
 
-- [ ] Manual live-run: `pnpm lab validate aws-dms` - expected: `manifest valid`, and once `traces/featured.json` exists (Task 12), `trace valid, 0 eventReferenceErrors`.
+- [ ] Write `demos/aws-dms/README.md`:
+
+```markdown
+# AWS DMS + TiDB: Aurora PostgreSQL migration
+
+Aurora PostgreSQL feeds AWS DMS, which full-loads existing rows into TiDB
+Cloud and then switches to CDC via PostgreSQL logical replication, while the
+app keeps writing. A validated cutover flips the app's connection string
+once CDC latency drains to zero and row counts/checksums match.
+
+## What it proves
+
+- TiDB Cloud is a supported AWS DMS target using the standard MySQL endpoint type.
+- Full load and CDC run concurrently with live writes, and CDC lag is measured, not assumed.
+- Cutover is driven from measured signals, and the downtime window is reported, not estimated.
+
+## Prerequisites
+
+- AWS account with permission to create RDS/Aurora, DMS, VPC, and IAM resources.
+- TiDB Cloud account with permission to create a Dedicated cluster.
+- terraform, aws cli, Node 22, pnpm.
+
+## Run
+
+1. `cd infra/terraform && terraform init && TF_VAR_aurora_master_password=... TF_VAR_tidb_host=... terraform apply` (Plan section, Task 2).
+2. Create the TiDB Cloud Dedicated cluster, add the DMS security group to its traffic filter, load `infra/sql/schema-tidb.sql` (Task 3).
+3. Create the DMS TiDB target endpoint and the full-load-and-cdc replication task (Task 2's manual steps).
+4. `cp .env.example .env` and fill in `TIDB_*`, `PG_*`, `DMS_REPLICATION_INSTANCE_ARN`, `DMS_TASK_ARN`, `AWS_REGION`.
+5. `pnpm lab run aws-dms --record` and open the UI pointed at the relay port.
+
+## Record
+
+`pnpm lab run aws-dms --record` writes `demos/aws-dms/traces/<timestamp>.json`.
+Promote a good run: `cp demos/aws-dms/traces/<timestamp>.json demos/aws-dms/traces/featured.json`.
+
+## Teardown
+
+See Section 5 of the plan for the exact commands and the four `aws`/console
+checks that confirm nothing is still billing.
+
+## Cost notes
+
+Bills for the Aurora PostgreSQL instance, the DMS replication instance, and
+the TiDB Cloud Dedicated cluster, each at its documented hourly rate, plus
+PrivateLink/VPC peering hourly charges if used. See
+https://aws.amazon.com/dms/pricing/, https://www.pingcap.com/tidb-cloud-pricing/,
+and https://aws.amazon.com/rds/aurora/pricing/ for current rates - no price
+is hardcoded here because it changes independently of this plan.
+```
+
+- [ ] Write `demos/aws-dms/TALK-TRACK.md`:
+
+```markdown
+# Talk track: AWS DMS + TiDB
+
+## Provision and verify
+"Aurora PostgreSQL, AWS DMS, and TiDB Cloud are up. This is the same DMS you
+already use for other migrations."
+
+## Schema conversion
+"DMS creates tables and primary keys. Everything else in the type
+conversion is explicit, and we show you exactly what changed - look at the
+mapping table, nothing here is a black box."
+
+## Full load
+"DMS full-loads the existing orders and accounts tables while the app keeps
+taking traffic. Watch the per-table completion percentage."
+
+## CDC under live load
+"Now every insert, update, and delete on Aurora flows through logical
+replication into TiDB, live. We can burst the write rate and DMS keeps up."
+
+## Validate
+"We don't just trust DMS's validation state, we recompute row counts and
+checksums ourselves on both databases, with a canonical row encoding so
+formatting differences between PostgreSQL and TiDB never cause a false
+mismatch."
+
+## Cutover
+"Writes stop, CDC drains to zero lag, we verify one more time, then the app
+points at TiDB. That whole window is the downtime we measure - seconds, not
+an estimate."
+
+## Discovery questions
+
+1. "You're on Aurora PostgreSQL today - what's driving the evaluation of TiDB?"
+2. "Have you used AWS DMS for a migration before, and what went wrong or right?"
+3. "What's your tolerance for a cutover downtime window - seconds, minutes, longer?"
+4. "How do you validate a migration today - do you trust the vendor's validation state, or recompute it yourself?"
+5. "Which PostgreSQL-specific features (arrays, JSONB, custom types) does your schema depend on?"
+
+## Objections and honest answers
+
+1. "Doesn't DMS just handle schema conversion for us?"
+   No - DMS creates tables and primary keys only. Secondary indexes, foreign
+   keys, sequences, and check constraints are hand-written, and this demo
+   shows exactly which ones and why.
+2. "Is this zero-downtime?"
+   No. There's a real cutover window while writes are stopped and the final
+   checks run. This demo measures that window in seconds rather than
+   assuming it away.
+3. "PostgreSQL to a MySQL-compatible target - what data types actually survive?"
+   The mapping table in the plan documents every column: UUID becomes a
+   36-char string, arrays become text, JSONB becomes native JSON, NUMERIC
+   keeps explicit precision/scale to avoid DMS's default-precision truncation.
+4. "What if our tables don't have primary keys?"
+   DMS CDC requires one - UPDATE/DELETE without a primary key are otherwise
+   silently ignored. This is a hard constraint to flag early with a
+   customer, not something to discover mid-migration.
+5. "Does this work with DMS Serverless instead of a replication instance?"
+   Unverified end-to-end against TiDB Cloud specifically at the time of
+   writing (Section 4) - this plan defaults to a classic replication
+   instance because that is the path PingCAP's own docs verify.
+```
+
+- [ ] Commit: `git add demos/aws-dms/README.md demos/aws-dms/TALK-TRACK.md && git commit -m "aws-dms: add README and talk track"`
+
+### Task 12: Validation and public-content gate
+
+- [ ] Manual live-run: `pnpm lab validate aws-dms` - expected: `manifest valid`, and once `traces/featured.json` exists (Task 13), `trace valid, 0 eventReferenceErrors`.
 - [ ] Manual live-run: `pnpm lab check-public` - expected: no denylisted terms found in `demos/aws-dms/**`.
+- [ ] Manual live-run: `grep -rn "—" demos/aws-dms` - expected: no matches (em dash guard); if any file has one, replace it with a regular hyphen and re-run.
 - [ ] Commit only if this step required fixes: `git add demos/aws-dms && git commit -m "aws-dms: fix validation/public-content findings"`
 
 ## 8. Recording the featured trace
 
 1. Bring up infra (Task 2) and confirm the DMS task is `Ready` with an empty target schema freshly loaded from Task 3.
-2. Set `.env` (`cp .env.example .env` and fill in `TIDB_*`, `PG_*`, `DMS_REPLICATION_INSTANCE_ARN`, `DMS_TASK_ARN`, `AWS_REGION`), and set `LAB_ENV_TIDB` to the TiDB Cloud version shown in the cluster's console overview page, `LAB_ENV_NOTES` to the AWS region and DMS instance class used.
+2. Set `.env` (`cp .env.example .env` and fill in `TIDB_*`, `PG_*`, `DMS_REPLICATION_INSTANCE_ARN`, `DMS_TASK_ARN`, `DMS_REPLICATION_INSTANCE_ID`, `DMS_TASK_ID`, `AWS_REGION`), and set `LAB_ENV_TIDB` to the TiDB Cloud version shown in the cluster's console overview page, `LAB_ENV_NOTES` to the AWS region and DMS instance class used.
 3. Run `pnpm lab run aws-dms --record --port 7070` and open the UI (`pnpm --filter @lab/ui dev`) pointed at `http://localhost:7070`.
 4. Let `provision` and `schema` phases complete, then start the DMS task so `full-load` begins; once full load finishes and CDC starts, press **Burst writes** once during `cdc-live` to show throughput rising, then **Run validation**, then **Start cutover**. A good run is 3-6 minutes end to end with no `log` events at `error` level and every check reaching `pass`.
 5. Stop the runner (Ctrl-C) to flush `demos/aws-dms/traces/<ISO timestamp>.json`.
@@ -532,8 +2181,10 @@ export const cutoverDowntimeSeconds = (options: CutoverTimerOptions): number =>
 - **Aurora PostgreSQL version matters for CDC.** Confirm the cluster's engine version maps to Aurora PostgreSQL 2.2/PG 10.6-compatible or higher (Section 4); anything lower silently supports full load only and CDC never starts.
 - **DMS validation and checksum checks both need a primary key on every table.** The schema in Task 3 gives every table one; if this plan is extended with more tables, keep that rule or `row-count-match`/`checksum-match` degrade per the PostgreSQL-source limitations in Section 4.
 - **NUMERIC without precision/scale silently truncates.** Every `NUMERIC` column in `schema.sql` declares explicit precision and scale for this reason (Section 4); do not add an unscoped `NUMERIC` column later without re-checking this.
-- **TiDB system databases must be filtered out of DMS table mappings.** Use an explicit schema/table selector, never `%`, per Section 4, or the task fails trying to migrate `mysql`/`sys`/`INFORMATION_SCHEMA`.
-- **CloudWatch metric propagation lag.** `CDCLatencySource`/`CDCLatencyTarget` can take up to a minute to appear after CDC starts; the `cutover` phase's "poll until zero for three consecutive ticks" rule exists specifically to avoid cutting over on a stale/missing datapoint.
+- **TiDB system databases must be filtered out of DMS table mappings.** `table-mappings.json` scopes selection to the `public`/`lab` schema explicitly, never `%`, per Section 4, or the task fails trying to migrate `mysql`/`sys`/`INFORMATION_SCHEMA`.
+- **CloudWatch metric propagation lag.** `CDCLatencySource`/`CDCLatencyTarget` can take up to a minute to appear after CDC starts; the `cutover` phase's "poll until zero" logic in `main.ts` re-validates on every zero reading rather than trusting a single stale/missing datapoint.
 - **DMS Serverless is unverified for this pairing end-to-end (Section 4).** Default to a classic replication instance; only try DMS Serverless as a follow-up experiment once the base demo is recorded.
-- **`DescribeTableStatistics` field names are UNVERIFIED against the live API in this plan.** Task 6 requires running the raw `aws dms describe-table-statistics` CLI call and copying real field names before writing `dms-poller.ts`; do not hand-write field names from memory.
-- **Cost creep from an idle Aurora/DMS/TiDB Cloud stack.** Follow the exact teardown commands in Section 5 immediately after recording; re-verify with the listed `aws dms`/`aws rds` describe calls and the TiDB Cloud console before ending the work session.
+- **`DescribeTableStatistics` and CloudWatch dimension field names were UNVERIFIED against the live API when this plan was written.** Task 8 requires running the raw `aws dms describe-table-statistics` and `aws cloudwatch list-metrics` CLI calls and fixing `table-stats.ts`/`cloudwatch-query.ts` (and their tests) against the real response before trusting either parser in a recording; do not skip this step even though the pure-logic tests in Task 6 pass against hand-written fixtures.
+- **Checksum canonical encoding depends on the load generator's own write discipline.** The JSON `metadata` column's key-order-must-match-between-engines assumption (Section 7, Task 4) only holds if `pg-client.ts`'s `insertAccountsAndOrders` always writes `metadata` with the same fixed key order; if the load generator is extended to write richer JSON, re-verify `checksum-match` still passes after a full sync.
+- **Terraform's fixed IAM role names.** `dms-vpc-role` and `dms-cloudwatch-logs-role` are account-wide DMS conventions (Section 4); if a prior DMS setup in the same account already created them, `terraform apply` fails and the fix is `terraform import`, not renaming the Terraform resource.
+- **Cost creep from an idle Aurora/DMS/TiDB Cloud stack.** Follow the exact teardown commands in Section 5 immediately after recording; re-verify with the listed `aws dms`/`aws rds`/`aws logs` describe calls and the TiDB Cloud console before ending the work session.
