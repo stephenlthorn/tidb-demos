@@ -2162,7 +2162,7 @@ an estimate."
 
 - [ ] Manual live-run: `pnpm lab validate aws-dms` - expected: `manifest valid`, and once `traces/featured.json` exists (Task 13), `trace valid, 0 eventReferenceErrors`.
 - [ ] Manual live-run: `pnpm lab check-public` - expected: no denylisted terms found in `demos/aws-dms/**`.
-- [ ] Manual live-run: `grep -rn "—" demos/aws-dms` - expected: no matches (em dash guard); if any file has one, replace it with a regular hyphen and re-run.
+- [ ] Manual live-run: `grep -rn $'\u2014' demos/aws-dms` - expected: no matches (em dash guard); if any file has one, replace it with a regular hyphen and re-run.
 - [ ] Commit only if this step required fixes: `git add demos/aws-dms && git commit -m "aws-dms: fix validation/public-content findings"`
 
 ## 8. Recording the featured trace
