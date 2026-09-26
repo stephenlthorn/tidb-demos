@@ -158,7 +158,8 @@ demos/debezium/
     "@lab/runner-kit": "workspace:*",
     "@confluentinc/kafka-javascript": "^1.0.0",
     "pg": "^8.12.0",
-    "mysql2": "^3.11.0"
+    "mysql2": "^3.11.0",
+    "zod": "^4.1.0"
   },
   "devDependencies": {
     "tsx": "^4.20.0",
@@ -337,6 +338,7 @@ describe('parseDebeziumEnvelope', () => {
 - [ ] Create `demos/debezium/runner/src/debeziumEnvelope.ts`:
 
 ```ts
+import { z } from 'zod';
 export type ParsedEnvelope = {
   readonly ok: true;
   readonly connector: string;
@@ -353,22 +355,31 @@ export type EnvelopeParseFailure = {
 
 export type EnvelopeParseResult = ParsedEnvelope | EnvelopeParseFailure;
 
-type RawEnvelope = {
-  readonly payload?: {
-    readonly after?: Record<string, unknown> | null;
-    readonly source?: { readonly connector?: string; readonly table?: string };
-    readonly op?: string;
-    readonly ts_ms?: number;
-  };
+const RawEnvelopeSchema = z.object({
+  payload: z
+    .object({
+      after: z.record(z.string(), z.unknown()).nullable().optional(),
+      source: z.object({ connector: z.string().optional(), table: z.string().optional() }).optional(),
+      op: z.string().optional(),
+      ts_ms: z.number().optional(),
+    })
+    .optional(),
+});
+
+const parseJson = (raw: string): { readonly ok: true; readonly value: unknown } | { readonly ok: false } => {
+  try {
+    return { ok: true, value: JSON.parse(raw) };
+  } catch {
+    return { ok: false };
+  }
 };
 
 export const parseDebeziumEnvelope = (raw: string): EnvelopeParseResult => {
-  let message: RawEnvelope;
-  try {
-    message = JSON.parse(raw) as RawEnvelope;
-  } catch {
-    return { ok: false, reason: 'invalid JSON' };
-  }
+  const json = parseJson(raw);
+  if (!json.ok) return { ok: false, reason: 'invalid JSON' };
+  const parsed = RawEnvelopeSchema.safeParse(json.value);
+  if (!parsed.success) return { ok: false, reason: 'missing envelope fields' };
+  const message = parsed.data;
   const source = message.payload?.source;
   const op = message.payload?.op;
   const tsMs = message.payload?.ts_ms;
@@ -728,10 +739,14 @@ Expected: `Create changefeed successfully!` with `"state":"normal"` in the retur
 - [ ] Create `demos/debezium/runner/src/connectApi.ts`:
 
 ```ts
-export type ConnectorStatusResponse = {
-  readonly connector: { readonly state: string };
-  readonly tasks: readonly { readonly id: number; readonly state: string }[];
-};
+import { z } from 'zod';
+
+const ConnectorStatusResponseSchema = z.object({
+  connector: z.object({ state: z.string() }),
+  tasks: z.array(z.object({ id: z.number(), state: z.string() })),
+});
+
+export type ConnectorStatusResponse = z.infer<typeof ConnectorStatusResponseSchema>;
 
 export type ConnectApi = {
   readonly getStatus: (name: string) => Promise<ConnectorStatusResponse>;
@@ -740,7 +755,7 @@ export type ConnectApi = {
 export const createConnectApi = (options: { readonly baseUrl: string }): ConnectApi => {
   const getStatus = async (name: string): Promise<ConnectorStatusResponse> => {
     const response = await fetch(`${options.baseUrl}/connectors/${name}/status`);
-    return (await response.json()) as ConnectorStatusResponse;
+    return ConnectorStatusResponseSchema.parse(await response.json());
   };
   return { getStatus };
 };
@@ -827,6 +842,7 @@ export const createSharedConsumer = (options: { readonly brokers: readonly strin
 - [ ] Create `demos/debezium/runner/main.ts`:
 
 ```ts
+import { z } from 'zod';
 import { createEmitter, every, onControl, createTidbPool } from '@lab/runner-kit';
 import { createConnectApi } from './src/connectApi';
 import { createTicdcApi } from './src/ticdcApi';
@@ -867,14 +883,16 @@ onControl((id) => {
   }
 });
 
+const HeartbeatRowsSchema = z.array(z.object({ source_commit_ms: z.coerce.number() }));
+const ColumnRowsSchema = z.array(z.object({ COLUMN_NAME: z.string() }));
+
 const runHeartbeatTick = async (): Promise<void> => {
   const sourceCommitMs = emitter.elapsedMs();
   await postgres.upsertHeartbeat(sourceCommitMs);
-  const [row] = (await pool.query('SELECT source_commit_ms FROM heartbeat WHERE id = 1')) as unknown as [
-    { readonly source_commit_ms: number }[],
-  ];
-  if (row?.[0]) {
-    const lag = computeHeartbeatLagMs({ observedAtMs: emitter.elapsedMs(), sourceCommitMs: row[0].source_commit_ms });
+  const [rows] = await pool.query('SELECT source_commit_ms FROM heartbeat WHERE id = 1');
+  const heartbeat = HeartbeatRowsSchema.parse(rows)[0];
+  if (heartbeat !== undefined) {
+    const lag = computeHeartbeatLagMs({ observedAtMs: emitter.elapsedMs(), sourceCommitMs: heartbeat.source_commit_ms });
     emitter.metric('replication-lag-ms', lag);
   }
 };
@@ -888,9 +906,10 @@ const runConnectStatusTick = async (): Promise<void> => {
 
 const runSchemaCheckTick = async (): Promise<void> => {
   if (addColumnPressedAtMs === undefined || riskTierObservedAtMs !== undefined) return;
-  const [columns] = (await pool.query(
+  const [columnRows] = await pool.query(
     "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'lab' AND TABLE_NAME = 'accounts' AND COLUMN_NAME = 'risk_tier'",
-  )) as unknown as [{ readonly COLUMN_NAME: string }[]];
+  );
+  const columns = ColumnRowsSchema.parse(columnRows);
   if (columns.length > 0) {
     riskTierObservedAtMs = emitter.elapsedMs();
     const propagationMs = computeSchemaPropagationMs({
@@ -1108,7 +1127,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/debezium/manifest.json`, `integrations/demos/debezium/package.json`, `integrations/demos/debezium/test/manifest.test.ts`, `integrations/demos/debezium/tsconfig.json`
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/demo-debezium exec vitest run test/manifest.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-debezium test` -> PASS
+  - `pnpm --filter @lab/demo-debezium typecheck` -> exit 0
 - Done when: Task 1's steps are all checked off and the gate output matches.
 
 ### Packet 03-P2: Debezium envelope parser (pure)
@@ -1117,7 +1137,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/debezium/runner/src/debeziumEnvelope.ts`, `integrations/demos/debezium/runner/test/debeziumEnvelope.test.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/demo-debezium exec vitest run runner/test/debeziumEnvelope.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-debezium test debeziumEnvelope` -> PASS
+  - `pnpm --filter @lab/demo-debezium typecheck` -> exit 0
 - Done when: Task 2's steps are all checked off and the gate output matches.
 
 ### Packet 03-P3: Heartbeat SQL and lag computation (pure)
@@ -1126,7 +1147,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/debezium/runner/src/heartbeat.ts`, `integrations/demos/debezium/runner/test/heartbeat.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-debezium exec vitest run runner/test/heartbeat.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-debezium test heartbeat` -> PASS
+  - `pnpm --filter @lab/demo-debezium typecheck` -> exit 0
 - Done when: Task 3's steps are all checked off and the gate output matches.
 
 ### Packet 03-P4: Connector status summarizer (pure)
@@ -1135,7 +1157,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/debezium/runner/src/connectStatus.ts`, `integrations/demos/debezium/runner/test/connectStatus.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-debezium exec vitest run runner/test/connectStatus.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-debezium test connectStatus` -> PASS
+  - `pnpm --filter @lab/demo-debezium typecheck` -> exit 0
 - Done when: Task 4's steps are all checked off and the gate output matches.
 
 ### Packet 03-P5: Parse rate tracker (pure)
@@ -1144,7 +1167,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/debezium/runner/src/parseRate.ts`, `integrations/demos/debezium/runner/test/parseRate.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-debezium exec vitest run runner/test/parseRate.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-debezium test parseRate` -> PASS
+  - `pnpm --filter @lab/demo-debezium typecheck` -> exit 0
 - Done when: Task 5's steps are all checked off and the gate output matches.
 
 ### Packet 03-P6: Schema propagation timer (pure)
@@ -1153,7 +1177,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/debezium/runner/src/schemaPropagation.ts`, `integrations/demos/debezium/runner/test/schemaPropagation.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-debezium exec vitest run runner/test/schemaPropagation.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-debezium test schemaPropagation` -> PASS
+  - `pnpm --filter @lab/demo-debezium typecheck` -> exit 0
 - Done when: Task 6's steps are all checked off and the gate output matches.
 
 ### Packet 03-P7: Demo-local infra - Postgres and Kafka Connect (manual, I/O)
@@ -1162,25 +1187,25 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/debezium/infra/connect-plugins`, `integrations/demos/debezium/infra/docker-compose.yml`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-debezium typecheck` -> exit 0
+  - `docker compose -f integrations/demos/debezium/infra/docker-compose.yml config -q` -> exit 0
 - Done when: Task 7's steps are all checked off and the gate output matches.
 
 ### Packet 03-P8: Create the source table, heartbeat table, and both connectors (manual, I/O)
 - Tasks: 8
 - Depends on: 03-P7   Shared runtime: tidb-playground
 - Files owned: none (manual or docs step)
-- Model: sonnet   Effort: S
+- Model: coordinator   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 8's text; `pnpm --filter @lab/demo-debezium typecheck` -> exit 0
+  - every command in Task 8 produces the output the task quotes; the coordinator pastes that output into the packet report
 - Done when: Task 8's steps are all checked off and the gate output matches.
 
 ### Packet 03-P9: Create the TiCDC Debezium changefeed (manual, I/O)
 - Tasks: 9
 - Depends on: 03-P8   Shared runtime: none
 - Files owned: none (manual or docs step)
-- Model: sonnet   Effort: S
+- Model: coordinator   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 9's text; `pnpm --filter @lab/demo-debezium typecheck` -> exit 0
+  - every command in Task 9 produces the output the task quotes; the coordinator pastes that output into the packet report
 - Done when: Task 9's steps are all checked off and the gate output matches.
 
 ### Packet 03-P10: Thin I/O adapters
@@ -1189,7 +1214,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/debezium/runner/src/connectApi.ts`, `integrations/demos/debezium/runner/src/kafkaConsumer.ts`, `integrations/demos/debezium/runner/src/postgresClient.ts`, `integrations/demos/debezium/runner/src/ticdcApi.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - coordinator reviews the files against Task 10's text; `pnpm --filter @lab/demo-debezium typecheck` -> exit 0
+  - `pnpm --filter @lab/demo-debezium typecheck` -> exit 0
 - Done when: Task 10's steps are all checked off and the gate output matches.
 
 ### Packet 03-P11: Wire the runner's main.ts
@@ -1198,16 +1223,17 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/debezium/runner/main.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - coordinator reviews the files against Task 11's text; `pnpm --filter @lab/demo-debezium typecheck` -> exit 0
+  - `pnpm --filter @lab/demo-debezium typecheck` -> exit 0
 - Done when: Task 11's steps are all checked off and the gate output matches.
 
 ### Packet 03-P12: README and TALK-TRACK
 - Tasks: 12
 - Depends on: 03-P11   Shared runtime: cloud-account
-- Files owned: `integrations/demos/debezium/README.md`, `integrations/demos/debezium/TALK-TRACK.md`, `integrations/demos/debezium/traces`, `integrations/demos/debezium/traces/featured.json`
+- Files owned: `integrations/demos/debezium/README.md`, `integrations/demos/debezium/TALK-TRACK.md`, `integrations/demos/debezium/traces/featured.json`
 - Model: sonnet   Effort: M
 - Gate:
-  - coordinator reviews the files against Task 12's text; `pnpm --filter @lab/demo-debezium typecheck` -> exit 0
+  - `grep -c $'\u2014' integrations/demos/debezium/README.md integrations/demos/debezium/TALK-TRACK.md` -> 0 for every file
+  - `pnpm lab check-public` -> `0 findings`
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 12's steps are all checked off and the gate output matches.
 

@@ -1323,8 +1323,8 @@ This is a thin I/O / infra step, not TDD - it produces the fixture Task 7's pars
 
 ### Packet 04-P1: Verify: TiCDC changefeed, canal-json shape, prepared plan cache
 - Tasks: 6, 8 (verification steps only)
-- Depends on: none   Shared runtime: tidb-playground
-- Files owned: `demos/redis/infra/create-changefeed.sh`, `demos/redis/fixtures/sample-canal-json-message.json`, `integrations/docs/plans/04-redis.md` (section 4 rows only)
+- Depends on: 00-P10   Shared runtime: tidb-playground
+- Files owned: `integrations/demos/redis/infra/create-changefeed.sh`, `integrations/demos/redis/fixtures/sample-canal-json-message.json`, `integrations/docs/plans/04-redis.md` (section 4 rows only)
 - Model: sonnet   Effort: M
 - Gate (coordinator runs these, all must pass):
   - `./infra/tidb/playground.sh` (background) -> prints a TiDB version string
@@ -1337,8 +1337,8 @@ This is a thin I/O / infra step, not TDD - it produces the fixture Task 7's pars
 
 ### Packet 04-P2: keys.ts - Redis key naming
 - Tasks: 3
-- Depends on: none   Shared runtime: none
-- Files owned: `demos/redis/runner/src/keys.ts`, `demos/redis/runner/test/keys.test.ts`
+- Depends on: 00-P10   Shared runtime: none
+- Files owned: `integrations/demos/redis/runner/src/keys.ts`, `integrations/demos/redis/runner/test/keys.test.ts`
 - Model: sonnet   Effort: S
 - Gate (coordinator runs these, all must pass):
   - `pnpm --filter @lab/demo-redis test -- keys` -> PASS
@@ -1346,8 +1346,8 @@ This is a thin I/O / infra step, not TDD - it produces the fixture Task 7's pars
 
 ### Packet 04-P3: staleness.ts - hit ratio, staleness predicate, invalidation lag
 - Tasks: 4
-- Depends on: none   Shared runtime: none
-- Files owned: `demos/redis/runner/src/staleness.ts`, `demos/redis/runner/test/staleness.test.ts`
+- Depends on: 00-P10   Shared runtime: none
+- Files owned: `integrations/demos/redis/runner/src/staleness.ts`, `integrations/demos/redis/runner/test/staleness.test.ts`
 - Model: sonnet   Effort: S
 - Gate (coordinator runs these, all must pass):
   - `pnpm --filter @lab/demo-redis test -- staleness` -> PASS
@@ -1355,8 +1355,8 @@ This is a thin I/O / infra step, not TDD - it produces the fixture Task 7's pars
 
 ### Packet 04-P4: mode.ts - invalidation-mode and control state machine
 - Tasks: 5
-- Depends on: none   Shared runtime: none
-- Files owned: `demos/redis/runner/src/mode.ts`, `demos/redis/runner/test/mode.test.ts`
+- Depends on: 00-P10   Shared runtime: none
+- Files owned: `integrations/demos/redis/runner/src/mode.ts`, `integrations/demos/redis/runner/test/mode.test.ts`
 - Model: sonnet   Effort: S
 - Gate (coordinator runs these, all must pass):
   - `pnpm --filter @lab/demo-redis test -- mode` -> PASS
@@ -1365,7 +1365,7 @@ This is a thin I/O / infra step, not TDD - it produces the fixture Task 7's pars
 ### Packet 04-P5: canal.ts - parse a canal-json message
 - Tasks: 7
 - Depends on: 04-P1 (needs the captured fixture)   Shared runtime: none
-- Files owned: `demos/redis/runner/src/canal.ts`, `demos/redis/runner/test/canal.test.ts`
+- Files owned: `integrations/demos/redis/runner/src/canal.ts`, `integrations/demos/redis/runner/test/canal.test.ts`
 - Model: sonnet   Effort: S
 - Gate (coordinator runs these, all must pass):
   - `pnpm --filter @lab/demo-redis test -- canal` -> PASS
@@ -1373,8 +1373,8 @@ This is a thin I/O / infra step, not TDD - it produces the fixture Task 7's pars
 
 ### Packet 04-P6: config.ts - demo env parsing
 - Tasks: 10
-- Depends on: none   Shared runtime: none
-- Files owned: `demos/redis/runner/src/config.ts`, `demos/redis/runner/test/config.test.ts`
+- Depends on: 00-P10   Shared runtime: none
+- Files owned: `integrations/demos/redis/runner/src/config.ts`, `integrations/demos/redis/runner/test/config.test.ts`
 - Model: sonnet   Effort: S
 - Gate (coordinator runs these, all must pass):
   - `pnpm --filter @lab/demo-redis test -- config` -> PASS
@@ -1382,8 +1382,8 @@ This is a thin I/O / infra step, not TDD - it produces the fixture Task 7's pars
 
 ### Packet 04-P7: manifest, package scaffold
 - Tasks: 1, 2
-- Depends on: none   Shared runtime: none
-- Files owned: `demos/redis/manifest.json`, `demos/redis/test/manifest.test.ts`, `demos/redis/package.json`, `demos/redis/tsconfig.json`, `demos/redis/.env.example`
+- Depends on: 00-P10   Shared runtime: none
+- Files owned: `integrations/demos/redis/manifest.json`, `integrations/demos/redis/test/manifest.test.ts`, `integrations/demos/redis/package.json`, `integrations/demos/redis/tsconfig.json`, `integrations/demos/redis/.env.example`
 - Model: sonnet   Effort: S
 - Gate (coordinator runs these, all must pass):
   - `pnpm --filter @lab/demo-redis test -- manifest` -> PASS
@@ -1393,7 +1393,7 @@ This is a thin I/O / infra step, not TDD - it produces the fixture Task 7's pars
 ### Packet 04-P8: tidb-repo.ts - TiDB I/O adapter
 - Tasks: 8 (adapter code only; verification already done by 04-P1)
 - Depends on: 04-P1, 04-P7   Shared runtime: tidb-playground
-- Files owned: `demos/redis/runner/src/schema.sql.ts`, `demos/redis/runner/src/tidb-repo.ts`
+- Files owned: `integrations/demos/redis/runner/src/schema.sql.ts`, `integrations/demos/redis/runner/src/tidb-repo.ts`
 - Model: sonnet   Effort: M
 - Gate (coordinator runs these, all must pass):
   - Manual live-run script from Task 8 -> prints `{ id: 1, payload: 'updated', version: 2, writtenAtMs: <recent ms> }`
@@ -1402,7 +1402,7 @@ This is a thin I/O / infra step, not TDD - it produces the fixture Task 7's pars
 ### Packet 04-P9: redis-cache.ts - Redis I/O adapter
 - Tasks: 9
 - Depends on: 04-P7   Shared runtime: none
-- Files owned: `demos/redis/infra/docker-compose.yml`, `demos/redis/runner/src/redis-cache.ts`
+- Files owned: `integrations/demos/redis/infra/docker-compose.yml`, `integrations/demos/redis/runner/src/redis-cache.ts`
 - Model: sonnet   Effort: S
 - Gate (coordinator runs these, all must pass):
   - `docker compose -f demos/redis/infra/docker-compose.yml up -d` -> `lab-redis-demo` running
@@ -1412,7 +1412,7 @@ This is a thin I/O / infra step, not TDD - it produces the fixture Task 7's pars
 ### Packet 04-P10: workload.ts - write and read loops
 - Tasks: 11
 - Depends on: 04-P2, 04-P4, 04-P6, 04-P8, 04-P9   Shared runtime: tidb-playground
-- Files owned: `demos/redis/runner/src/workload.ts`
+- Files owned: `integrations/demos/redis/runner/src/workload.ts`
 - Model: sonnet   Effort: M
 - Gate (coordinator runs these, all must pass):
   - Manual live-run driver from Task 11 -> mostly misses on the first pass per row, then hits once each row's key is warm
@@ -1421,7 +1421,7 @@ This is a thin I/O / infra step, not TDD - it produces the fixture Task 7's pars
 ### Packet 04-P11: sampler.ts and invalidator.ts - staleness sampling and CDC invalidation
 - Tasks: 12
 - Depends on: 04-P1, 04-P5, 04-P9   Shared runtime: kafka
-- Files owned: `demos/redis/runner/src/sampler.ts`, `demos/redis/runner/src/invalidator.ts`
+- Files owned: `integrations/demos/redis/runner/src/sampler.ts`, `integrations/demos/redis/runner/src/invalidator.ts`
 - Model: sonnet   Effort: M
 - Gate (coordinator runs these, all must pass):
   - Manual live-run from Task 12 (changefeed active, invalidator started, one write in `cdc` mode) -> `getCachedPayload` returns `undefined` immediately after the delete
@@ -1430,30 +1430,30 @@ This is a thin I/O / infra step, not TDD - it produces the fixture Task 7's pars
 ### Packet 04-P12: main.ts - wire everything together and validate
 - Tasks: 13, 14
 - Depends on: 04-P7, 04-P8, 04-P9, 04-P10, 04-P11   Shared runtime: tidb-playground
-- Files owned: `demos/redis/runner/main.ts`
+- Files owned: `integrations/demos/redis/runner/main.ts`
 - Model: sonnet   Effort: M
 - Gate (coordinator runs these, all must pass):
   - `pnpm lab run redis` (from `integrations/`, with TiDB, Redis, Kafka running) -> `GET /health` returns `{"ok":true,"demo":"redis"}`
   - `pnpm lab validate redis` -> PASS, no unknown node/edge/metric/phase/check/control ids
-- Done when: the runner wires config, TiDB pool, Redis client, Kafka consumer, emitter, and the `every()` loops together, and `pnpm lab validate redis` passes. If an id mismatch is found, the fix lands in `demos/redis/manifest.json` (owned by 04-P7) as a follow-up, not in this packet's files.
+- Done when: the runner wires config, TiDB pool, Redis client, Kafka consumer, emitter, and the `every()` loops together, and `pnpm lab validate redis` passes. If an id mismatch is found, the fix lands in `integrations/demos/redis/manifest.json` (owned by 04-P7) as a follow-up, not in this packet's files.
 
 ### Packet 04-P13: README.md and TALK-TRACK.md
 - Tasks: 15, 16
 - Depends on: 04-P1   Shared runtime: none
-- Files owned: `demos/redis/README.md`, `demos/redis/TALK-TRACK.md`
+- Files owned: `integrations/demos/redis/README.md`, `integrations/demos/redis/TALK-TRACK.md`
 - Model: sonnet   Effort: S
 - Gate (coordinator runs these, all must pass):
-  - `pnpm lab check-public` -> PASS (no denylisted terms, no internal URLs, anywhere under `demos/redis/`)
+  - `pnpm lab check-public` -> PASS (no denylisted terms, no internal URLs, anywhere under `integrations/demos/redis/`)
 - Done when: both files exist with the real verified-facts values from 04-P1 pasted into README's "Verified facts used by this demo" section (no placeholder brackets remain).
 
 ### Packet 04-P14: Record the featured trace
 - Tasks: section 8 (recording steps)
 - Depends on: 04-P12, 04-P13   Shared runtime: tidb-playground, kafka
-- Files owned: `demos/redis/traces/featured.json`
+- Files owned: `integrations/demos/redis/traces/featured.json`
 - Model: sonnet   Effort: M
 - Gate (coordinator runs these, all must pass):
-  - `pnpm lab run redis --record` driven through all three phases -> trace file written under `demos/redis/traces/`
+  - `pnpm lab run redis --record` driven through all three phases -> trace file written under `integrations/demos/redis/traces/`
   - `pnpm lab validate redis` -> PASS, including `eventReferenceErrors` returning no errors for every event in `featured.json`
   - `pnpm lab check-public` -> PASS
   - Teardown: `docker compose -f demos/redis/infra/docker-compose.yml down -v && docker compose -f infra/kafka/docker-compose.yml down -v && tiup clean lab`
-- Done when: `demos/redis/traces/featured.json` covers all three phases, both checks (`cdc-zero-stale`, `versions-converge`) show `pass`, and teardown is confirmed with `docker ps` and `ps aux | grep '[t]iup'` showing nothing left running.
+- Done when: `integrations/demos/redis/traces/featured.json` covers all three phases, both checks (`cdc-zero-stale`, `versions-converge`) show `pass`, and teardown is confirmed with `docker ps` and `ps aux | grep '[t]iup'` showing nothing left running.

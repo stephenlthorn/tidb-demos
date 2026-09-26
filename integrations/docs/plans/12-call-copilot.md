@@ -191,7 +191,8 @@ demos/call-copilot/
     "mysql2": "^3.11.0",
     "ws": "^8.18.0",
     "@anthropic-ai/sdk": "^0.32.0",
-    "openai": "^4.68.0"
+    "openai": "^4.68.0",
+    "zod": "^4.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
@@ -810,6 +811,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 - [ ] Write `demos/call-copilot/runner/src/kb.ts`:
 
 ```ts
+import { z } from 'zod';
 import { createTidbPool, timed } from '@lab/runner-kit';
 import type { Pool } from 'mysql2/promise';
 import { reciprocalRankFusion } from './fusion';
@@ -823,8 +825,11 @@ const vectorQuery = async (pool: Pool, embedding: readonly number[], limit: numb
     'SELECT id FROM kb_facts ORDER BY VEC_COSINE_DISTANCE(embedding, ?) LIMIT ?',
     [JSON.stringify(embedding), limit],
   );
-  return (rows as { readonly id: string }[]).map((row) => row.id);
+  return IdRowsSchema.parse(rows).map((row) => row.id);
 };
+
+const IdRowsSchema = z.array(z.object({ id: z.string() }));
+const KbFactRowsSchema = z.array(z.object({ id: z.string(), text: z.string() }));
 
 const fulltextQuery = async (pool: Pool, query: string, limit: number): Promise<readonly string[]> => {
   const [rows] = await pool.query(
@@ -838,7 +843,7 @@ const fetchFactsByIds = async (pool: Pool, ids: readonly string[]): Promise<read
   if (ids.length === 0) return [];
   const placeholders = ids.map(() => '?').join(',');
   const [rows] = await pool.query(`SELECT id, text FROM kb_facts WHERE id IN (${placeholders})`, ids);
-  const byId = new Map((rows as KbFact[]).map((row) => [row.id, row]));
+  const byId = new Map(KbFactRowsSchema.parse(rows).map((row) => [row.id, row]));
   return ids.map((id) => byId.get(id)).filter((row): row is KbFact => row !== undefined);
 };
 
@@ -919,11 +924,12 @@ export const openKbPool = (): Pool => createTidbPool();
   "
   ```
 
-  Expected output: an `OPEN` line followed by at least one `Begin` JSON message. Record the exact field names of the `Begin` and any `Termination`/error messages you observe here in a comment at the top of `asr-client.ts` below, since Section 4 marks the full schema **UNVERIFIED** beyond the documented `Turn` fields.
+  Expected output: an `OPEN` line followed by at least one `Begin` JSON message. Record the exact field names of the `Begin` and any `Termination`/error messages you observe in this plan's section 4 row for the AssemblyAI schema (code stays comment-free), since Section 4 marks the full schema **UNVERIFIED** beyond the documented `Turn` fields.
 - [ ] Write `demos/call-copilot/runner/src/asr-client.ts`:
 
 ```ts
 import WebSocket from 'ws';
+import { z } from 'zod';
 
 export type AsrWord = { readonly text: string; readonly start: number; readonly end: number; readonly confidence: number };
 
@@ -940,22 +946,24 @@ export type AsrClient = {
   readonly close: () => void;
 };
 
+const TurnMessageSchema = z.object({
+  type: z.literal('Turn'),
+  turn_order: z.number().default(0),
+  transcript: z.string().default(''),
+  end_of_turn: z.boolean().default(false),
+  words: z
+    .array(z.object({ text: z.string().default(''), start: z.number().default(0), end: z.number().default(0), confidence: z.number().default(0) }))
+    .default([]),
+});
+
 const parseTurn = (raw: unknown): AsrTurn | undefined => {
-  if (typeof raw !== 'object' || raw === null) return undefined;
-  const message = raw as Record<string, unknown>;
-  if (message.type !== 'Turn') return undefined;
+  const parsed = TurnMessageSchema.safeParse(raw);
+  if (!parsed.success) return undefined;
   return {
-    turnOrder: Number(message.turn_order ?? 0),
-    transcript: String(message.transcript ?? ''),
-    endOfTurn: Boolean(message.end_of_turn),
-    words: Array.isArray(message.words)
-      ? (message.words as Record<string, unknown>[]).map((word) => ({
-          text: String(word.text ?? ''),
-          start: Number(word.start ?? 0),
-          end: Number(word.end ?? 0),
-          confidence: Number(word.confidence ?? 0),
-        }))
-      : [],
+    turnOrder: parsed.data.turn_order,
+    transcript: parsed.data.transcript,
+    endOfTurn: parsed.data.end_of_turn,
+    words: parsed.data.words,
   };
 };
 
@@ -1082,7 +1090,9 @@ export const startMicCapture = (options: { readonly deviceName: string }): Audio
 export const startFixtureCapture = (options: { readonly wavPath: string; readonly chunkBytes: number }): AudioSource => {
   const stream = createReadStream(options.wavPath, { start: 44, highWaterMark: options.chunkBytes });
   const handlers: ((chunk: Buffer) => void)[] = [];
-  stream.on('data', (chunk) => handlers.forEach((handler) => handler(chunk as Buffer)));
+  stream.on('data', (chunk) => {
+    if (Buffer.isBuffer(chunk)) handlers.forEach((handler) => handler(chunk));
+  });
   return {
     onChunk: (handler) => handlers.push(handler),
     stop: () => stream.close(),
@@ -1503,7 +1513,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/call-copilot/.env.example`, `integrations/demos/call-copilot/manifest.json`, `integrations/demos/call-copilot/package.json`, `integrations/demos/call-copilot/test/manifest.test.ts`, `integrations/demos/call-copilot/tsconfig.json`
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/demo-call-copilot exec vitest run test/manifest.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
+  - `grep -cE '^(TIDB_HOST|TIDB_PORT|TIDB_USER|TIDB_PASSWORD|TIDB_DATABASE|TIDB_TLS|LAB_ENV_TIDB|LAB_ENV_NOTES)=' integrations/demos/call-copilot/.env.example` -> 8
 - Done when: Task 1's steps are all checked off and the gate output matches.
 
 ### Packet 12-P2: PII redaction (pure logic)
@@ -1512,7 +1523,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/call-copilot/runner/src/redact.ts`, `integrations/demos/call-copilot/runner/test/redact.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-call-copilot exec vitest run runner/test/redact.test.ts` -> all PASS
+  - `pnpm vitest run runner/test/redact.test.ts` -> PASS (4 tests)
+  - `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
 - Done when: Task 2's steps are all checked off and the gate output matches.
 
 ### Packet 12-P3: Rolling transcript turn window (pure logic)
@@ -1521,7 +1533,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/call-copilot/runner/src/window.ts`, `integrations/demos/call-copilot/runner/test/window.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-call-copilot exec vitest run runner/test/window.test.ts` -> all PASS
+  - `pnpm vitest run runner/test/window.test.ts` -> PASS (4 tests)
+  - `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
 - Done when: Task 3's steps are all checked off and the gate output matches.
 
 ### Packet 12-P4: Trigger detector (pure logic)
@@ -1530,7 +1543,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/call-copilot/runner/src/triggers.ts`, `integrations/demos/call-copilot/runner/test/triggers.test.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/demo-call-copilot exec vitest run runner/test/triggers.test.ts` -> all PASS
+  - `pnpm vitest run runner/test/triggers.test.ts` -> PASS (6 tests)
+  - `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
 - Done when: Task 4's steps are all checked off and the gate output matches.
 
 ### Packet 12-P5: Reciprocal Rank Fusion (pure logic)
@@ -1539,7 +1553,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/call-copilot/runner/src/fusion.ts`, `integrations/demos/call-copilot/runner/test/fusion.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-call-copilot exec vitest run runner/test/fusion.test.ts` -> all PASS
+  - `pnpm vitest run runner/test/fusion.test.ts` -> PASS (5 tests)
+  - `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
 - Done when: Task 5's steps are all checked off and the gate output matches.
 
 ### Packet 12-P6: Prompt assembly (pure logic)
@@ -1548,7 +1563,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/call-copilot/runner/src/prompt.ts`, `integrations/demos/call-copilot/runner/test/prompt.test.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/demo-call-copilot exec vitest run runner/test/prompt.test.ts` -> all PASS
+  - `pnpm vitest run runner/test/prompt.test.ts` -> PASS (3 tests)
+  - `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
 - Done when: Task 6's steps are all checked off and the gate output matches.
 
 ### Packet 12-P7: Latency math (pure logic)
@@ -1557,7 +1573,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/call-copilot/runner/src/timing.ts`, `integrations/demos/call-copilot/runner/test/timing.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-call-copilot exec vitest run runner/test/timing.test.ts` -> all PASS
+  - `pnpm vitest run runner/test/timing.test.ts` -> PASS (4 tests)
+  - `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
 - Done when: Task 7's steps are all checked off and the gate output matches.
 
 ### Packet 12-P8: TiDB knowledge base - schema, seed, and retrieval queries (thin I/O adapter, manual live run)
@@ -1566,7 +1583,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/call-copilot/fixtures/kb-facts.json`, `integrations/demos/call-copilot/runner/src/kb.ts`, `integrations/demos/call-copilot/runner/src/seed-kb.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - coordinator reviews the files against Task 8's text; `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
+  - `cd demos/call-copilot && cp .env.example .env` -> `seeded kb_facts: 15 rows` (or however many rows `kb-facts.json` contains)
+  - `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 8's steps are all checked off and the gate output matches.
 
@@ -1576,7 +1594,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/call-copilot/runner/src/asr-client.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - coordinator reviews the files against Task 9's text; `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
+  - `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
 - Done when: Task 9's steps are all checked off and the gate output matches.
 
 ### Packet 12-P10: Synthetic mock-call script and fixture audio (manual, generates a committed fixture)
@@ -1585,7 +1603,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/call-copilot/fixtures/mock-call-script.json`, `integrations/demos/call-copilot/fixtures/mock-call.wav`
 - Model: coordinator   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 10's text; `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
+  - every command in Task 10 produces the output the task quotes; the coordinator pastes that output into the packet report
 - Done when: Task 10's steps are all checked off and the gate output matches.
 
 ### Packet 12-P11: Audio capture - BlackHole/sox mic source and fixture-file source (thin I/O adapter, manual live run)
@@ -1594,7 +1612,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/call-copilot/runner/src/audio-capture.ts`
 - Model: coordinator   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 11's text; `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
+  - `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
 - Done when: Task 11's steps are all checked off and the gate output matches.
 
 ### Packet 12-P12: Runner main.ts - wire capture, ASR, retrieval, suggestion, lab events
@@ -1603,7 +1621,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/call-copilot/runner/main.ts`
 - Model: coordinator   Effort: M
 - Gate:
-  - coordinator reviews the files against Task 12's text; `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
+  - `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
 - Done when: Task 12's steps are all checked off and the gate output matches.
 
 ### Packet 12-P13: Post-call summary and follow-up draft (thin I/O adapter, manual live run)
@@ -1612,7 +1630,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/call-copilot/runner/src/summarize-call.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 13's text; `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
+  - `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
 - Done when: Task 13's steps are all checked off and the gate output matches.
 
 ### Packet 12-P14: Redaction-at-rest and retention purge (thin I/O adapter, manual live run)
@@ -1621,16 +1639,17 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/call-copilot/runner/src/retention.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 14's text; `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
+  - `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
 - Done when: Task 14's steps are all checked off and the gate output matches.
 
 ### Packet 12-P15: Hybrid retrieval eval set (pure logic over fixture data)
 - Tasks: 15
 - Depends on: 12-P14   Shared runtime: none
-- Files owned: `integrations/demos/call-copilot/runner/test/eval`, `integrations/demos/call-copilot/runner/test/eval/hybrid-eval.test.ts`, `integrations/demos/call-copilot/runner/test/eval/triggers.json`
+- Files owned: `integrations/demos/call-copilot/runner/test/eval/hybrid-eval.test.ts`, `integrations/demos/call-copilot/runner/test/eval/triggers.json`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-call-copilot exec vitest run runner/test/eval/hybrid-eval.test.ts` -> all PASS
+  - `TIDB_HOST=127.0.0.1 pnpm vitest run runner/test/eval/hybrid-eval.test.ts` -> PASS (all rows matched)
+  - `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
 - Done when: Task 15's steps are all checked off and the gate output matches.
 
 ### Packet 12-P16: README and TALK-TRACK
@@ -1639,7 +1658,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/call-copilot/README.md`, `integrations/demos/call-copilot/TALK-TRACK.md`, `integrations/demos/call-copilot/traces`
 - Model: coordinator   Effort: M
 - Gate:
-  - coordinator reviews the files against Task 16's text; `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
+  - `grep -c $'\u2014' integrations/demos/call-copilot/README.md integrations/demos/call-copilot/TALK-TRACK.md` -> 0 for every file
+  - `pnpm lab check-public` -> `0 findings`
 - Done when: Task 16's steps are all checked off and the gate output matches.
 
 ### Packet 12-R: Record and publish the featured trace

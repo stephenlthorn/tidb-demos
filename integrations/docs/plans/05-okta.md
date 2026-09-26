@@ -154,7 +154,7 @@ demos/okta/
     main.ts                    entry point: wires emitter, poller, sync loop, controls
     src/
       groupRoleMap.ts           pure: Okta group names -> DbRole
-      sqlIdentifiers.ts         pure: safe backtick-quoting for SQL identifiers
+      sqlIdentifiers.ts         pure: validated usernames, quoted account/role names, escaped literals
       grantDiff.ts              pure: desired vs actual grant drift detection
       latency.ts                pure: elapsed-ms-since-published-timestamp math
       oktaPoller.ts             I/O adapter: polls Okta System Log + Users/Groups API
@@ -191,7 +191,8 @@ Follow TDD strictly for every file in `runner/src/*.ts` that is pure logic. `okt
   "dependencies": {
     "@lab/contract": "workspace:*",
     "@lab/runner-kit": "workspace:*",
-    "mysql2": "^3.11.0"
+    "mysql2": "^3.11.0",
+    "zod": "^4.1.0"
   },
   "devDependencies": {
     "tsx": "^4.20.0",
@@ -254,7 +255,7 @@ describe('roleForGroups', () => {
 });
 ```
 
-- [ ] Run `cd demos/okta && pnpm vitest run test/groupRoleMap.test.ts`. Expected FAIL: `Cannot find module '../src/groupRoleMap'`.
+- [ ] Run `pnpm --filter @lab/demo-okta exec vitest run runner/test/groupRoleMap.test.ts`. Expected FAIL: `Cannot find module '../src/groupRoleMap'`.
 - [ ] Write the minimal implementation `demos/okta/runner/src/groupRoleMap.ts`:
 
 ```ts
@@ -276,7 +277,7 @@ export const roleForGroups = (groupNames: readonly string[]): DbRole | null => {
 };
 ```
 
-- [ ] Run `cd demos/okta && pnpm vitest run test/groupRoleMap.test.ts`. Expected PASS: 5 tests passing.
+- [ ] Run `pnpm --filter @lab/demo-okta exec vitest run runner/test/groupRoleMap.test.ts`. Expected PASS: 5 tests passing.
 - [ ] Commit:
 
 ```bash
@@ -284,67 +285,89 @@ git add demos/okta/runner/src/groupRoleMap.ts demos/okta/runner/test/groupRoleMa
 git commit -m "okta: add groupRoleMap pure mapping"
 ```
 
-### Task 3: `sqlIdentifiers.ts` (pure: safe identifier quoting)
+### Task 3: `sqlIdentifiers.ts` (pure: safe account names, roles and literals)
+
+TiDB cannot bind parameters inside `CREATE USER`, `GRANT`, `REVOKE` or `SHOW GRANTS`, so every dynamic piece of those statements goes through one of three tested functions. Identifiers use the platform's `quoteIdentifier` from `@lab/runner-kit`; usernames coming from Okta are additionally restricted to a strict pattern, so a malicious or malformed Okta login can never reach SQL.
 
 - [ ] Write the failing test `demos/okta/runner/test/sqlIdentifiers.test.ts`:
 
 ```ts
 import { describe, expect, it } from 'vitest';
-import { quoteIdentifier, quoteQualifiedIdentifier } from '../src/sqlIdentifiers';
+import { accountName, roleName, stringLiteral, toDbUsername } from '../src/sqlIdentifiers';
 
-describe('quoteIdentifier', () => {
-  it('wraps a plain identifier in backticks', () => {
-    expect(quoteIdentifier('lab_analyst')).toBe('`lab_analyst`');
+describe('toDbUsername', () => {
+  it('derives a lowercase username from an Okta login', () => {
+    expect(toDbUsername('Alice.Smith@example.com')).toBe('alice.smith');
   });
 
-  it('doubles an embedded backtick', () => {
-    expect(quoteIdentifier('weird`name')).toBe('`weird``name`');
-  });
-
-  it('rejects an empty identifier', () => {
-    expect(() => quoteIdentifier('')).toThrow('identifier must not be empty');
-  });
-
-  it('rejects an identifier containing a NUL byte', () => {
-    expect(() => quoteIdentifier('a\u0000b')).toThrow('identifier must not contain a NUL byte');
+  it('rejects logins that would produce an unsafe or too long username', () => {
+    expect(() => toDbUsername("x'; DROP USER root; --@example.com")).toThrow('unsafe username');
+    expect(() => toDbUsername(`${'a'.repeat(40)}@example.com`)).toThrow('unsafe username');
+    expect(() => toDbUsername('@example.com')).toThrow('unsafe username');
   });
 });
 
-describe('quoteQualifiedIdentifier', () => {
-  it('joins quoted parts with a dot', () => {
-    expect(quoteQualifiedIdentifier(['reporting', 'orders'])).toBe('`reporting`.`orders`');
+describe('accountName', () => {
+  it('quotes both parts of a TiDB account name', () => {
+    expect(accountName('alice.smith')).toBe('`alice.smith`@`%`');
+  });
+
+  it('refuses a username that did not pass validation', () => {
+    expect(() => accountName('bad`name')).toThrow('unsafe username');
+  });
+});
+
+describe('roleName', () => {
+  it('quotes the two demo roles', () => {
+    expect(roleName('analyst')).toBe('`analyst`');
+    expect(roleName('engineer')).toBe('`engineer`');
+  });
+});
+
+describe('stringLiteral', () => {
+  it('escapes quotes and backslashes', () => {
+    expect(stringLiteral("it's \\ fine")).toBe("'it''s \\\\ fine'");
+  });
+
+  it('rejects NUL bytes', () => {
+    expect(() => stringLiteral('a\u0000b')).toThrow('literal must not contain a NUL byte');
   });
 });
 ```
 
-- [ ] Run `cd demos/okta && pnpm vitest run test/sqlIdentifiers.test.ts`. Expected FAIL: `Cannot find module '../src/sqlIdentifiers'`.
+- [ ] Run `pnpm --filter @lab/demo-okta exec vitest run runner/test/sqlIdentifiers.test.ts`. Expected FAIL: `Failed to resolve import "../src/sqlIdentifiers"`.
 - [ ] Write the minimal implementation `demos/okta/runner/src/sqlIdentifiers.ts`:
 
 ```ts
-export type QuotedIdentifier = string;
+import { quoteIdentifier } from '@lab/runner-kit';
+import type { DbRole } from './groupRoleMap';
 
-const containsNulByte = (value: string): boolean => value.includes('\u0000');
+const SAFE_USERNAME = /^[a-z0-9][a-z0-9._-]{0,31}$/;
 
-export const quoteIdentifier = (value: string): QuotedIdentifier => {
-  if (value.length === 0) {
-    throw new Error('identifier must not be empty');
-  }
-  if (containsNulByte(value)) {
-    throw new Error('identifier must not contain a NUL byte');
-  }
-  return `\`${value.replace(/`/g, '``')}\``;
+const assertSafeUsername = (username: string): string => {
+  if (!SAFE_USERNAME.test(username)) throw new Error(`unsafe username: ${JSON.stringify(username)}`);
+  return username;
 };
 
-export const quoteQualifiedIdentifier = (parts: readonly string[]): QuotedIdentifier =>
-  parts.map(quoteIdentifier).join('.');
+export const toDbUsername = (oktaLogin: string): string =>
+  assertSafeUsername((oktaLogin.split('@')[0] ?? '').toLowerCase());
+
+export const accountName = (username: string): string => `${quoteIdentifier(assertSafeUsername(username))}@${quoteIdentifier('%')}`;
+
+export const roleName = (role: DbRole): string => quoteIdentifier(role);
+
+export const stringLiteral = (value: string): string => {
+  if (value.includes('\u0000')) throw new Error('literal must not contain a NUL byte');
+  return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "''")}'`;
+};
 ```
 
-- [ ] Run `cd demos/okta && pnpm vitest run test/sqlIdentifiers.test.ts`. Expected PASS: 5 tests passing.
+- [ ] Run `pnpm --filter @lab/demo-okta exec vitest run runner/test/sqlIdentifiers.test.ts`. Expected PASS: 7 tests passing.
 - [ ] Commit:
 
 ```bash
 git add demos/okta/runner/src/sqlIdentifiers.ts demos/okta/runner/test/sqlIdentifiers.test.ts
-git commit -m "okta: add sqlIdentifiers safe quoting"
+git commit -m "okta: add safe account, role and literal builders"
 ```
 
 ### Task 4: `grantDiff.ts` (pure: desired vs actual grant drift)
@@ -397,7 +420,7 @@ describe('findDrift', () => {
 });
 ```
 
-- [ ] Run `cd demos/okta && pnpm vitest run test/grantDiff.test.ts`. Expected FAIL: `Cannot find module '../src/grantDiff'`.
+- [ ] Run `pnpm --filter @lab/demo-okta exec vitest run runner/test/grantDiff.test.ts`. Expected FAIL: `Cannot find module '../src/grantDiff'`.
 - [ ] Write the minimal implementation `demos/okta/runner/src/grantDiff.ts`:
 
 ```ts
@@ -458,7 +481,7 @@ export const findDrift = (
 };
 ```
 
-- [ ] Run `cd demos/okta && pnpm vitest run test/grantDiff.test.ts`. Expected PASS: 5 tests passing.
+- [ ] Run `pnpm --filter @lab/demo-okta exec vitest run runner/test/grantDiff.test.ts`. Expected PASS: 5 tests passing.
 - [ ] Commit:
 
 ```bash
@@ -487,7 +510,7 @@ describe('msSincePublished', () => {
 });
 ```
 
-- [ ] Run `cd demos/okta && pnpm vitest run test/latency.test.ts`. Expected FAIL: `Cannot find module '../src/latency'`.
+- [ ] Run `pnpm --filter @lab/demo-okta exec vitest run runner/test/latency.test.ts`. Expected FAIL: `Cannot find module '../src/latency'`.
 - [ ] Write the minimal implementation `demos/okta/runner/src/latency.ts`:
 
 ```ts
@@ -500,7 +523,7 @@ export const msSincePublished = (publishedIso: string, completedAtMs: number): n
 };
 ```
 
-- [ ] Run `cd demos/okta && pnpm vitest run test/latency.test.ts`. Expected PASS: 2 tests passing.
+- [ ] Run `pnpm --filter @lab/demo-okta exec vitest run runner/test/latency.test.ts`. Expected PASS: 2 tests passing.
 - [ ] Commit:
 
 ```bash
@@ -528,7 +551,7 @@ describe('okta manifest', () => {
 });
 ```
 
-- [ ] Run `cd demos/okta && pnpm vitest run test/manifest.test.ts`. Expected FAIL: `ENOENT: no such file or directory, open '.../demos/okta/manifest.json'`.
+- [ ] Run `pnpm --filter @lab/demo-okta exec vitest run test/manifest.test.ts`. Expected FAIL: `ENOENT: no such file or directory, open '.../demos/okta/manifest.json'`.
 - [ ] Write `demos/okta/manifest.json` in full:
 
 ```json
@@ -614,7 +637,7 @@ describe('okta manifest', () => {
 }
 ```
 
-- [ ] Run `cd demos/okta && pnpm vitest run test/manifest.test.ts`. Expected PASS: 1 test passing.
+- [ ] Run `pnpm --filter @lab/demo-okta exec vitest run test/manifest.test.ts`. Expected PASS: 1 test passing.
 - [ ] Run `pnpm lab validate okta` from the workspace root. Expected: `manifest.json: OK` with no reference errors.
 - [ ] Commit:
 
@@ -642,6 +665,7 @@ OKTA_API_TOKEN=
 OKTA_ANALYSTS_GROUP_ID=
 OKTA_ENGINEERS_GROUP_ID=
 OKTA_DEMO_USER_ID=
+OKTA_DEMO_USER_LOGIN=demo_okta_user@example.com
 OKTA_POLL_INTERVAL_MS=3000
 TIDB_REPORTING_SCHEMA=reporting
 ```
@@ -780,37 +804,51 @@ git commit -m "okta: add Okta REST adapter (manual-verified)"
 
 ```ts
 import type { Pool } from 'mysql2/promise';
+import { z } from 'zod';
+import { quoteIdentifier } from '@lab/runner-kit';
 import type { DbRole } from './groupRoleMap';
-import { quoteIdentifier } from './sqlIdentifiers';
+import { accountName, roleName, stringLiteral } from './sqlIdentifiers';
+
+const DB_ROLES: readonly DbRole[] = ['analyst', 'engineer'];
+
+const GrantRowsSchema = z.array(z.record(z.string(), z.string()));
 
 export const ensureRoles = async (pool: Pool, schema: string): Promise<void> => {
   const quotedSchema = quoteIdentifier(schema);
-  await pool.query(`CREATE ROLE IF NOT EXISTS 'analyst'`);
-  await pool.query(`CREATE ROLE IF NOT EXISTS 'engineer'`);
-  await pool.query(`GRANT SELECT ON ${quotedSchema}.* TO 'analyst'`);
-  await pool.query(`GRANT SELECT, INSERT, UPDATE ON ${quotedSchema}.* TO 'engineer'`);
+  await pool.query(`CREATE ROLE IF NOT EXISTS ${roleName('analyst')}, ${roleName('engineer')}`);
+  await pool.query(`GRANT SELECT ON ${quotedSchema}.* TO ${roleName('analyst')}`);
+  await pool.query(`GRANT SELECT, INSERT, UPDATE ON ${quotedSchema}.* TO ${roleName('engineer')}`);
 };
 
-export const provisionUser = async (
-  pool: Pool,
-  username: string,
-  password: string,
-  role: DbRole,
-): Promise<void> => {
-  const quotedUser = quoteIdentifier(username);
-  await pool.query(`CREATE USER IF NOT EXISTS '${username}'@'%' IDENTIFIED BY '${password}'`);
-  await pool.query(`GRANT 'analyst' TO '${username}'@'%'`).catch(() => undefined);
-  await pool.query(`REVOKE 'analyst' FROM '${username}'@'%'`).catch(() => undefined);
-  await pool.query(`REVOKE 'engineer' FROM '${username}'@'%'`).catch(() => undefined);
-  await pool.query(`GRANT '${role}' TO '${username}'@'%'`);
-  await pool.query(`SET DEFAULT ROLE '${role}' TO '${username}'@'%'`);
-  void quotedUser;
+export const provisionUser = async (pool: Pool, username: string, password: string, role: DbRole): Promise<void> => {
+  const account = accountName(username);
+  await pool.query(`CREATE USER IF NOT EXISTS ${account} IDENTIFIED BY ${stringLiteral(password)}`);
+  await Promise.all(
+    DB_ROLES.filter((other) => other !== role).map((other) =>
+      pool.query(`REVOKE ${roleName(other)} FROM ${account}`).catch(() => undefined),
+    ),
+  );
+  await pool.query(`GRANT ${roleName(role)} TO ${account}`);
+  await pool.query(`SET DEFAULT ROLE ${roleName(role)} TO ${account}`);
 };
 
 export const lockAndDropUser = async (pool: Pool, username: string): Promise<void> => {
-  await pool.query(`ALTER USER '${username}'@'%' ACCOUNT LOCK`);
-  await pool.query(`DROP USER IF EXISTS '${username}'@'%'`);
+  const account = accountName(username);
+  await pool.query(`ALTER USER ${account} ACCOUNT LOCK`);
+  await pool.query(`DROP USER IF EXISTS ${account}`);
 };
+
+const grantLinesFor = async (pool: Pool, username: string): Promise<readonly string[]> => {
+  try {
+    const [rows] = await pool.query(`SHOW GRANTS FOR ${accountName(username)}`);
+    return GrantRowsSchema.parse(rows).flatMap((row) => Object.values(row));
+  } catch {
+    return [];
+  }
+};
+
+const roleFromGrants = (lines: readonly string[]): DbRole | null =>
+  ['engineer', 'analyst'].find((role): role is DbRole => lines.some((line) => line.includes(`'${role}'`) || line.includes(`\`${role}\``))) ?? null;
 
 export const readActualAssignments = async (
   pool: Pool,
@@ -818,17 +856,8 @@ export const readActualAssignments = async (
 ): Promise<readonly { readonly username: string; readonly role: DbRole | null; readonly exists: boolean }[]> =>
   Promise.all(
     usernames.map(async (username) => {
-      const [rows] = await pool
-        .query(`SHOW GRANTS FOR '${username}'@'%'`)
-        .catch(() => [[]] as unknown as [readonly unknown[]]);
-      const grantLines = (rows as readonly { toString(): string }[]).map((row) => row.toString());
-      const exists = grantLines.length > 0;
-      const role: DbRole | null = grantLines.some((line) => line.includes("'engineer'"))
-        ? 'engineer'
-        : grantLines.some((line) => line.includes("'analyst'"))
-          ? 'analyst'
-          : null;
-      return { username, role, exists };
+      const lines = await grantLinesFor(pool, username);
+      return { username, role: roleFromGrants(lines), exists: lines.length > 0 };
     }),
   );
 ```
@@ -874,6 +903,7 @@ import {
   fetchGroupMemberIds,
   removeUserFromGroup,
 } from './src/oktaPoller';
+import { toDbUsername } from './src/sqlIdentifiers';
 import { ensureRoles, lockAndDropUser, provisionUser, readActualAssignments } from './src/tidbSync';
 
 const env = process.env;
@@ -884,7 +914,7 @@ const okta = { orgUrl: env.OKTA_ORG_URL ?? '', apiToken: env.OKTA_API_TOKEN ?? '
 const analystsGroupId = env.OKTA_ANALYSTS_GROUP_ID ?? '';
 const engineersGroupId = env.OKTA_ENGINEERS_GROUP_ID ?? '';
 const demoUserId = env.OKTA_DEMO_USER_ID ?? '';
-const demoUsername = 'demo_okta_user';
+const demoUsername = toDbUsername(env.OKTA_DEMO_USER_LOGIN ?? 'demo_okta_user@example.com');
 const schema = env.TIDB_REPORTING_SCHEMA ?? 'reporting';
 const pollIntervalMs = Number(env.OKTA_POLL_INTERVAL_MS ?? '3000');
 
@@ -1148,7 +1178,7 @@ git commit -m "okta: add featured trace"
 - **JWKS is a local file in TiDB, not a live URL.** Any `tidb_auth_token` build needs its own small sidecar that periodically fetches Okta's JWKS endpoint and writes it to the path TiDB's `auth-token-jwks` config points at; TiDB does not fetch JWKS over HTTP itself.
 - **The `SQL Users` console page is a preview feature gated behind a support ticket.** This plan manages TiDB database users and roles by connecting with a SQL client and running statements directly (via `tidbSync.ts`), which needs no such request and works identically on TiDB Cloud and TiDB Self-Managed.
 - **Cloud Organization SSO cannot be disabled once enabled.** Never enable it against a shared or production TiDB Cloud organization for a Part A walkthrough; use a disposable or already-SSO-enabled demo organization.
-- **Password embedded in generated SQL strings.** `provisionUser` in `tidbSync.ts` interpolates the demo password directly into a `CREATE USER ... IDENTIFIED BY` statement because `mysql2`'s parameter binding does not cover `CREATE USER`/`GRANT` DDL; the password is a fixed, non-secret demo value (`Testpass123!`), never a real credential, and is never logged by the emitter.
+- **No parameter binding for account DDL.** TiDB cannot bind parameters in `CREATE USER`, `GRANT`, `REVOKE` or `SHOW GRANTS`, so `tidbSync.ts` builds those statements only from `accountName` (usernames restricted to `^[a-z0-9][a-z0-9._-]{0,31}$`), `roleName` (a fixed two-role list) and `stringLiteral` (escaped). The demo password is a fixed, non-secret value (`Testpass123!`) and is never logged.
 - **Okta Event Hooks remain the right production answer.** If a customer wants sub-second reaction instead of poll-interval latency, point them at Event Hooks with a real ingress and TLS termination, not at a local tunnel; this plan intentionally does not build that path live.
 
 ## 10. Subagent work packets
@@ -1177,7 +1207,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/okta/package.json`, `integrations/demos/okta/tsconfig.json`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 1's text; `pnpm --filter @lab/demo-okta typecheck` -> exit 0
+  - `cd demos/okta && pnpm install` -> lockfile updates, no errors, `node_modules/@lab/contract` and `node_modules/@lab/runner-kit` are symlinks into the workspace packages
 - Done when: Task 1's steps are all checked off and the gate output matches.
 
 ### Packet 05-P2: `groupRoleMap.ts` (pure: Okta group -> TiDB role)
@@ -1186,17 +1216,20 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/okta/runner/src/groupRoleMap.ts`, `integrations/demos/okta/runner/test/groupRoleMap.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-okta exec vitest run runner/test/groupRoleMap.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-okta exec vitest run runner/test/groupRoleMap.test.ts` -> PASS: 5 tests passing
+  - `pnpm --filter @lab/demo-okta typecheck` -> exit 0
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 2's steps are all checked off and the gate output matches.
 
-### Packet 05-P3: `sqlIdentifiers.ts` (pure: safe identifier quoting)
+### Packet 05-P3: `sqlIdentifiers.ts` (pure: safe account names, roles and literals)
 - Tasks: 3
-- Depends on: 05-P2   Shared runtime: none
+- Depends on: 05-P2   Shared runtime: cloud-account
 - Files owned: `integrations/demos/okta/runner/src/sqlIdentifiers.ts`, `integrations/demos/okta/runner/test/sqlIdentifiers.test.ts`
-- Model: sonnet   Effort: S
+- Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/demo-okta exec vitest run runner/test/sqlIdentifiers.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-okta exec vitest run runner/test/sqlIdentifiers.test.ts` -> PASS: 7 tests passing
+  - `pnpm --filter @lab/demo-okta typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 3's steps are all checked off and the gate output matches.
 
 ### Packet 05-P4: `grantDiff.ts` (pure: desired vs actual grant drift)
@@ -1205,7 +1238,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/okta/runner/src/grantDiff.ts`, `integrations/demos/okta/runner/test/grantDiff.test.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/demo-okta exec vitest run runner/test/grantDiff.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-okta exec vitest run runner/test/grantDiff.test.ts` -> PASS: 5 tests passing
+  - `pnpm --filter @lab/demo-okta typecheck` -> exit 0
 - Done when: Task 4's steps are all checked off and the gate output matches.
 
 ### Packet 05-P5: `latency.ts` (pure: elapsed ms since an Okta event's published timestamp)
@@ -1214,7 +1248,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/okta/runner/src/latency.ts`, `integrations/demos/okta/runner/test/latency.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-okta exec vitest run runner/test/latency.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-okta exec vitest run runner/test/latency.test.ts` -> PASS: 2 tests passing
+  - `pnpm --filter @lab/demo-okta typecheck` -> exit 0
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 5's steps are all checked off and the gate output matches.
 
@@ -1224,7 +1259,9 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/okta/manifest.json`, `integrations/demos/okta/test/manifest.test.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/demo-okta exec vitest run test/manifest.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-okta exec vitest run test/manifest.test.ts` -> PASS: 1 test passing
+  - `pnpm lab validate okta` -> `manifest.json: OK` with no reference errors
+  - `pnpm --filter @lab/demo-okta typecheck` -> exit 0
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 6's steps are all checked off and the gate output matches.
 
@@ -1234,7 +1271,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/okta/.env.example`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-okta typecheck` -> exit 0
+  - `grep -cE '^(TIDB_HOST|TIDB_PORT|TIDB_USER|TIDB_PASSWORD|TIDB_DATABASE|TIDB_TLS|LAB_ENV_TIDB|LAB_ENV_NOTES)=' integrations/demos/okta/.env.example` -> 8
 - Done when: Task 7's steps are all checked off and the gate output matches.
 
 ### Packet 05-P8: `oktaPoller.ts` (I/O adapter, manual verification)
@@ -1243,7 +1280,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/okta/runner/src/oktaPoller.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - coordinator reviews the files against Task 8's text; `pnpm --filter @lab/demo-okta typecheck` -> exit 0
+  - `pnpm --filter @lab/demo-okta typecheck` -> exit 0
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 8's steps are all checked off and the gate output matches.
 
@@ -1253,7 +1290,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/okta/runner/src/tidbSync.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - coordinator reviews the files against Task 9's text; `pnpm --filter @lab/demo-okta typecheck` -> exit 0
+  - `pnpm --filter @lab/demo-okta typecheck` -> exit 0
 - Done when: Task 9's steps are all checked off and the gate output matches.
 
 ### Packet 05-P10: `main.ts` (wiring, manual live-run)
@@ -1262,7 +1299,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/okta/runner/main.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - coordinator reviews the files against Task 10's text; `pnpm --filter @lab/demo-okta typecheck` -> exit 0
+  - `pnpm --filter @lab/demo-okta typecheck` -> exit 0
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 10's steps are all checked off and the gate output matches.
 
@@ -1272,7 +1309,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/okta/README.md`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 11's text; `pnpm --filter @lab/demo-okta typecheck` -> exit 0
+  - `grep -c $'\u2014' integrations/demos/okta/README.md` -> 0 for every file
+  - `pnpm lab check-public` -> `0 findings`
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 11's steps are all checked off and the gate output matches.
 
@@ -1282,7 +1320,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/okta/TALK-TRACK.md`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 12's text; `pnpm --filter @lab/demo-okta typecheck` -> exit 0
+  - `grep -c $'\u2014' integrations/demos/okta/TALK-TRACK.md` -> 0 for every file
+  - `pnpm lab check-public` -> `0 findings`
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 12's steps are all checked off and the gate output matches.
 
@@ -1292,7 +1331,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/okta/GUIDE-ORG-SSO.md`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 13's text; `pnpm --filter @lab/demo-okta typecheck` -> exit 0
+  - `grep -c $'\u2014' integrations/demos/okta/GUIDE-ORG-SSO.md` -> 0 for every file
+  - `pnpm lab check-public` -> `0 findings`
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 13's steps are all checked off and the gate output matches.
 

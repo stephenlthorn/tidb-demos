@@ -1840,7 +1840,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/databricks/package.json`, `integrations/demos/databricks/runner/src`, `integrations/demos/databricks/runner/test`, `integrations/demos/databricks/test`, `integrations/demos/databricks/traces`, `integrations/demos/databricks/tsconfig.json`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 1's text; `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
+  - every command in Task 1 produces the output the task quotes; the coordinator pastes that output into the packet report
 - Done when: Task 1's steps are all checked off and the gate output matches.
 
 ### Packet 06-P2: Manifest
@@ -1849,7 +1849,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/databricks/manifest.json`, `integrations/demos/databricks/test/manifest.test.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/demo-databricks exec vitest run test/manifest.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
 - Done when: Task 2's steps are all checked off and the gate output matches.
 
 ### Packet 06-P3: Scoring rule presets and the rule-toggle
@@ -1858,7 +1858,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/databricks/runner/src/scoringRule.ts`, `integrations/demos/databricks/runner/test/scoringRule.test.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/demo-databricks exec vitest run runner/test/scoringRule.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
 - Done when: Task 3's steps are all checked off and the gate output matches.
 
 ### Packet 06-P4: Scoring and heartbeat SQL builders
@@ -1867,7 +1867,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/databricks/runner/src/scoringStatement.ts`, `integrations/demos/databricks/runner/test/scoringStatement.test.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/demo-databricks exec vitest run runner/test/scoringStatement.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
 - Done when: Task 4's steps are all checked off and the gate output matches.
 
 ### Packet 06-P5: Reverse-ETL upsert builder
@@ -1876,7 +1876,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/databricks/runner/src/upsertStatement.ts`, `integrations/demos/databricks/runner/test/upsertStatement.test.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/demo-databricks exec vitest run runner/test/upsertStatement.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
 - Done when: Task 5's steps are all checked off and the gate output matches.
 
 ### Packet 06-P6: Statement Execution API response parser and poll-decision state machine
@@ -1885,7 +1885,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/databricks/runner/src/statementResponse.ts`, `integrations/demos/databricks/runner/test/statementResponse.test.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/demo-databricks exec vitest run runner/test/statementResponse.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
 - Done when: Task 6's steps are all checked off and the gate output matches.
 
 ### Packet 06-P7: Freshness and full-loop math
@@ -1894,7 +1894,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/databricks/runner/src/freshness.ts`, `integrations/demos/databricks/runner/test/freshness.test.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/demo-databricks exec vitest run runner/test/freshness.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
 - Done when: Task 7's steps are all checked off and the gate output matches.
 
 ### Packet 06-P8: Synthetic event generator
@@ -1903,7 +1903,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/databricks/runner/src/eventGenerator.ts`, `integrations/demos/databricks/runner/test/eventGenerator.test.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/demo-databricks exec vitest run runner/test/eventGenerator.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
 - Done when: Task 8's steps are all checked off and the gate output matches.
 
 ### Packet 06-P9: TiDB schema DDL constants
@@ -1912,7 +1912,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/databricks/runner/src/tidbSchema.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 9's text; `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
+  - `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
 - Done when: Task 9's steps are all checked off and the gate output matches.
 
 ### Packet 06-P10: Databricks Statement Execution API client
@@ -1921,16 +1921,16 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/databricks/runner/src/statementExecutionClient.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 10's text; `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
+  - `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
 - Done when: Task 10's steps are all checked off and the gate output matches.
 
 ### Packet 06-P11: One-time Databricks-side setup (manual, live)
 - Tasks: 11
 - Depends on: 06-P10   Shared runtime: none
 - Files owned: none (manual or docs step)
-- Model: sonnet   Effort: M
+- Model: coordinator   Effort: M
 - Gate:
-  - coordinator reviews the files against Task 11's text; `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
+  - every command in Task 11 produces the output the task quotes; the coordinator pastes that output into the packet report
 - Done when: Task 11's steps are all checked off and the gate output matches.
 
 ### Packet 06-P12: One-time TiDB-side setup (manual, live)
@@ -1939,7 +1939,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/databricks/.env.example`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 12's text; `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
+  - `grep -cE '^(TIDB_HOST|TIDB_PORT|TIDB_USER|TIDB_PASSWORD|TIDB_DATABASE|TIDB_TLS|LAB_ENV_TIDB|LAB_ENV_NOTES)=' integrations/demos/databricks/.env.example` -> 8
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 12's steps are all checked off and the gate output matches.
 
@@ -1949,25 +1949,25 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/databricks/runner/main.ts`
 - Model: sonnet   Effort: L
 - Gate:
-  - coordinator reviews the files against Task 13's text; `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
+  - `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
 - Done when: Task 13's steps are all checked off and the gate output matches.
 
 ### Packet 06-P14: End-to-end live run through the relay
 - Tasks: 14
 - Depends on: 06-P13   Shared runtime: tidb-playground
 - Files owned: none (manual or docs step)
-- Model: sonnet   Effort: S
+- Model: coordinator   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 14's text; `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
+  - every command in Task 14 produces the output the task quotes; the coordinator pastes that output into the packet report
 - Done when: Task 14's steps are all checked off and the gate output matches.
 
 ### Packet 06-P15: Public-content gate
 - Tasks: 15
 - Depends on: 06-P14   Shared runtime: none
 - Files owned: none (manual or docs step)
-- Model: sonnet   Effort: S
+- Model: coordinator   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 15's text; `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
+  - every command in Task 15 produces the output the task quotes; the coordinator pastes that output into the packet report
 - Done when: Task 15's steps are all checked off and the gate output matches.
 
 ### Packet 06-P16: README and TALK-TRACK
@@ -1976,7 +1976,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/databricks/README.md`, `integrations/demos/databricks/TALK-TRACK.md`, `integrations/demos/databricks/traces`
 - Model: sonnet   Effort: L
 - Gate:
-  - coordinator reviews the files against Task 16's text; `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
+  - `grep -c $'\u2014' integrations/demos/databricks/README.md integrations/demos/databricks/TALK-TRACK.md` -> 0 for every file
+  - `pnpm lab check-public` -> `0 findings`
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 16's steps are all checked off and the gate output matches.
 

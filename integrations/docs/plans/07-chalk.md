@@ -1169,7 +1169,9 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/chalk/.env.example`, `integrations/demos/chalk/.gitignore`, `integrations/demos/chalk/package.json`, `integrations/demos/chalk/requirements.txt`, `integrations/demos/chalk/tsconfig.json`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 1's text; `pnpm --filter @lab/demo-chalk typecheck` -> exit 0
+  - `ls demos/chalk` -> `package.json`, `tsconfig.json`, `.env.example`, `requirements.txt`, `.venv` present. This is scaffolding, not logic, so there is no failing test for this task
+  - `.venv/bin/python -c "import lab_runner, pymysql, chalk"` -> no import error, confirming the editable `lab_runner` install and both dependencies resolve
+  - `grep -cE '^(TIDB_HOST|TIDB_PORT|TIDB_USER|TIDB_PASSWORD|TIDB_DATABASE|TIDB_TLS|LAB_ENV_TIDB|LAB_ENV_NOTES)=' integrations/demos/chalk/.env.example` -> 8
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 1's steps are all checked off and the gate output matches.
 
@@ -1179,107 +1181,115 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/chalk/manifest.json`, `integrations/demos/chalk/test/manifest.test.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/demo-chalk exec vitest run test/manifest.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-chalk test` -> PASS: both tests green
+  - `pnpm --filter @lab/demo-chalk typecheck` -> exit 0
 - Done when: Task 2's steps are all checked off and the gate output matches.
 
 ### Packet 07-P3: Pure logic - baseline SQL builder
 - Tasks: 3
 - Depends on: 07-P2   Shared runtime: none
-- Files owned: `integrations/demos/chalk/runner`, `integrations/demos/chalk/runner/src/baseline_sql.py`, `integrations/demos/chalk/runner/test/test_baseline_sql.py`
+- Files owned: `integrations/demos/chalk/runner/src/baseline_sql.py`, `integrations/demos/chalk/runner/test/test_baseline_sql.py`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-chalk exec vitest run runner/test/test_baseline_sql.py` -> all PASS
+  - `cd demos/chalk/runner && ../.venv/bin/python -m pytest test/test_baseline_sql.py` -> PASS: 4 passed
+  - `cd integrations/demos/chalk && .venv/bin/python -m py_compile runner/src/baseline_sql.py runner/test/test_baseline_sql.py` -> exit 0
 - Done when: Task 3's steps are all checked off and the gate output matches.
 
 ### Packet 07-P4: Pure logic - freshness lag
 - Tasks: 4
 - Depends on: 07-P3   Shared runtime: none
-- Files owned: `integrations/demos/chalk/runner`, `integrations/demos/chalk/runner/src/freshness.py`, `integrations/demos/chalk/runner/test/test_freshness.py`
+- Files owned: `integrations/demos/chalk/runner/src/freshness.py`, `integrations/demos/chalk/runner/test/test_freshness.py`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-chalk exec vitest run runner/test/test_freshness.py` -> all PASS
+  - `cd demos/chalk/runner && ../.venv/bin/python -m pytest test/test_freshness.py` -> PASS: 3 passed
+  - `cd integrations/demos/chalk && .venv/bin/python -m py_compile runner/src/freshness.py runner/test/test_freshness.py` -> exit 0
 - Done when: Task 4's steps are all checked off and the gate output matches.
 
 ### Packet 07-P5: Pure logic - velocity flag evaluation
 - Tasks: 5
 - Depends on: 07-P4   Shared runtime: none
-- Files owned: `integrations/demos/chalk/runner`, `integrations/demos/chalk/runner/src/velocity.py`, `integrations/demos/chalk/runner/test/test_velocity.py`
+- Files owned: `integrations/demos/chalk/runner/src/velocity.py`, `integrations/demos/chalk/runner/test/test_velocity.py`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-chalk exec vitest run runner/test/test_velocity.py` -> all PASS
+  - `cd demos/chalk/runner && ../.venv/bin/python -m pytest test/test_velocity.py` -> PASS: 4 passed
+  - `cd integrations/demos/chalk && .venv/bin/python -m py_compile runner/src/velocity.py runner/test/test_velocity.py` -> exit 0
 - Done when: Task 5's steps are all checked off and the gate output matches.
 
 ### Packet 07-P6: Pure logic - transaction generator
 - Tasks: 6
 - Depends on: 07-P5   Shared runtime: none
-- Files owned: `integrations/demos/chalk/runner`, `integrations/demos/chalk/runner/src/workload.py`, `integrations/demos/chalk/runner/test/test_workload.py`
+- Files owned: `integrations/demos/chalk/runner/src/workload.py`, `integrations/demos/chalk/runner/test/test_workload.py`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-chalk exec vitest run runner/test/test_workload.py` -> all PASS
+  - `cd demos/chalk/runner && ../.venv/bin/python -m pytest test/test_workload.py` -> PASS: 4 passed
+  - `cd integrations/demos/chalk && .venv/bin/python -m py_compile runner/src/workload.py runner/test/test_workload.py` -> exit 0
 - Done when: Task 6's steps are all checked off and the gate output matches.
 
 ### Packet 07-P7: Manual - TiDB schema (thin I/O, no TDD)
 - Tasks: 7
-- Depends on: 07-P6   Shared runtime: none
-- Files owned: `integrations/demos/chalk/runner`, `integrations/demos/chalk/runner/src/schema.py`
+- Depends on: 07-P6   Shared runtime: tidb-playground
+- Files owned: `integrations/demos/chalk/runner/src/schema.py`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-chalk typecheck` -> exit 0
+  - `cd integrations/demos/chalk && .venv/bin/python -m py_compile runner/src/schema.py` -> exit 0
 - Done when: Task 7's steps are all checked off and the gate output matches.
 
 ### Packet 07-P8: Manual - seed data and transaction writer (thin I/O)
 - Tasks: 8
-- Depends on: 07-P7   Shared runtime: none
-- Files owned: `integrations/demos/chalk/.env`, `integrations/demos/chalk/runner`, `integrations/demos/chalk/runner/src/tidb_io.py`
+- Depends on: 07-P7   Shared runtime: tidb-playground
+- Files owned: `integrations/demos/chalk/runner/src/tidb_io.py`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 8's text; `pnpm --filter @lab/demo-chalk typecheck` -> exit 0
+  - `cd integrations/demos/chalk && .venv/bin/python -m py_compile runner/src/tidb_io.py` -> exit 0
 - Done when: Task 8's steps are all checked off and the gate output matches.
 
 ### Packet 07-P9: Manual - Chalk project, MySQL source against TiDB, SQL resolvers
 - Tasks: 9
 - Depends on: 07-P8   Shared runtime: cloud-account
-- Files owned: `integrations/demos/chalk/.env.example`, `integrations/demos/chalk/chalk`, `integrations/demos/chalk/chalk/requirements.txt`, `integrations/demos/chalk/chalk/src`, `integrations/demos/chalk/chalk/src/resolvers/amount_sum_24h.chalk.sql`, `integrations/demos/chalk/chalk/src/resolvers/distinct_merchants_24h.chalk.sql`, `integrations/demos/chalk/chalk/src/resolvers/txn_count_1h.chalk.sql`, `integrations/demos/chalk/chalk/src/resolvers/velocity_flag.py`, `integrations/demos/chalk/chalk/src/user.py`
+- Files owned: `integrations/demos/chalk/.env.example`, `integrations/demos/chalk/chalk/requirements.txt`, `integrations/demos/chalk/chalk/src/resolvers/amount_sum_24h.chalk.sql`, `integrations/demos/chalk/chalk/src/resolvers/distinct_merchants_24h.chalk.sql`, `integrations/demos/chalk/chalk/src/resolvers/txn_count_1h.chalk.sql`, `integrations/demos/chalk/chalk/src/resolvers/velocity_flag.py`, `integrations/demos/chalk/chalk/src/user.py`
 - Model: sonnet   Effort: M
 - Gate:
-  - coordinator reviews the files against Task 9's text; `pnpm --filter @lab/demo-chalk typecheck` -> exit 0
+  - `cd demos/chalk/chalk && chalk apply --branch chalk-tidb-demo` -> a deployment summary reporting the `User` feature class and its resolvers with no errors
+  - `grep -cE '^(TIDB_HOST|TIDB_PORT|TIDB_USER|TIDB_PASSWORD|TIDB_DATABASE|TIDB_TLS|LAB_ENV_TIDB|LAB_ENV_NOTES)=' integrations/demos/chalk/.env.example` -> 8
+  - `cd integrations/demos/chalk && .venv/bin/python -m py_compile chalk/src/resolvers/velocity_flag.py chalk/src/user.py` -> exit 0
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 9's steps are all checked off and the gate output matches.
 
 ### Packet 07-P10: Manual - confirm the Chalk Python client's exact call shape
 - Tasks: 10
 - Depends on: 07-P9   Shared runtime: none
-- Files owned: `integrations/demos/chalk/.venv/bin/pip`, `integrations/demos/chalk/README.md`
+- Files owned: `integrations/demos/chalk/README.md`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 10's text; `pnpm --filter @lab/demo-chalk typecheck` -> exit 0
+  - `grep -c $'\u2014' integrations/demos/chalk/README.md` -> 0 for every file
+  - `pnpm lab check-public` -> `0 findings`
 - Done when: Task 10's steps are all checked off and the gate output matches.
 
 ### Packet 07-P11: Manual - Chalk client wrapper (thin I/O)
 - Tasks: 11
 - Depends on: 07-P10   Shared runtime: none
-- Files owned: `integrations/demos/chalk/runner`, `integrations/demos/chalk/runner/src/chalk_io.py`
+- Files owned: `integrations/demos/chalk/runner/src/chalk_io.py`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 11's text; `pnpm --filter @lab/demo-chalk typecheck` -> exit 0
+  - `cd integrations/demos/chalk && .venv/bin/python -m py_compile runner/src/chalk_io.py` -> exit 0
 - Done when: Task 11's steps are all checked off and the gate output matches.
 
 ### Packet 07-P12: Manual - wire the steady-state tick loop and feature-parity check
 - Tasks: 12
 - Depends on: 07-P11   Shared runtime: none
-- Files owned: `integrations/demos/chalk/.env`, `integrations/demos/chalk/runner`, `integrations/demos/chalk/runner/main.py`
+- Files owned: `integrations/demos/chalk/runner/main.py`
 - Model: sonnet   Effort: M
 - Gate:
-  - coordinator reviews the files against Task 12's text; `pnpm --filter @lab/demo-chalk typecheck` -> exit 0
+  - `cd integrations/demos/chalk && .venv/bin/python -m py_compile runner/main.py` -> exit 0
 - Done when: Task 12's steps are all checked off and the gate output matches.
 
 ### Packet 07-P13: Manual - wire the velocity-burst control and fraud-flip check
 - Tasks: 13
 - Depends on: 07-P12   Shared runtime: tidb-playground
-- Files owned: `integrations/demos/chalk/runner`, `integrations/demos/chalk/runner/main.py`
+- Files owned: `integrations/demos/chalk/runner/main.py`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 13's text; `pnpm --filter @lab/demo-chalk typecheck` -> exit 0
+  - `cd integrations/demos/chalk && .venv/bin/python -m py_compile runner/main.py` -> exit 0
 - Done when: Task 13's steps are all checked off and the gate output matches.
 
 ### Packet 07-P14: Manual - wire burst-writes control and finish the phase state machine
@@ -1288,16 +1298,17 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/chalk/runner/main.py`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 14's text; `pnpm --filter @lab/demo-chalk typecheck` -> exit 0
+  - `cd demos/chalk && .venv/bin/python -u runner/main.py` -> a continuous stream of `metric`/`flow`/`check` JSON lines on stdout, a clean `phase: wrapup` event, and process exit code `0`
+  - `cd integrations/demos/chalk && .venv/bin/python -m py_compile runner/main.py` -> exit 0
 - Done when: Task 14's steps are all checked off and the gate output matches.
 
 ### Packet 07-P15: Manual - run through the relay end to end
 - Tasks: 15
 - Depends on: 07-P14   Shared runtime: tidb-playground
 - Files owned: none (manual or docs step)
-- Model: sonnet   Effort: S
+- Model: coordinator   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 15's text; `pnpm --filter @lab/demo-chalk typecheck` -> exit 0
+  - every command in Task 15 produces the output the task quotes; the coordinator pastes that output into the packet report
 - Done when: Task 15's steps are all checked off and the gate output matches.
 
 ### Packet 07-R: Record and publish the featured trace

@@ -160,7 +160,8 @@ demos/kafka/
     "@lab/contract": "workspace:*",
     "@lab/runner-kit": "workspace:*",
     "@confluentinc/kafka-javascript": "^1.0.0",
-    "mysql2": "^3.11.0"
+    "mysql2": "^3.11.0",
+    "zod": "^4.1.0"
   },
   "devDependencies": {
     "tsx": "^4.20.0",
@@ -298,6 +299,7 @@ describe('paymentEvent', () => {
 - [ ] Create `demos/kafka/runner/src/paymentEvent.ts`:
 
 ```ts
+import { z } from 'zod';
 export type PaymentEvent = {
   readonly paymentId: string;
   readonly accountId: string;
@@ -330,7 +332,15 @@ export const createPaymentEvent = (options: CreatePaymentEventOptions): PaymentE
 
 export const encodePaymentEvent = (event: PaymentEvent): string => JSON.stringify(event);
 
-export const decodePaymentEvent = (raw: string): PaymentEvent => JSON.parse(raw) as PaymentEvent;
+const PaymentEventSchema = z.object({
+  paymentId: z.string(),
+  accountId: z.string(),
+  amountCents: z.number().int(),
+  currency: z.string(),
+  produceTs: z.number(),
+});
+
+export const decodePaymentEvent = (raw: string): PaymentEvent => PaymentEventSchema.parse(JSON.parse(raw));
 ```
 
 - [ ] Run: `pnpm --filter @lab/demo-kafka test paymentEvent` - expected PASS.
@@ -549,6 +559,7 @@ describe('parseCanalJsonMessage', () => {
 - [ ] Create `demos/kafka/runner/src/canalJsonParser.ts`:
 
 ```ts
+import { z } from 'zod';
 export type ParsedRowEvent = {
   readonly ok: true;
   readonly table: string;
@@ -564,21 +575,28 @@ export type ParseFailure = {
 
 export type ParseResult = ParsedRowEvent | ParseFailure;
 
-type CanalJsonMessage = {
-  readonly table?: string;
-  readonly type?: string;
-  readonly isDdl?: boolean;
-  readonly data?: readonly Record<string, string>[] | null;
-  readonly _tidb?: { readonly commitTs?: number };
+const CanalJsonMessageSchema = z.object({
+  table: z.string().optional(),
+  type: z.string().optional(),
+  isDdl: z.boolean().optional(),
+  data: z.array(z.record(z.string(), z.string())).nullable().optional(),
+  _tidb: z.object({ commitTs: z.number().optional() }).optional(),
+});
+
+const parseJson = (raw: string): { readonly ok: true; readonly value: unknown } | { readonly ok: false } => {
+  try {
+    return { ok: true, value: JSON.parse(raw) };
+  } catch {
+    return { ok: false };
+  }
 };
 
 export const parseCanalJsonMessage = (raw: string): ParseResult => {
-  let message: CanalJsonMessage;
-  try {
-    message = JSON.parse(raw) as CanalJsonMessage;
-  } catch {
-    return { ok: false, reason: 'invalid JSON' };
-  }
+  const json = parseJson(raw);
+  if (!json.ok) return { ok: false, reason: 'invalid JSON' };
+  const parsed = CanalJsonMessageSchema.safeParse(json.value);
+  if (!parsed.success) return { ok: false, reason: 'not a row event' };
+  const message = parsed.data;
   if (message.isDdl === true || !message.data || message.data.length === 0 || !message._tidb?.commitTs) {
     return { ok: false, reason: 'not a row event' };
   }
@@ -782,7 +800,7 @@ const runIngesterTick = async (): Promise<void> => {
   const batch = await kafka.createConsumer('kafka-demo-ingester').consumeBatch({ topic: 'payments', maxMessages: 200 });
   const events = batch.map((message) => decodePaymentEvent(message.value));
   const built = buildUpsertSql(events);
-  if (built.sql !== '') await pool.query(built.sql, built.params as unknown[]);
+  if (built.sql !== '') await pool.query(built.sql, [...built.params]);
   emitter.metric('ingest-rate', events.length);
 };
 
@@ -992,7 +1010,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/kafka/manifest.json`, `integrations/demos/kafka/package.json`, `integrations/demos/kafka/test/manifest.test.ts`, `integrations/demos/kafka/tsconfig.json`
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/demo-kafka exec vitest run test/manifest.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-kafka test` -> PASS
+  - `pnpm --filter @lab/demo-kafka typecheck` -> exit 0
 - Done when: Task 1's steps are all checked off and the gate output matches.
 
 ### Packet 02-P2: Payment event creation and encoding (pure)
@@ -1001,7 +1020,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/kafka/runner/src/paymentEvent.ts`, `integrations/demos/kafka/runner/test/paymentEvent.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-kafka exec vitest run runner/test/paymentEvent.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-kafka test paymentEvent` -> PASS
+  - `pnpm --filter @lab/demo-kafka typecheck` -> exit 0
 - Done when: Task 2's steps are all checked off and the gate output matches.
 
 ### Packet 02-P3: Dedupe tracker (pure)
@@ -1010,7 +1030,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/kafka/runner/src/dedupe.ts`, `integrations/demos/kafka/runner/test/dedupe.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-kafka exec vitest run runner/test/dedupe.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-kafka test dedupe` -> PASS
+  - `pnpm --filter @lab/demo-kafka typecheck` -> exit 0
 - Done when: Task 3's steps are all checked off and the gate output matches.
 
 ### Packet 02-P4: End-to-end latency computation (pure)
@@ -1019,7 +1040,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/kafka/runner/src/latency.ts`, `integrations/demos/kafka/runner/test/latency.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-kafka exec vitest run runner/test/latency.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-kafka test latency` -> PASS
+  - `pnpm --filter @lab/demo-kafka typecheck` -> exit 0
 - Done when: Task 4's steps are all checked off and the gate output matches.
 
 ### Packet 02-P5: Batched upsert SQL builder (pure)
@@ -1028,7 +1050,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/kafka/runner/src/upsertSql.ts`, `integrations/demos/kafka/runner/test/upsertSql.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-kafka exec vitest run runner/test/upsertSql.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-kafka test upsertSql` -> PASS
+  - `pnpm --filter @lab/demo-kafka typecheck` -> exit 0
 - Done when: Task 5's steps are all checked off and the gate output matches.
 
 ### Packet 02-P6: Canal-JSON message parser (pure)
@@ -1037,7 +1060,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/kafka/runner/src/canalJsonParser.ts`, `integrations/demos/kafka/runner/test/canalJsonParser.test.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/demo-kafka exec vitest run runner/test/canalJsonParser.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-kafka test canalJsonParser` -> PASS
+  - `pnpm --filter @lab/demo-kafka typecheck` -> exit 0
 - Done when: Task 6's steps are all checked off and the gate output matches.
 
 ### Packet 02-P7: Checkpoint lag computation (pure)
@@ -1046,25 +1070,26 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/kafka/runner/src/checkpointLag.ts`, `integrations/demos/kafka/runner/test/checkpointLag.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-kafka exec vitest run runner/test/checkpointLag.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-kafka test checkpointLag` -> PASS
+  - `pnpm --filter @lab/demo-kafka typecheck` -> exit 0
 - Done when: Task 7's steps are all checked off and the gate output matches.
 
 ### Packet 02-P8: Bring up shared infra and confirm connectivity (manual, I/O)
 - Tasks: 8
 - Depends on: 02-P7   Shared runtime: tidb-playground + kafka
 - Files owned: none (manual or docs step)
-- Model: sonnet   Effort: S
+- Model: coordinator   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 8's text; `pnpm --filter @lab/demo-kafka typecheck` -> exit 0
+  - every command in Task 8 produces the output the task quotes; the coordinator pastes that output into the packet report
 - Done when: Task 8's steps are all checked off and the gate output matches.
 
 ### Packet 02-P9: Create the changefeed (manual, I/O)
 - Tasks: 9
 - Depends on: 02-P8   Shared runtime: tidb-playground + kafka
 - Files owned: none (manual or docs step)
-- Model: sonnet   Effort: S
+- Model: coordinator   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 9's text; `pnpm --filter @lab/demo-kafka typecheck` -> exit 0
+  - every command in Task 9 produces the output the task quotes; the coordinator pastes that output into the packet report
 - Done when: Task 9's steps are all checked off and the gate output matches.
 
 ### Packet 02-P10: Thin I/O adapters - Kafka client, TiCDC API client, schema runner
@@ -1073,7 +1098,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/kafka/runner/src/kafkaClient.ts`, `integrations/demos/kafka/runner/src/ticdcApi.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 10's text; `pnpm --filter @lab/demo-kafka typecheck` -> exit 0
+  - `pnpm --filter @lab/demo-kafka typecheck` -> exit 0
 - Done when: Task 10's steps are all checked off and the gate output matches.
 
 ### Packet 02-P11: Wire the runner's main.ts
@@ -1082,16 +1107,17 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/kafka/runner/main.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - coordinator reviews the files against Task 11's text; `pnpm --filter @lab/demo-kafka typecheck` -> exit 0
+  - `pnpm --filter @lab/demo-kafka typecheck` -> exit 0
 - Done when: Task 11's steps are all checked off and the gate output matches.
 
 ### Packet 02-P12: README and TALK-TRACK
 - Tasks: 12
 - Depends on: 02-P11   Shared runtime: cloud-account
-- Files owned: `integrations/demos/kafka/README.md`, `integrations/demos/kafka/TALK-TRACK.md`, `integrations/demos/kafka/traces`, `integrations/demos/kafka/traces/featured.json`
+- Files owned: `integrations/demos/kafka/README.md`, `integrations/demos/kafka/TALK-TRACK.md`, `integrations/demos/kafka/traces/featured.json`
 - Model: sonnet   Effort: M
 - Gate:
-  - coordinator reviews the files against Task 12's text; `pnpm --filter @lab/demo-kafka typecheck` -> exit 0
+  - `grep -c $'\u2014' integrations/demos/kafka/README.md integrations/demos/kafka/TALK-TRACK.md` -> 0 for every file
+  - `pnpm lab check-public` -> `0 findings`
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 12's steps are all checked off and the gate output matches.
 

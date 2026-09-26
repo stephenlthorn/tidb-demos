@@ -65,3 +65,15 @@ reporting their output verbatim, then list any deviations from the plan in at mo
 | 6 | Record featured traces, `pnpm build:site`, deploy | Coordinator |
 
 After each wave: `pnpm typecheck && pnpm test && pnpm lab check-public` from `integrations/`, then push.
+
+## Regenerating packets after a plan changes
+
+Section 10 of Plans 01-03 and 05-12 is generated from each plan's own section 4 (UNVERIFIED rows become the verify packet) and section 7 (one packet per task; RED/GREEN task pairs become one packet). Gates come from the task's own `Run ... Expected ...` lines plus checks by file type: `typecheck` for TypeScript, `py_compile` for Python, `terraform validate` for `.tf`, `docker compose config -q` for compose files, the em-dash grep and `pnpm lab check-public` for docs. Tasks with no files and no quoted commands become coordinator packets whose gate is the task's quoted output.
+
+After editing a plan's tasks, regenerate its packets from `integrations/docs/plans/`:
+
+```bash
+python3 tools/packets.py 05-okta.md
+```
+
+Plan 04's packets are hand-written with a real dependency graph (its pure-logic packets can run in parallel); do not regenerate it, edit it by hand.

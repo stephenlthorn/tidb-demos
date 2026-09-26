@@ -198,7 +198,8 @@ demos/terraform-eks/
   },
   "dependencies": {
     "@lab/contract": "workspace:*",
-    "@lab/runner-kit": "workspace:*"
+    "@lab/runner-kit": "workspace:*",
+    "zod": "^4.1.0"
   },
   "devDependencies": {
     "tsx": "^4.20.0",
@@ -385,6 +386,7 @@ describe('parseTerraformLine', () => {
 - [ ] Create `demos/terraform-eks/runner/src/terraform-events.ts`:
 
 ```ts
+import { z } from 'zod';
 export type TerraformResourceEvent =
   | { readonly type: 'resource-starting'; readonly resourceAddr: string; readonly resourceType: string; readonly action: string }
   | {
@@ -422,9 +424,22 @@ type RawMessage = {
   readonly changes?: RawChanges;
 };
 
+const RawMessageSchema = z.object({
+  type: z.string(),
+  hook: z
+    .object({
+      resource: z.object({ addr: z.string(), resource_type: z.string() }),
+      action: z.string(),
+      elapsed_seconds: z.number().optional(),
+    })
+    .optional(),
+  changes: z.object({ operation: z.string(), add: z.number(), change: z.number(), remove: z.number() }).optional(),
+});
+
 const parseJson = (line: string): RawMessage | undefined => {
   try {
-    return JSON.parse(line) as RawMessage;
+    const parsed = RawMessageSchema.safeParse(JSON.parse(line));
+    return parsed.success ? parsed.data : undefined;
   } catch {
     return undefined;
   }
@@ -1567,7 +1582,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/terraform-eks/package.json`, `integrations/demos/terraform-eks/tsconfig.json`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 1's text; `pnpm --filter @lab/demo-terraform-eks typecheck` -> exit 0
+  - `pnpm install` -> lockfile updates, no errors, `@lab/demo-terraform-eks` listed under `pnpm ls -r --depth -1`
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 1's steps are all checked off and the gate output matches.
 
@@ -1577,7 +1592,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/terraform-eks/manifest.json`, `integrations/demos/terraform-eks/test/manifest.test.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/demo-terraform-eks exec vitest run test/manifest.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-terraform-eks exec vitest run test/manifest.test.ts` -> PASS: both tests green
+  - `pnpm --filter @lab/demo-terraform-eks typecheck` -> exit 0
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 2's steps are all checked off and the gate output matches.
 
@@ -1587,7 +1603,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/terraform-eks/runner/src/terraform-events.test.ts`, `integrations/demos/terraform-eks/runner/src/terraform-events.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/demo-terraform-eks exec vitest run runner/src/terraform-events.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-terraform-eks exec vitest run runner/src/terraform-events.test.ts` -> PASS: all four tests green
+  - `pnpm --filter @lab/demo-terraform-eks typecheck` -> exit 0
 - Done when: Task 3's steps are all checked off and the gate output matches.
 
 ### Packet 10-P4: `resource-mapping.ts` - terraform resource address to diagram node (pure logic, TDD)
@@ -1596,7 +1613,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/terraform-eks/runner/src/resource-mapping.test.ts`, `integrations/demos/terraform-eks/runner/src/resource-mapping.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-terraform-eks exec vitest run runner/src/resource-mapping.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-terraform-eks exec vitest run runner/src/resource-mapping.test.ts` -> PASS: all seven tests green
+  - `pnpm --filter @lab/demo-terraform-eks typecheck` -> exit 0
 - Done when: Task 4's steps are all checked off and the gate output matches.
 
 ### Packet 10-P5: `cost.ts` - estimated hourly cost (pure logic, TDD)
@@ -1605,62 +1623,68 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/terraform-eks/runner/src/cost.test.ts`, `integrations/demos/terraform-eks/runner/src/cost.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/demo-terraform-eks exec vitest run runner/src/cost.test.ts` -> all PASS
+  - `pnpm --filter @lab/demo-terraform-eks exec vitest run runner/src/cost.test.ts` -> PASS: all three tests green
+  - `pnpm --filter @lab/demo-terraform-eks typecheck` -> exit 0
 - Done when: Task 5's steps are all checked off and the gate output matches.
 
 ### Packet 10-P6: Terraform - providers, variables, VPC
 - Tasks: 6
 - Depends on: 10-P5   Shared runtime: cloud-account
-- Files owned: `integrations/demos/terraform-eks/infra/terraform`, `integrations/demos/terraform-eks/infra/terraform/variables.tf`, `integrations/demos/terraform-eks/infra/terraform/versions.tf`, `integrations/demos/terraform-eks/infra/terraform/vpc.tf`
+- Files owned: `integrations/demos/terraform-eks/infra/terraform/variables.tf`, `integrations/demos/terraform-eks/infra/terraform/versions.tf`, `integrations/demos/terraform-eks/infra/terraform/vpc.tf`
 - Model: sonnet   Effort: M
 - Gate:
-  - coordinator reviews the files against Task 6's text; `pnpm --filter @lab/demo-terraform-eks typecheck` -> exit 0
+  - `terraform -chdir=demos/terraform-eks/infra/terraform init` -> `Terraform has been successfully initialized!`
+  - `terraform -chdir=integrations/demos/terraform-eks/infra/terraform init -backend=false && terraform -chdir=integrations/demos/terraform-eks/infra/terraform validate` -> `Success! The configuration is valid.`
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 6's steps are all checked off and the gate output matches.
 
 ### Packet 10-P7: Terraform - EKS cluster and managed node group
 - Tasks: 7
 - Depends on: 10-P6   Shared runtime: none
-- Files owned: `integrations/demos/terraform-eks/infra/terraform`, `integrations/demos/terraform-eks/infra/terraform/eks.tf`
+- Files owned: `integrations/demos/terraform-eks/infra/terraform/eks.tf`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-terraform-eks typecheck` -> exit 0
+  - `terraform -chdir=demos/terraform-eks/infra/terraform validate` -> `Success! The configuration is valid.`
+  - `terraform -chdir=integrations/demos/terraform-eks/infra/terraform init -backend=false && terraform -chdir=integrations/demos/terraform-eks/infra/terraform validate` -> `Success! The configuration is valid.`
 - Done when: Task 7's steps are all checked off and the gate output matches.
 
 ### Packet 10-P8: Terraform - TiDB Cloud Dedicated cluster and network container
 - Tasks: 8
 - Depends on: 10-P7   Shared runtime: none
-- Files owned: `integrations/demos/terraform-eks/infra/terraform`, `integrations/demos/terraform-eks/infra/terraform/tidb.tf`
+- Files owned: `integrations/demos/terraform-eks/infra/terraform/tidb.tf`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 8's text; `pnpm --filter @lab/demo-terraform-eks typecheck` -> exit 0
+  - `terraform -chdir=demos/terraform-eks/infra/terraform validate` -> `Success! The configuration is valid.`
+  - `terraform -chdir=integrations/demos/terraform-eks/infra/terraform init -backend=false && terraform -chdir=integrations/demos/terraform-eks/infra/terraform validate` -> `Success! The configuration is valid.`
 - Done when: Task 8's steps are all checked off and the gate output matches.
 
 ### Packet 10-P9: Terraform - private endpoint variant
 - Tasks: 9
 - Depends on: 10-P8   Shared runtime: none
-- Files owned: `integrations/demos/terraform-eks/infra/terraform`, `integrations/demos/terraform-eks/infra/terraform/private_link.tf`
+- Files owned: `integrations/demos/terraform-eks/infra/terraform/private_link.tf`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 9's text; `pnpm --filter @lab/demo-terraform-eks typecheck` -> exit 0
+  - `terraform -chdir=demos/terraform-eks/infra/terraform validate` -> `Success! The configuration is valid.` If `tidb_node_setting.node_group_id` is not addressable this way once the provider resolves the schema, use the `tidbcloud_dedicated_node_group` data source instead (Section 4 flags provider ordering as **UNVERIFIED**; confirm during Task 14 and adjust this reference then)
+  - `terraform -chdir=integrations/demos/terraform-eks/infra/terraform init -backend=false && terraform -chdir=integrations/demos/terraform-eks/infra/terraform validate` -> `Success! The configuration is valid.`
 - Done when: Task 9's steps are all checked off and the gate output matches.
 
 ### Packet 10-P10: Terraform - app deployment on EKS and outputs
 - Tasks: 10
 - Depends on: 10-P9   Shared runtime: none
-- Files owned: `integrations/demos/terraform-eks/infra/terraform`, `integrations/demos/terraform-eks/infra/terraform/k8s.tf`, `integrations/demos/terraform-eks/infra/terraform/outputs.tf`
+- Files owned: `integrations/demos/terraform-eks/infra/terraform/k8s.tf`, `integrations/demos/terraform-eks/infra/terraform/outputs.tf`
 - Model: sonnet   Effort: M
 - Gate:
-  - coordinator reviews the files against Task 10's text; `pnpm --filter @lab/demo-terraform-eks typecheck` -> exit 0
+  - `terraform -chdir=demos/terraform-eks/infra/terraform validate` -> `Success! The configuration is valid.`
+  - `terraform -chdir=integrations/demos/terraform-eks/infra/terraform init -backend=false && terraform -chdir=integrations/demos/terraform-eks/infra/terraform validate` -> `Success! The configuration is valid.`
 - Done when: Task 10's steps are all checked off and the gate output matches.
 
 ### Packet 10-P11: The demo app (thin I/O, manual verification)
 - Tasks: 11
 - Depends on: 10-P10   Shared runtime: none
-- Files owned: `integrations/demos/terraform-eks/infra/app`, `integrations/demos/terraform-eks/infra/app/Dockerfile`, `integrations/demos/terraform-eks/infra/app/main.go`
+- Files owned: `integrations/demos/terraform-eks/infra/app/Dockerfile`, `integrations/demos/terraform-eks/infra/app/main.go`
 - Model: sonnet   Effort: M
 - Gate:
-  - coordinator reviews the files against Task 11's text; `pnpm --filter @lab/demo-terraform-eks typecheck` -> exit 0
+  - every command in Task 11 produces the output the task quotes; the coordinator pastes that output into the packet report
 - Done when: Task 11's steps are all checked off and the gate output matches.
 
 ### Packet 10-P12: `terraform-runner.ts` - spawn terraform and stream lines (thin I/O, manual verification)
@@ -1669,7 +1693,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/terraform-eks/runner/src/terraform-runner.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 12's text; `pnpm --filter @lab/demo-terraform-eks typecheck` -> exit 0
+  - `pnpm --filter @lab/demo-terraform-eks typecheck` -> exit 0
 - Done when: Task 12's steps are all checked off and the gate output matches.
 
 ### Packet 10-P13: `load-generator.ts` - drive load and sample latency (thin I/O, manual verification)
@@ -1678,7 +1702,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/terraform-eks/runner/src/load-generator.ts`, `integrations/demos/terraform-eks/runner/src/terraform-runner.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 13's text; `pnpm --filter @lab/demo-terraform-eks typecheck` -> exit 0
+  - `pnpm --filter @lab/demo-terraform-eks typecheck` -> exit 0
 - Done when: Task 13's steps are all checked off and the gate output matches.
 
 ### Packet 10-P14: `.env.example`
@@ -1687,7 +1711,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/terraform-eks/.env.example`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 14's text; `pnpm --filter @lab/demo-terraform-eks typecheck` -> exit 0
+  - `grep -cE '^(TIDB_HOST|TIDB_PORT|TIDB_USER|TIDB_PASSWORD|TIDB_DATABASE|TIDB_TLS|LAB_ENV_TIDB|LAB_ENV_NOTES)=' integrations/demos/terraform-eks/.env.example` -> 8
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 14's steps are all checked off and the gate output matches.
 
@@ -1697,7 +1721,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/terraform-eks/runner/main.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - coordinator reviews the files against Task 15's text; `pnpm --filter @lab/demo-terraform-eks typecheck` -> exit 0
+  - `pnpm --filter @lab/demo-terraform-eks typecheck` -> exit 0
 - Done when: Task 15's steps are all checked off and the gate output matches.
 
 ### Packet 10-P16: `README.md`
@@ -1706,7 +1730,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/terraform-eks/README.md`, `integrations/demos/terraform-eks/traces`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 16's text; `pnpm --filter @lab/demo-terraform-eks typecheck` -> exit 0
+  - `grep -c $'\u2014' integrations/demos/terraform-eks/README.md` -> 0 for every file
+  - `pnpm lab check-public` -> `0 findings`
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 16's steps are all checked off and the gate output matches.
 
@@ -1716,7 +1741,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/terraform-eks/TALK-TRACK.md`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 17's text; `pnpm --filter @lab/demo-terraform-eks typecheck` -> exit 0
+  - `grep -c $'\u2014' integrations/demos/terraform-eks/TALK-TRACK.md` -> 0 for every file
+  - `pnpm lab check-public` -> `0 findings`
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 17's steps are all checked off and the gate output matches.
 
@@ -1726,7 +1752,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/terraform-eks/infra/terraform`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 18's text; `pnpm --filter @lab/demo-terraform-eks typecheck` -> exit 0
+  - every command in Task 18 produces the output the task quotes; the coordinator pastes that output into the packet report
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 18's steps are all checked off and the gate output matches.
 
@@ -1734,9 +1760,9 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Tasks: 19
 - Depends on: 10-P18   Shared runtime: cloud-account
 - Files owned: none (manual or docs step)
-- Model: sonnet   Effort: S
+- Model: coordinator   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 19's text; `pnpm --filter @lab/demo-terraform-eks typecheck` -> exit 0
+  - every command in Task 19 produces the output the task quotes; the coordinator pastes that output into the packet report
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 19's steps are all checked off and the gate output matches.
 
@@ -1744,9 +1770,9 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Tasks: 20
 - Depends on: 10-P19   Shared runtime: tidb-playground
 - Files owned: none (manual or docs step)
-- Model: sonnet   Effort: S
+- Model: coordinator   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 20's text; `pnpm --filter @lab/demo-terraform-eks typecheck` -> exit 0
+  - every command in Task 20 produces the output the task quotes; the coordinator pastes that output into the packet report
 - Done when: Task 20's steps are all checked off and the gate output matches.
 
 ### Packet 10-R: Record and publish the featured trace

@@ -1553,7 +1553,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/power-bi/runner/src/routing.ts`, `integrations/demos/power-bi/runner/test/routing.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-power-bi exec vitest run runner/test/routing.test.ts` -> FAIL - `Cannot find module '../src/routing'`.
+  - `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
 - Done when: Task 1's steps are all checked off and the gate output matches.
 
 ### Packet 11-P2: `routing.ts`: exact SQL to force an engine.
@@ -1562,7 +1562,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/power-bi/runner/src/routing.ts`, `integrations/demos/power-bi/runner/test/routing.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-power-bi exec vitest run runner/test/routing.test.ts` -> FAIL - `setIsolationEnginesStatement is not exported`.
+  - `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
 - Done when: Task 2's steps are all checked off and the gate output matches.
 
 ### Packet 11-P3: `metrics.ts`: freshness math.
@@ -1571,7 +1571,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/power-bi/runner/src/metrics.ts`, `integrations/demos/power-bi/runner/test/metrics.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-power-bi exec vitest run runner/test/metrics.test.ts` -> FAIL - `Cannot find module '../src/metrics'`.
+  - `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
 - Done when: Task 3's steps are all checked off and the gate output matches.
 
 ### Packet 11-P4: `metrics.ts`: write p99 degradation math.
@@ -1580,7 +1580,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/power-bi/runner/src/metrics.ts`, `integrations/demos/power-bi/runner/test/metrics.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-power-bi exec vitest run runner/test/metrics.test.ts` -> FAIL - `degradationPct is not exported`.
+  - `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
 - Done when: Task 4's steps are all checked off and the gate output matches.
 
 ### Packet 11-P5: `orderGenerator.ts`: deterministic order builder.
@@ -1589,7 +1589,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/power-bi/runner/src/orderGenerator.ts`, `integrations/demos/power-bi/runner/test/orderGenerator.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-power-bi exec vitest run runner/test/orderGenerator.test.ts` -> FAIL - `Cannot find module '../src/orderGenerator'`.
+  - `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
 - Done when: Task 5's steps are all checked off and the gate output matches.
 
 ### Packet 11-P6: `orderGenerator.ts`: heartbeat order builder.
@@ -1598,7 +1598,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/power-bi/runner/src/orderGenerator.ts`, `integrations/demos/power-bi/runner/test/orderGenerator.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-power-bi exec vitest run runner/test/orderGenerator.test.ts` -> FAIL - `createHeartbeatOrder is not exported`.
+  - `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
 - Done when: Task 6's steps are all checked off and the gate output matches.
 
 ### Packet 11-P7: `writeLoadPlan.ts`: orders per tick under baseline/burst.
@@ -1607,7 +1607,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/power-bi/runner/src/writeLoadPlan.ts`, `integrations/demos/power-bi/runner/test/writeLoadPlan.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-power-bi exec vitest run runner/test/writeLoadPlan.test.ts` -> FAIL - `Cannot find module '../src/writeLoadPlan'`.
+  - `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
 - Done when: Task 7's steps are all checked off and the gate output matches.
 
 ### Packet 11-P8: `timeline.ts`: elapsed time to phase id.
@@ -1616,7 +1616,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/power-bi/runner/src/timeline.ts`, `integrations/demos/power-bi/runner/test/timeline.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-power-bi exec vitest run runner/test/timeline.test.ts` -> FAIL - `Cannot find module '../src/timeline'`.
+  - `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
 - Done when: Task 8's steps are all checked off and the gate output matches.
 
 ### Packet 11-P9: `dashboardQueries.ts`: the exact dashboard query set.
@@ -1625,7 +1625,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/power-bi/runner/src/dashboardQueries.ts`, `integrations/demos/power-bi/runner/test/dashboardQueries.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-power-bi exec vitest run runner/test/dashboardQueries.test.ts` -> FAIL - `Cannot find module '../src/dashboardQueries'`.
+  - `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
 - Done when: Task 9's steps are all checked off and the gate output matches.
 
 ### Packet 11-P10: `schema.ts`: the orders table DDL.
@@ -1634,7 +1634,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/power-bi/runner/src/schema.ts`, `integrations/demos/power-bi/runner/test/schema.test.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm --filter @lab/demo-power-bi exec vitest run runner/test/schema.test.ts` -> FAIL - `Cannot find module '../src/schema'`.
+  - `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
 - Done when: Task 10's steps are all checked off and the gate output matches.
 
 ### Packet 11-P11: manifest.
@@ -1643,7 +1643,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/power-bi/manifest.json`, `integrations/demos/power-bi/test/manifest.test.ts`
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/demo-power-bi exec vitest run test/manifest.test.ts` -> FAIL - `ENOENT: no such file or directory, open '.../demos/power-bi/manifest.json'`.
+  - `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
 - Done when: Task 11's steps are all checked off and the gate output matches.
 
 ### Packet 11-P12: package scaffolding.
@@ -1652,16 +1652,19 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/power-bi/.env.example`, `integrations/demos/power-bi/package.json`, `integrations/demos/power-bi/tsconfig.json`
 - Model: sonnet   Effort: S
 - Gate:
-  - `pnpm install` -> workspace resolves `@lab/demo-power-bi`, `pnpm -w list --depth -1` shows it in the tree.
+  - `pnpm install` -> workspace resolves `@lab/demo-power-bi`, `pnpm -w list --depth -1` shows it in the tree
+  - `grep -cE '^(TIDB_HOST|TIDB_PORT|TIDB_USER|TIDB_PASSWORD|TIDB_DATABASE|TIDB_TLS|LAB_ENV_TIDB|LAB_ENV_NOTES)=' integrations/demos/power-bi/.env.example` -> 8
 - Done when: Task 12's steps are all checked off and the gate output matches.
 
 ### Packet 11-P13: provision TiDB for local development.
 - Tasks: 13
 - Depends on: 11-P12   Shared runtime: none
-- Files owned: `integrations/demos/power-bi/.env`, `integrations/demos/power-bi/.env.example`
+- Files owned: `integrations/demos/power-bi/.env.example`
 - Model: sonnet   Effort: S
 - Gate:
-  - `cp demos/power-bi/.env.example demos/power-bi/.env` -> no output; `.env` now exists (it is gitignored).
+  - `infra/tidb/playground.sh` -> output: tiup prints the allocated version and `Connect TiDB: mysql --host 127.0.0.1 --port 4000 -u root`
+  - `cp demos/power-bi/.env.example demos/power-bi/.env` -> no output; `.env` now exists (it is gitignored)
+  - `grep -cE '^(TIDB_HOST|TIDB_PORT|TIDB_USER|TIDB_PASSWORD|TIDB_DATABASE|TIDB_TLS|LAB_ENV_TIDB|LAB_ENV_NOTES)=' integrations/demos/power-bi/.env.example` -> 8
 - Done when: Task 13's steps are all checked off and the gate output matches.
 
 ### Packet 11-P14: create the schema and seed baseline rows.
@@ -1670,7 +1673,8 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/power-bi/runner/setup.ts`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 14's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+  - `pnpm --filter @lab/demo-power-bi run setup` -> output: `seeded 2000 orders`, process exits 0
+  - `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
 - Done when: Task 14's steps are all checked off and the gate output matches.
 
 ### Packet 11-P15: implement and first-run the runner.
@@ -1679,34 +1683,37 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/power-bi/runner/main.ts`
 - Model: sonnet   Effort: L
 - Gate:
-  - coordinator reviews the files against Task 15's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+  - `curl -s http://localhost:7070/manifest | head -c 200` -> output: the start of the manifest JSON, including `"id":"power-bi"`
+  - `curl -sN http://localhost:7070/events | head -n 20` -> output: a stream of JSON lines beginning with `{"type":"phase","t":0,"phase":"intro"}` followed by `node`, `flow`, and `metric` events
+  - `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
 - Done when: Task 15's steps are all checked off and the gate output matches.
 
 ### Packet 11-P16: exercise the controls.
 - Tasks: 16
 - Depends on: 11-P15   Shared runtime: tidb-playground
 - Files owned: none (manual or docs step)
-- Model: sonnet   Effort: S
+- Model: coordinator   Effort: S
 - Gate:
-  - `curl -s -X POST http://localhost:7070/control/route-to-tikv` -> subsequent `write-p99-degradation` metric events, once the run reaches or has passed `dashboard-on-tikv`/`dashboard-on-tiflash`, rise noticeably compared to the pre-control baseline.
+  - `curl -s -X POST http://localhost:7070/control/route-to-tikv` -> subsequent `write-p99-degradation` metric events, once the run reaches or has passed `dashboard-on-tikv`/`dashboard-on-tiflash`, rise noticeably compared to the pre-control baseline
+  - `curl -s -X POST http://localhost:7070/control/does-not-exist` -> output: HTTP 404, per the relay protocol in Plan 00
 - Done when: Task 16's steps are all checked off and the gate output matches.
 
 ### Packet 11-P17: confirm the checks fire during a full run.
 - Tasks: 17
 - Depends on: 11-P16   Shared runtime: tidb-playground
 - Files owned: none (manual or docs step)
-- Model: sonnet   Effort: S
+- Model: coordinator   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 17's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+  - `curl -sN http://localhost:7070/events | grep '"type":"check"'` -> output: three checks appear, each moving `pending` -> `pass` (or `fail`, if the threshold is genuinely exceeded, which is itself useful signal): `tiflash-replica-available`, `snapshot-totals-match`, `write-p99-within-threshold`
 - Done when: Task 17's steps are all checked off and the gate output matches.
 
 ### Packet 11-P18: UI smoke test.
 - Tasks: 18
 - Depends on: 11-P17   Shared runtime: cloud-account
 - Files owned: none (manual or docs step)
-- Model: sonnet   Effort: S
+- Model: coordinator   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 18's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+  - `pnpm --filter @lab/ui dev` -> output: Vite dev server URL printed, e.g. `http://localhost:5173`
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 18's steps are all checked off and the gate output matches.
 
@@ -1714,9 +1721,9 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Tasks: 19
 - Depends on: 11-P18   Shared runtime: cloud-account
 - Files owned: none (manual or docs step)
-- Model: sonnet   Effort: S
+- Model: coordinator   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 19's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+  - every command in Task 19 produces the output the task quotes; the coordinator pastes that output into the packet report
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 19's steps are all checked off and the gate output matches.
 
@@ -1724,9 +1731,9 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Tasks: 20
 - Depends on: 11-P19   Shared runtime: cloud-account
 - Files owned: none (manual or docs step)
-- Model: sonnet   Effort: S
+- Model: coordinator   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 20's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+  - every command in Task 20 produces the output the task quotes; the coordinator pastes that output into the packet report
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 20's steps are all checked off and the gate output matches.
 
@@ -1734,18 +1741,18 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Tasks: 21
 - Depends on: 11-P20   Shared runtime: none
 - Files owned: none (manual or docs step)
-- Model: sonnet   Effort: S
+- Model: coordinator   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 21's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+  - every command in Task 21 produces the output the task quotes; the coordinator pastes that output into the packet report
 - Done when: Task 21's steps are all checked off and the gate output matches.
 
 ### Packet 11-P22: verify Power BI sent the exact SQL.
 - Tasks: 22
 - Depends on: 11-P21   Shared runtime: none
 - Files owned: none (manual or docs step)
-- Model: sonnet   Effort: S
+- Model: coordinator   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 22's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+  - every command in Task 22 produces the output the task quotes; the coordinator pastes that output into the packet report
 - Done when: Task 22's steps are all checked off and the gate output matches.
 
 ### Packet 11-P23: screen record the Power BI refresh.
@@ -1754,7 +1761,7 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/power-bi/traces/power-bi-refresh.mp4`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 23's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+  - every command in Task 23 produces the output the task quotes; the coordinator pastes that output into the packet report
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 23's steps are all checked off and the gate output matches.
 
@@ -1762,9 +1769,9 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Tasks: 24
 - Depends on: 11-P23   Shared runtime: cloud-account
 - Files owned: none (manual or docs step)
-- Model: sonnet   Effort: S
+- Model: coordinator   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 24's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+  - every command in Task 24 produces the output the task quotes; the coordinator pastes that output into the packet report
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 24's steps are all checked off and the gate output matches.
 
@@ -1772,18 +1779,21 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Tasks: 25
 - Depends on: 11-P24   Shared runtime: none
 - Files owned: none (manual or docs step)
-- Model: sonnet   Effort: S
+- Model: coordinator   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 25's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+  - every command in Task 25 produces the output the task quotes; the coordinator pastes that output into the packet report
 - Done when: Task 25's steps are all checked off and the gate output matches.
 
 ### Packet 11-P26: write `README.md`.
 - Tasks: 26
 - Depends on: 11-P25   Shared runtime: cloud-account
-- Files owned: `integrations/demos/power-bi/.env`, `integrations/demos/power-bi/.env.example`, `integrations/demos/power-bi/README.md`
+- Files owned: `integrations/demos/power-bi/.env.example`, `integrations/demos/power-bi/README.md`
 - Model: sonnet   Effort: S
 - Gate:
-  - coordinator reviews the files against Task 26's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+  - `pnpm lab check-public` -> no denylisted terms or internal URLs found in this file
+  - `grep -c $'\u2014' integrations/demos/power-bi/README.md` -> 0 for every file
+  - `pnpm lab check-public` -> `0 findings`
+  - `grep -cE '^(TIDB_HOST|TIDB_PORT|TIDB_USER|TIDB_PASSWORD|TIDB_DATABASE|TIDB_TLS|LAB_ENV_TIDB|LAB_ENV_NOTES)=' integrations/demos/power-bi/.env.example` -> 8
   - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
 - Done when: Task 26's steps are all checked off and the gate output matches.
 
@@ -1793,7 +1803,9 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
 - Files owned: `integrations/demos/power-bi/TALK-TRACK.md`
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm lab check-public` -> no denylisted terms or internal URLs found in this file.
+  - `pnpm lab check-public` -> no denylisted terms or internal URLs found in this file
+  - `grep -c $'\u2014' integrations/demos/power-bi/TALK-TRACK.md` -> 0 for every file
+  - `pnpm lab check-public` -> `0 findings`
 - Done when: Task 27's steps are all checked off and the gate output matches.
 
 ### Packet 11-R: Record and publish the featured trace
