@@ -708,8 +708,8 @@ All commands below run from the `integrations/` repository root unless a task sa
     "pattern": "Business teams that want live dashboards on operational data without a nightly ETL job into a separate warehouse.",
     "publish": true,
     "runner": {
-      "command": ["npx", "tsx", "main.ts"],
-      "cwd": "runner"
+      "command": ["node", "--import", "tsx", "runner/main.ts"],
+      "cwd": "."
     },
     "nodes": [
       { "id": "order-workload", "label": "Order workload", "kind": "source", "x": 10, "y": 50 },
@@ -776,6 +776,7 @@ All commands below run from the `integrations/` repository root unless a task sa
     "type": "module",
     "scripts": {
       "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
       "setup": "tsx runner/setup.ts",
       "start": "tsx runner/main.ts"
     },
@@ -785,9 +786,10 @@ All commands below run from the `integrations/` repository root unless a task sa
       "mysql2": "^3.11.0"
     },
     "devDependencies": {
+      "@types/node": "^22.10.0",
       "tsx": "^4.19.0",
-      "typescript": "^5.6.0",
-      "vitest": "^2.1.0"
+      "typescript": "^5.9.0",
+      "vitest": "^3.2.0"
     }
   }
   ```
@@ -1525,3 +1527,282 @@ All commands below run from the `integrations/` repository root unless a task sa
 - **Local tiup playground's single TiFlash node differs from a TiDB Cloud tier's managed TiFlash topology.** Day-to-day development against the local playground (task 13-18) is fine for iterating on the runner; only the featured recording (section 8) needs to run against the actual TiDB Cloud cluster the Power BI report is pointed at, since the acts require both to be watching the same data.
 - **`tidb_enable_stmt_summary` may be off by default in some environments.** Task 22's verification step includes the `SET GLOBAL` fallback; if the account lacks privilege to set it globally, use `SHOW VARIABLES LIKE 'tidb_enable_stmt_summary'` first to check before assuming it needs changing.
 - **Do not let the Windows VM or TiDB Cloud cluster outlive the recording session.** Both bill by time; tasks 24 and 25 give the exact teardown commands, and section 5 restates them - run them the same day as the recording.
+
+## 10. Subagent work packets
+
+Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets in this plan run in the order listed; a later packet may edit a file an earlier packet created. Plan 00 must be complete first.
+
+### Packet 11-V1: Verify open facts before building
+- Tasks: none (docs only)
+- Depends on: 00-P10   Shared runtime: cloud-account
+- Files owned: `integrations/docs/plans/11-power-bi.md` (section 4 only)
+- Model: sonnet   Effort: S
+- Items to confirm (run each item's confirm step, paste the real output into section 4, set VERIFIED or record the workaround):
+  - | An on-premises data gateway is only required for Power BI Service when the MySQL-compatible server "isn't cloud accessible"; Power BI Desktop itself never needs a gateway | https://learn.microsoft.com/en-us/power-query/connectors/mysql-database | Verified for Desktop (used in this demo). **UNVERIF
+  - | docs.pingcap.com has no dedicated Power BI connection guide; the closest official material is the general JDBC/ODBC "Connect to TiDB" developer guide | https://docs.pingcap.com/tidb/stable/dev-guide-connect-to-tidb/ | Verified absence as of this writing. **UNVERIFIED**: search docs.pingcap.com for
+  - | TiDB Cloud Starter, Essential, and Premium tiers all support TiFlash/HTAP | https://docs.pingcap.com/tidbcloud/select-cluster-tier/ | Verified. **UNVERIFIED**: exact current tier names and any per-tier TiFlash replica-count ceilings change over time - re-confirm at that URL immediately before crea
+  - | Windows 365 Cloud PC gives a full Windows desktop reachable from a Mac browser or the Remote Desktop app, billed per seat per month regardless of hours used | General Windows 365 product documentation | **UNVERIFIED** - confirm current plans and whether an hourly/short-term option exists at the Wi
+  - | Power BI Desktop is a free download and does not require a paid Power BI license to connect to a live data source and build a report locally | Not confirmed against an official source in this pass | **UNVERIFIED** - confirm on the Power BI Desktop download/licensing page before relying on it; if a
+- Gate:
+  - `grep -c UNVERIFIED integrations/docs/plans/11-power-bi.md` -> lower than before, and every remaining item says why it cannot be checked yet
+- Done when: no packet below depends on an unconfirmed fact without a recorded workaround.
+
+### Packet 11-P1: `routing.ts`: engine to isolation-engine list.
+- Tasks: 1
+- Depends on: 11-V1   Shared runtime: none
+- Files owned: `integrations/demos/power-bi/runner/src/routing.ts`, `integrations/demos/power-bi/runner/test/routing.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-power-bi exec vitest run runner/test/routing.test.ts` -> FAIL - `Cannot find module '../src/routing'`.
+- Done when: Task 1's steps are all checked off and the gate output matches.
+
+### Packet 11-P2: `routing.ts`: exact SQL to force an engine.
+- Tasks: 2
+- Depends on: 11-P1   Shared runtime: none
+- Files owned: `integrations/demos/power-bi/runner/src/routing.ts`, `integrations/demos/power-bi/runner/test/routing.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-power-bi exec vitest run runner/test/routing.test.ts` -> FAIL - `setIsolationEnginesStatement is not exported`.
+- Done when: Task 2's steps are all checked off and the gate output matches.
+
+### Packet 11-P3: `metrics.ts`: freshness math.
+- Tasks: 3
+- Depends on: 11-P2   Shared runtime: none
+- Files owned: `integrations/demos/power-bi/runner/src/metrics.ts`, `integrations/demos/power-bi/runner/test/metrics.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-power-bi exec vitest run runner/test/metrics.test.ts` -> FAIL - `Cannot find module '../src/metrics'`.
+- Done when: Task 3's steps are all checked off and the gate output matches.
+
+### Packet 11-P4: `metrics.ts`: write p99 degradation math.
+- Tasks: 4
+- Depends on: 11-P3   Shared runtime: none
+- Files owned: `integrations/demos/power-bi/runner/src/metrics.ts`, `integrations/demos/power-bi/runner/test/metrics.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-power-bi exec vitest run runner/test/metrics.test.ts` -> FAIL - `degradationPct is not exported`.
+- Done when: Task 4's steps are all checked off and the gate output matches.
+
+### Packet 11-P5: `orderGenerator.ts`: deterministic order builder.
+- Tasks: 5
+- Depends on: 11-P4   Shared runtime: none
+- Files owned: `integrations/demos/power-bi/runner/src/orderGenerator.ts`, `integrations/demos/power-bi/runner/test/orderGenerator.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-power-bi exec vitest run runner/test/orderGenerator.test.ts` -> FAIL - `Cannot find module '../src/orderGenerator'`.
+- Done when: Task 5's steps are all checked off and the gate output matches.
+
+### Packet 11-P6: `orderGenerator.ts`: heartbeat order builder.
+- Tasks: 6
+- Depends on: 11-P5   Shared runtime: none
+- Files owned: `integrations/demos/power-bi/runner/src/orderGenerator.ts`, `integrations/demos/power-bi/runner/test/orderGenerator.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-power-bi exec vitest run runner/test/orderGenerator.test.ts` -> FAIL - `createHeartbeatOrder is not exported`.
+- Done when: Task 6's steps are all checked off and the gate output matches.
+
+### Packet 11-P7: `writeLoadPlan.ts`: orders per tick under baseline/burst.
+- Tasks: 7
+- Depends on: 11-P6   Shared runtime: none
+- Files owned: `integrations/demos/power-bi/runner/src/writeLoadPlan.ts`, `integrations/demos/power-bi/runner/test/writeLoadPlan.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-power-bi exec vitest run runner/test/writeLoadPlan.test.ts` -> FAIL - `Cannot find module '../src/writeLoadPlan'`.
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 11-P8: `timeline.ts`: elapsed time to phase id.
+- Tasks: 8
+- Depends on: 11-P7   Shared runtime: none
+- Files owned: `integrations/demos/power-bi/runner/src/timeline.ts`, `integrations/demos/power-bi/runner/test/timeline.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-power-bi exec vitest run runner/test/timeline.test.ts` -> FAIL - `Cannot find module '../src/timeline'`.
+- Done when: Task 8's steps are all checked off and the gate output matches.
+
+### Packet 11-P9: `dashboardQueries.ts`: the exact dashboard query set.
+- Tasks: 9
+- Depends on: 11-P8   Shared runtime: none
+- Files owned: `integrations/demos/power-bi/runner/src/dashboardQueries.ts`, `integrations/demos/power-bi/runner/test/dashboardQueries.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-power-bi exec vitest run runner/test/dashboardQueries.test.ts` -> FAIL - `Cannot find module '../src/dashboardQueries'`.
+- Done when: Task 9's steps are all checked off and the gate output matches.
+
+### Packet 11-P10: `schema.ts`: the orders table DDL.
+- Tasks: 10
+- Depends on: 11-P9   Shared runtime: none
+- Files owned: `integrations/demos/power-bi/runner/src/schema.ts`, `integrations/demos/power-bi/runner/test/schema.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-power-bi exec vitest run runner/test/schema.test.ts` -> FAIL - `Cannot find module '../src/schema'`.
+- Done when: Task 10's steps are all checked off and the gate output matches.
+
+### Packet 11-P11: manifest.
+- Tasks: 11
+- Depends on: 11-P10   Shared runtime: none
+- Files owned: `integrations/demos/power-bi/manifest.json`, `integrations/demos/power-bi/test/manifest.test.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/demo-power-bi exec vitest run test/manifest.test.ts` -> FAIL - `ENOENT: no such file or directory, open '.../demos/power-bi/manifest.json'`.
+- Done when: Task 11's steps are all checked off and the gate output matches.
+
+### Packet 11-P12: package scaffolding.
+- Tasks: 12
+- Depends on: 11-P11   Shared runtime: tidb-playground
+- Files owned: `integrations/demos/power-bi/.env.example`, `integrations/demos/power-bi/package.json`, `integrations/demos/power-bi/tsconfig.json`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm install` -> workspace resolves `@lab/demo-power-bi`, `pnpm -w list --depth -1` shows it in the tree.
+- Done when: Task 12's steps are all checked off and the gate output matches.
+
+### Packet 11-P13: provision TiDB for local development.
+- Tasks: 13
+- Depends on: 11-P12   Shared runtime: none
+- Files owned: `integrations/demos/power-bi/.env`, `integrations/demos/power-bi/.env.example`
+- Model: sonnet   Effort: S
+- Gate:
+  - `cp demos/power-bi/.env.example demos/power-bi/.env` -> no output; `.env` now exists (it is gitignored).
+- Done when: Task 13's steps are all checked off and the gate output matches.
+
+### Packet 11-P14: create the schema and seed baseline rows.
+- Tasks: 14
+- Depends on: 11-P13   Shared runtime: none
+- Files owned: `integrations/demos/power-bi/runner/setup.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 14's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+- Done when: Task 14's steps are all checked off and the gate output matches.
+
+### Packet 11-P15: implement and first-run the runner.
+- Tasks: 15
+- Depends on: 11-P14   Shared runtime: tidb-playground
+- Files owned: `integrations/demos/power-bi/runner/main.ts`
+- Model: sonnet   Effort: L
+- Gate:
+  - coordinator reviews the files against Task 15's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+- Done when: Task 15's steps are all checked off and the gate output matches.
+
+### Packet 11-P16: exercise the controls.
+- Tasks: 16
+- Depends on: 11-P15   Shared runtime: tidb-playground
+- Files owned: none (manual or docs step)
+- Model: sonnet   Effort: S
+- Gate:
+  - `curl -s -X POST http://localhost:7070/control/route-to-tikv` -> subsequent `write-p99-degradation` metric events, once the run reaches or has passed `dashboard-on-tikv`/`dashboard-on-tiflash`, rise noticeably compared to the pre-control baseline.
+- Done when: Task 16's steps are all checked off and the gate output matches.
+
+### Packet 11-P17: confirm the checks fire during a full run.
+- Tasks: 17
+- Depends on: 11-P16   Shared runtime: tidb-playground
+- Files owned: none (manual or docs step)
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 17's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+- Done when: Task 17's steps are all checked off and the gate output matches.
+
+### Packet 11-P18: UI smoke test.
+- Tasks: 18
+- Depends on: 11-P17   Shared runtime: cloud-account
+- Files owned: none (manual or docs step)
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 18's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 18's steps are all checked off and the gate output matches.
+
+### Packet 11-P19: provision the Windows VM.
+- Tasks: 19
+- Depends on: 11-P18   Shared runtime: cloud-account
+- Files owned: none (manual or docs step)
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 19's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 19's steps are all checked off and the gate output matches.
+
+### Packet 11-P20: install Power BI Desktop and its connector prerequisite.
+- Tasks: 20
+- Depends on: 11-P19   Shared runtime: cloud-account
+- Files owned: none (manual or docs step)
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 20's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 20's steps are all checked off and the gate output matches.
+
+### Packet 11-P21: connect Power BI Desktop to the TiDB cluster and build the 3 visuals.
+- Tasks: 21
+- Depends on: 11-P20   Shared runtime: none
+- Files owned: none (manual or docs step)
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 21's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+- Done when: Task 21's steps are all checked off and the gate output matches.
+
+### Packet 11-P22: verify Power BI sent the exact SQL.
+- Tasks: 22
+- Depends on: 11-P21   Shared runtime: none
+- Files owned: none (manual or docs step)
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 22's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+- Done when: Task 22's steps are all checked off and the gate output matches.
+
+### Packet 11-P23: screen record the Power BI refresh.
+- Tasks: 23
+- Depends on: 11-P22   Shared runtime: cloud-account
+- Files owned: `integrations/demos/power-bi/traces/power-bi-refresh.mp4`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 23's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 23's steps are all checked off and the gate output matches.
+
+### Packet 11-P24: tear down the Windows VM.
+- Tasks: 24
+- Depends on: 11-P23   Shared runtime: cloud-account
+- Files owned: none (manual or docs step)
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 24's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 24's steps are all checked off and the gate output matches.
+
+### Packet 11-P25: tear down the TiDB Cloud cluster used for the recording.
+- Tasks: 25
+- Depends on: 11-P24   Shared runtime: none
+- Files owned: none (manual or docs step)
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 25's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+- Done when: Task 25's steps are all checked off and the gate output matches.
+
+### Packet 11-P26: write `README.md`.
+- Tasks: 26
+- Depends on: 11-P25   Shared runtime: cloud-account
+- Files owned: `integrations/demos/power-bi/.env`, `integrations/demos/power-bi/.env.example`, `integrations/demos/power-bi/README.md`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 26's text; `pnpm --filter @lab/demo-power-bi typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 26's steps are all checked off and the gate output matches.
+
+### Packet 11-P27: write `TALK-TRACK.md`.
+- Tasks: 27
+- Depends on: 11-P26   Shared runtime: none
+- Files owned: `integrations/demos/power-bi/TALK-TRACK.md`
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm lab check-public` -> no denylisted terms or internal URLs found in this file.
+- Done when: Task 27's steps are all checked off and the gate output matches.
+
+### Packet 11-R: Record and publish the featured trace
+- Tasks: section 8
+- Depends on: 11-P27   Shared runtime: cloud-account
+- Files owned: `integrations/demos/power-bi/traces/featured.json`
+- Model: coordinator   Effort: M
+- Gate:
+  - `pnpm lab validate power-bi` -> `power-bi: manifest ok, featured trace ok (N events)`
+  - `pnpm lab check-public` -> `0 findings`
+  - teardown commands from section 5 run and confirmed
+- Done when: the replay tells the whole story in 3-6 minutes of playback at 1x.

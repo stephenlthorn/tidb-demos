@@ -364,7 +364,7 @@ export const quoteIdentifier: (name: string) => string;
 
 ### Runner kit, Python (`packages/runner-kit-py/lab_runner/__init__.py`)
 
-Same surface, snake_case: `Emitter(clock=None, write=None)` with `metric`, `flow`, `node`, `phase`, `check`, `log`, `elapsed_ms`; `percentile(values, p)`; `summarize(values)`; `parse_control_line(line)`; `on_control(handler, stream=None)` (daemon thread); `tidb_config_from_env(env)`; `tidb_connect_from_env(env=None)` (pymysql). Use it only when a vendor SDK is Python-only.
+Same surface, snake_case: `Emitter(clock=None, write=None)` with `metric`, `flow`, `node`, `phase`, `check`, `log`, `elapsed_ms`; `percentile(values, p)`; `summarize(values)`; `SampleWindow()` with `add(value)` and `drain()`; `timed(task, clock=None)` returning `(value, ms)`; `parse_control_line(line)`; `on_control(handler, stream=None)` (daemon thread); `tidb_config_from_env(env)`; `tidb_connect_from_env(env=None)` (pymysql). Use it only when a vendor SDK is Python-only.
 
 ### Environment variable conventions
 
@@ -1592,11 +1592,13 @@ import pytest
 
 from lab_runner import (
     Emitter,
+    SampleWindow,
     on_control,
     parse_control_line,
     percentile,
     summarize,
     tidb_config_from_env,
+    timed,
 )
 
 
@@ -1637,6 +1639,19 @@ def test_summarize():
     summary = summarize(list(range(1, 101)))
     assert (summary.count, summary.p50, summary.p95, summary.p99, summary.max) == (100, 50, 95, 99, 100)
     assert summarize([]) is None
+
+
+def test_sample_window_drains():
+    window = SampleWindow()
+    window.add(5.0)
+    window.add(7.0)
+    assert window.drain() == (5.0, 7.0)
+    assert window.drain() == ()
+
+
+def test_timed_returns_value_and_elapsed_ms():
+    value, ms = timed(lambda: "done", clock=clock_from([10.0, 35.0]))
+    assert (value, ms) == ("done", 25.0)
 
 
 def test_parse_control_line():
@@ -1776,6 +1791,29 @@ def summarize(values: Sequence[float]) -> Optional[LatencySummary]:
     )
 
 
+class SampleWindow:
+    def __init__(self) -> None:
+        self._values: list = []
+        self._lock = threading.Lock()
+
+    def add(self, value: float) -> None:
+        with self._lock:
+            self._values.append(value)
+
+    def drain(self) -> tuple:
+        with self._lock:
+            drained = tuple(self._values)
+            self._values.clear()
+            return drained
+
+
+def timed(task: Callable[[], object], clock: Optional[Clock] = None) -> tuple:
+    now = clock or _monotonic_ms
+    start = now()
+    value = task()
+    return value, now() - start
+
+
 def parse_control_line(line: str) -> Optional[str]:
     text = line.strip()
     if not text:
@@ -1838,7 +1876,7 @@ def tidb_connect_from_env(env: Optional[Mapping[str, str]] = None) -> pymysql.co
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `cd packages/runner-kit-py && .venv/bin/pytest -q`
-Expected: `8 passed`.
+Expected: `10 passed`.
 
 - [ ] **Step 6: Commit**
 
@@ -4975,3 +5013,108 @@ Expected: the `integrations-ci` workflow runs green on GitHub.
 - Every exported name in "Interfaces" exists in code with the same spelling: `createEmitter`, `summarize`, `createSampleWindow`, `every`, `sleep`, `timed`, `onControl`, `parseControlLine`, `tidbConfigFromEnv`, `createTidbPool`, `quoteIdentifier`, `DemoManifestSchema`, `DemoEventSchema`, `parseEventLine`, `eventReferenceErrors`, `TraceSchema`, `CatalogSchema`.
 - `pnpm lab run|validate|db-init|check-public|collect-site` all behave as the relay table says.
 - The example demo is `publish: false` and never appears in a `pnpm build:site` catalog.
+
+## Subagent work packets
+
+Format and rules: see `EXECUTION.md`. Run these strictly in order; every later plan depends on them.
+
+### Packet 00-P1: Workspace and contract
+- Tasks: 1, 2, 3, 4
+- Depends on: none   Shared runtime: none
+- Files owned: `integrations/package.json`, `integrations/pnpm-workspace.yaml`, `integrations/tsconfig.base.json`, `integrations/.gitignore`, `integrations/pnpm-lock.yaml`, `integrations/packages/contract/**`
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/contract test` -> `20 passed`
+  - `pnpm --filter @lab/contract typecheck` -> exit 0, no output
+- Done when: the contract matches the Interfaces section character for character.
+
+### Packet 00-P2: TypeScript runner kit
+- Tasks: 5, 6, 7, 8 (steps 1-4 and 6; step 5 is the live check in 00-P2L)
+- Depends on: 00-P1   Shared runtime: none
+- Files owned: `integrations/packages/runner-kit/**`, `integrations/infra/tidb/playground.sh`, `integrations/infra/kafka/docker-compose.yml`
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/runner-kit test` -> `24 passed`
+  - `pnpm --filter @lab/runner-kit typecheck` -> exit 0
+
+### Packet 00-P2L: Live TiDB check (coordinator)
+- Tasks: 8 step 5
+- Depends on: 00-P2   Shared runtime: tidb-playground
+- Files owned: none
+- Model: coordinator   Effort: S
+- Gate:
+  - the `SELECT VERSION()` one-liner in Task 8 step 5 -> one row containing `TiDB`
+  - `docker compose -f infra/kafka/docker-compose.yml up -d && docker compose -f infra/kafka/docker-compose.yml ps` -> `lab-kafka` `healthy`; then `docker compose -f infra/kafka/docker-compose.yml down`
+
+### Packet 00-P3: Python runner kit
+- Tasks: 9
+- Depends on: 00-P1   Shared runtime: none (can run in parallel with 00-P2)
+- Files owned: `integrations/packages/runner-kit-py/**`
+- Model: sonnet   Effort: S
+- Gate:
+  - `cd packages/runner-kit-py && .venv/bin/pytest -q` -> `10 passed`
+
+### Packet 00-P4: Relay core
+- Tasks: 10, 11, 12, 13
+- Depends on: 00-P2   Shared runtime: none
+- Files owned: `integrations/packages/relay/**` except `src/validate.ts`, `src/public-check.ts`, `src/collect-site.ts`, `src/db-init.ts`, `src/cli.ts` and their tests
+- Model: sonnet   Effort: L
+- Gate:
+  - `pnpm --filter @lab/relay test` -> 22 passed (demo-files 5, lines 7, trace-builder 3, server 6, run 1)
+
+### Packet 00-P5: Relay commands and CLI
+- Tasks: 14, 15
+- Depends on: 00-P4   Shared runtime: none
+- Files owned: `integrations/packages/relay/src/{validate,public-check,collect-site,db-init,cli}.ts`, matching tests
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/relay test` -> `34 passed`
+  - `pnpm --filter @lab/relay typecheck` -> exit 0
+  - `pnpm lab` -> usage line, exit 1
+
+### Packet 00-P6: Example demo
+- Tasks: 16 steps 1-5
+- Depends on: 00-P5   Shared runtime: none
+- Files owned: `integrations/demos/example/**`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-example test` -> `8 passed`
+
+### Packet 00-P6L: Record the example trace (coordinator)
+- Tasks: 16 steps 6-7
+- Depends on: 00-P6   Shared runtime: none (synthetic)
+- Gate:
+  - `pnpm lab validate example` -> `example: manifest ok, featured trace ok (N events)`
+
+### Packet 00-P7: UI state and formatting
+- Tasks: 17, 18
+- Depends on: 00-P1   Shared runtime: none (can run in parallel with 00-P4)
+- Files owned: `integrations/packages/ui/{package.json,tsconfig.json,vite.config.ts,index.html}`, `integrations/packages/ui/test/setup.ts`, `integrations/packages/ui/src/{state,sources/player.ts,route.ts,format.ts}`, matching tests
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/ui test` -> `23 passed`
+
+### Packet 00-P8: UI components
+- Tasks: 19, 20
+- Depends on: 00-P7   Shared runtime: none
+- Files owned: `integrations/packages/ui/src/{diagram,charts,components}/**`, matching tests
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/ui test` -> `35 passed`
+
+### Packet 00-P9: UI pages and styles
+- Tasks: 21
+- Depends on: 00-P8   Shared runtime: none
+- Files owned: `integrations/packages/ui/src/{data.ts,sources/use-replay.ts,sources/use-live.ts,pages/**,App.tsx,main.tsx,styles.css}`, `test/pages.test.tsx`
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/ui test && pnpm --filter @lab/ui typecheck` -> `38 passed`, exit 0
+
+### Packet 00-P10: End-to-end, site, CI (coordinator)
+- Tasks: 22, 23
+- Depends on: 00-P6L, 00-P9   Shared runtime: browser, GitHub
+- Gate:
+  - `pnpm typecheck && pnpm test` -> all green
+  - replay and live checks in Task 22 observed in the browser, screenshots saved
+  - `pnpm build:site` -> `0 findings`, `dist/` written
+  - `integrations-ci` workflow green on GitHub

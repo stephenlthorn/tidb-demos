@@ -163,11 +163,14 @@ demos/kafka/
     "mysql2": "^3.11.0"
   },
   "devDependencies": {
-    "vitest": "^2.0.0",
-    "typescript": "^5.5.0"
+    "tsx": "^4.20.0",
+    "@types/node": "^22.10.0",
+    "vitest": "^3.2.0",
+    "typescript": "^5.9.0"
   },
   "scripts": {
     "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
     "start": "tsx runner/main.ts"
   }
 }
@@ -212,7 +215,7 @@ describe('kafka demo manifest', () => {
   "integrations": ["Apache Kafka", "TiCDC"],
   "pattern": "fintech risk pipeline: payment events stream through Kafka into TiDB, risk state lives in TiDB, and TiCDC streams every change back out to Kafka for downstream consumers",
   "publish": true,
-  "runner": { "command": ["tsx", "runner/main.ts"], "cwd": "." },
+  "runner": { "command": ["node", "--import", "tsx", "runner/main.ts"], "cwd": "." },
   "nodes": [
     { "id": "producer", "label": "Payment producer", "kind": "source", "x": 5, "y": 20 },
     { "id": "payments-topic", "label": "payments topic", "kind": "queue", "x": 25, "y": 20 },
@@ -965,3 +968,140 @@ happened, and we caught every one of them."
 - **Duplicate topic auto-creation:** with `auto-create-topic` defaulting to `true`, a typo in the topic name creates a new empty topic instead of failing loudly. Verify `tidb-changes` and `payments` exist with `kafka-topics.sh --list` before a recording session.
 - **Ingester consumer group offsets:** `restart-ingester` in Task 11 only emits a `node` event; it does not actually disconnect the underlying consumer in the illustrative code. Before recording, implement the real teardown/recreate of the `Consumer` instance (disconnect, then `createConsumer` again with the same `group.id`) so the control demonstrates a real crash-recovery, not a no-op.
 - **TiDB Cloud variant:** Private Connect is not supported directly into managed Kafka SaaS (MSK, Confluent Cloud); a `kafka-proxy` intermediary is required in that case. Confirm current support before promising a customer a direct Private Connect path to their managed Kafka.
+
+## 10. Subagent work packets
+
+Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets in this plan run in the order listed; a later packet may edit a file an earlier packet created. Plan 00 must be complete first.
+
+### Packet 02-V1: Verify open facts before building
+- Tasks: none (docs only)
+- Depends on: 00-P10   Shared runtime: cloud-account
+- Files owned: `integrations/docs/plans/02-kafka.md` (section 4 only)
+- Model: sonnet   Effort: S
+- Items to confirm (run each item's confirm step, paste the real output into section 4, set VERIFIED or record the workaround):
+  - | TiDB Cloud Premium tier's changefeed-to-Kafka support level is not stated on the pages fetched for this plan (Premium was in public preview at the time of writing). | n/a | **UNVERIFIED** - before recording a TiDB Cloud Premium variant, check the current [Changefeed Overview (TiDB Cloud)](https://
+  - | KafkaJS has not published a release in an extended period and is widely reported as unmaintained; `@confluentinc/kafka-javascript` is Confluent's actively released, librdkafka-based client with a KafkaJS-compatible API. | [KafkaJS seems not maintained anymore (nestjs/nest#13223)](https://github.co
+  - | Kafka client choice for this demo: `@confluentinc/kafka-javascript`, because it has an active release cadence and vendor support, and its API is close enough to KafkaJS's that runner code reads like idiomatic Node Kafka code (rationale, not a vendor claim). | [@confluentinc/kafka-javascript on npm
+- Gate:
+  - `grep -c UNVERIFIED integrations/docs/plans/02-kafka.md` -> lower than before, and every remaining item says why it cannot be checked yet
+- Done when: no packet below depends on an unconfirmed fact without a recorded workaround.
+
+### Packet 02-P1: Scaffold the demo package and a failing manifest test
+- Tasks: 1
+- Depends on: 02-V1   Shared runtime: none
+- Files owned: `integrations/demos/kafka/manifest.json`, `integrations/demos/kafka/package.json`, `integrations/demos/kafka/test/manifest.test.ts`, `integrations/demos/kafka/tsconfig.json`
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/demo-kafka exec vitest run test/manifest.test.ts` -> all PASS
+- Done when: Task 1's steps are all checked off and the gate output matches.
+
+### Packet 02-P2: Payment event creation and encoding (pure)
+- Tasks: 2
+- Depends on: 02-P1   Shared runtime: none
+- Files owned: `integrations/demos/kafka/runner/src/paymentEvent.ts`, `integrations/demos/kafka/runner/test/paymentEvent.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-kafka exec vitest run runner/test/paymentEvent.test.ts` -> all PASS
+- Done when: Task 2's steps are all checked off and the gate output matches.
+
+### Packet 02-P3: Dedupe tracker (pure)
+- Tasks: 3
+- Depends on: 02-P2   Shared runtime: none
+- Files owned: `integrations/demos/kafka/runner/src/dedupe.ts`, `integrations/demos/kafka/runner/test/dedupe.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-kafka exec vitest run runner/test/dedupe.test.ts` -> all PASS
+- Done when: Task 3's steps are all checked off and the gate output matches.
+
+### Packet 02-P4: End-to-end latency computation (pure)
+- Tasks: 4
+- Depends on: 02-P3   Shared runtime: none
+- Files owned: `integrations/demos/kafka/runner/src/latency.ts`, `integrations/demos/kafka/runner/test/latency.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-kafka exec vitest run runner/test/latency.test.ts` -> all PASS
+- Done when: Task 4's steps are all checked off and the gate output matches.
+
+### Packet 02-P5: Batched upsert SQL builder (pure)
+- Tasks: 5
+- Depends on: 02-P4   Shared runtime: none
+- Files owned: `integrations/demos/kafka/runner/src/upsertSql.ts`, `integrations/demos/kafka/runner/test/upsertSql.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-kafka exec vitest run runner/test/upsertSql.test.ts` -> all PASS
+- Done when: Task 5's steps are all checked off and the gate output matches.
+
+### Packet 02-P6: Canal-JSON message parser (pure)
+- Tasks: 6
+- Depends on: 02-P5   Shared runtime: none
+- Files owned: `integrations/demos/kafka/runner/src/canalJsonParser.ts`, `integrations/demos/kafka/runner/test/canalJsonParser.test.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/demo-kafka exec vitest run runner/test/canalJsonParser.test.ts` -> all PASS
+- Done when: Task 6's steps are all checked off and the gate output matches.
+
+### Packet 02-P7: Checkpoint lag computation (pure)
+- Tasks: 7
+- Depends on: 02-P6   Shared runtime: none
+- Files owned: `integrations/demos/kafka/runner/src/checkpointLag.ts`, `integrations/demos/kafka/runner/test/checkpointLag.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-kafka exec vitest run runner/test/checkpointLag.test.ts` -> all PASS
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 02-P8: Bring up shared infra and confirm connectivity (manual, I/O)
+- Tasks: 8
+- Depends on: 02-P7   Shared runtime: tidb-playground + kafka
+- Files owned: none (manual or docs step)
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 8's text; `pnpm --filter @lab/demo-kafka typecheck` -> exit 0
+- Done when: Task 8's steps are all checked off and the gate output matches.
+
+### Packet 02-P9: Create the changefeed (manual, I/O)
+- Tasks: 9
+- Depends on: 02-P8   Shared runtime: tidb-playground + kafka
+- Files owned: none (manual or docs step)
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 9's text; `pnpm --filter @lab/demo-kafka typecheck` -> exit 0
+- Done when: Task 9's steps are all checked off and the gate output matches.
+
+### Packet 02-P10: Thin I/O adapters - Kafka client, TiCDC API client, schema runner
+- Tasks: 10
+- Depends on: 02-P9   Shared runtime: none
+- Files owned: `integrations/demos/kafka/runner/src/kafkaClient.ts`, `integrations/demos/kafka/runner/src/ticdcApi.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 10's text; `pnpm --filter @lab/demo-kafka typecheck` -> exit 0
+- Done when: Task 10's steps are all checked off and the gate output matches.
+
+### Packet 02-P11: Wire the runner's main.ts
+- Tasks: 11
+- Depends on: 02-P10   Shared runtime: none
+- Files owned: `integrations/demos/kafka/runner/main.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 11's text; `pnpm --filter @lab/demo-kafka typecheck` -> exit 0
+- Done when: Task 11's steps are all checked off and the gate output matches.
+
+### Packet 02-P12: README and TALK-TRACK
+- Tasks: 12
+- Depends on: 02-P11   Shared runtime: cloud-account
+- Files owned: `integrations/demos/kafka/README.md`, `integrations/demos/kafka/TALK-TRACK.md`, `integrations/demos/kafka/traces`, `integrations/demos/kafka/traces/featured.json`
+- Model: sonnet   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 12's text; `pnpm --filter @lab/demo-kafka typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 12's steps are all checked off and the gate output matches.
+
+### Packet 02-R: Record and publish the featured trace
+- Tasks: section 8
+- Depends on: 02-P12   Shared runtime: cloud-account
+- Files owned: `integrations/demos/kafka/traces/featured.json`
+- Model: coordinator   Effort: M
+- Gate:
+  - `pnpm lab validate kafka` -> `kafka: manifest ok, featured trace ok (N events)`
+  - `pnpm lab check-public` -> `0 findings`
+  - teardown commands from section 5 run and confirmed
+- Done when: the replay tells the whole story in 3-6 minutes of playback at 1x.

@@ -4,7 +4,7 @@
 
 **What every demo gets:** an animated flow diagram of the real data path, live metric tiles with sparklines (each one says exactly how it was measured), a phase timeline whose captions double as the talk track, correctness checks, and buttons that inject events (bursts, faults, revokes). Every demo runs **live** against real systems for calls, and records a **replay** that a static website plays back with play, pause, speed, and scrub.
 
-**How to use this folder:** build Plan 00 once, then pick any demo plan and implement it top to bottom. Each plan is self-contained, test-first, and ends with a recorded `traces/featured.json` that goes on the site.
+**How to use this folder:** build Plan 00 once, then pick any demo plan and implement it top to bottom. To delegate the build to Sonnet subagents, follow [EXECUTION.md](EXECUTION.md): every plan ends with a section of work packets (tasks, owned files, shared runtime, gate commands), including verify packets that confirm open facts before code depends on them. Each plan is self-contained, test-first, and ends with a recorded `traces/featured.json` that goes on the site.
 
 ## Build order
 

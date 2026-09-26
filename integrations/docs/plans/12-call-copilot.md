@@ -183,7 +183,7 @@ demos/call-copilot/
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run", "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@lab/contract": "workspace:*",
@@ -194,9 +194,10 @@ demos/call-copilot/
     "openai": "^4.68.0"
   },
   "devDependencies": {
+    "@types/node": "^22.10.0",
     "tsx": "^4.19.0",
-    "vitest": "^2.1.0",
-    "typescript": "^5.6.0"
+    "vitest": "^3.2.0",
+    "typescript": "^5.9.0"
   }
 }
 ```
@@ -250,7 +251,7 @@ SUGGESTION_LATENCY_TARGET_MS=2500
   "pattern": "sales engineers and account executives who want real-time help on live calls: the right product fact, proof point, or discovery question at the right moment",
   "publish": true,
   "runner": {
-    "command": ["npx", "tsx", "runner/main.ts"],
+    "command": ["node", "--import", "tsx", "runner/main.ts"],
     "cwd": "."
   },
   "nodes": [
@@ -1477,3 +1478,177 @@ See Section 5 of the plan for exact commands (`tiup clean lab`, dropping the TiD
 - **The embedding call is on the critical path for every suggestion.** `suggestion-latency-ms` includes the OpenAI embedding round trip before retrieval even starts; if that call is consistently the slow step, consider caching embeddings for repeated trigger phrases in the eval set, or moving to a lower-latency embedding endpoint - this is a legitimate follow-up, not something to silently work around by loosening the latency target.
 - **Never let a real customer name, transcript, or employee name into `kb-facts.json`, `mock-call-script.json`, or a recorded trace.** This repository is public; every fact and every line of the mock call must be public TiDB docs content or clearly invented, and `pnpm lab check-public` is the automated backstop, not the only check - review by eye before committing new fixture content.
 - **Consent is a mechanism, not legal advice.** Some jurisdictions require all-party consent to record; this plan's `consent-given` check proves the tool announces and gates on consent, it does not certify legal compliance in any given jurisdiction. Say this plainly in the README rather than implying otherwise.
+
+## 10. Subagent work packets
+
+Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets in this plan run in the order listed; a later packet may edit a file an earlier packet created. Plan 00 must be complete first.
+
+### Packet 12-V1: Verify open facts before building
+- Tasks: none (docs only)
+- Depends on: 00-P10   Shared runtime: cloud-account
+- Files owned: `integrations/docs/plans/12-call-copilot.md` (section 4 only)
+- Model: sonnet   Effort: S
+- Items to confirm (run each item's confirm step, paste the real output into section 4, set VERIFIED or record the workaround):
+  - Every product capability this demo relies on, with the official doc URL checked while writing this plan. Anything not confirmed is marked **UNVERIFIED** with the exact step to confirm it before building.
+  - | This plan chooses **BlackHole + `sox`** over a ScreenCaptureKit Swift helper as the primary audio-capture path specifically to avoid Swift/Xcode/code-signing complexity for a first version; ScreenCaptureKit remains a documented, UNVERIFIED-for-this-plan future upgrade path | n/a (design decision) 
+  - | The exact full JSON schema of every AssemblyAI streaming message type (`Begin`, `Turn`, `Termination`, error payloads) beyond the `Turn` fields listed above | https://www.assemblyai.com/docs/streaming/api-spec/streaming-websocket | **UNVERIFIED** - confirm the full message schema by opening one re
+  - | Whether the local `infra/tidb/playground.sh` (`tiup playground`) build of TiDB supports `FULLTEXT INDEX` / `FTS_MATCH_WORD` at all, given the docs describe full-text search as Starter-only in specific regions | https://docs.pingcap.com/ai/vector-search-full-text-search-sql/ | **UNVERIFIED** - conf
+- Gate:
+  - `grep -c UNVERIFIED integrations/docs/plans/12-call-copilot.md` -> lower than before, and every remaining item says why it cannot be checked yet
+- Done when: no packet below depends on an unconfirmed fact without a recorded workaround.
+
+### Packet 12-P1: Scaffold the demo folder and manifest
+- Tasks: 1
+- Depends on: 12-V1   Shared runtime: tidb-playground
+- Files owned: `integrations/demos/call-copilot/.env.example`, `integrations/demos/call-copilot/manifest.json`, `integrations/demos/call-copilot/package.json`, `integrations/demos/call-copilot/test/manifest.test.ts`, `integrations/demos/call-copilot/tsconfig.json`
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/demo-call-copilot exec vitest run test/manifest.test.ts` -> all PASS
+- Done when: Task 1's steps are all checked off and the gate output matches.
+
+### Packet 12-P2: PII redaction (pure logic)
+- Tasks: 2
+- Depends on: 12-P1   Shared runtime: none
+- Files owned: `integrations/demos/call-copilot/runner/src/redact.ts`, `integrations/demos/call-copilot/runner/test/redact.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-call-copilot exec vitest run runner/test/redact.test.ts` -> all PASS
+- Done when: Task 2's steps are all checked off and the gate output matches.
+
+### Packet 12-P3: Rolling transcript turn window (pure logic)
+- Tasks: 3
+- Depends on: 12-P2   Shared runtime: none
+- Files owned: `integrations/demos/call-copilot/runner/src/window.ts`, `integrations/demos/call-copilot/runner/test/window.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-call-copilot exec vitest run runner/test/window.test.ts` -> all PASS
+- Done when: Task 3's steps are all checked off and the gate output matches.
+
+### Packet 12-P4: Trigger detector (pure logic)
+- Tasks: 4
+- Depends on: 12-P3   Shared runtime: none
+- Files owned: `integrations/demos/call-copilot/runner/src/triggers.ts`, `integrations/demos/call-copilot/runner/test/triggers.test.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/demo-call-copilot exec vitest run runner/test/triggers.test.ts` -> all PASS
+- Done when: Task 4's steps are all checked off and the gate output matches.
+
+### Packet 12-P5: Reciprocal Rank Fusion (pure logic)
+- Tasks: 5
+- Depends on: 12-P4   Shared runtime: none
+- Files owned: `integrations/demos/call-copilot/runner/src/fusion.ts`, `integrations/demos/call-copilot/runner/test/fusion.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-call-copilot exec vitest run runner/test/fusion.test.ts` -> all PASS
+- Done when: Task 5's steps are all checked off and the gate output matches.
+
+### Packet 12-P6: Prompt assembly (pure logic)
+- Tasks: 6
+- Depends on: 12-P5   Shared runtime: none
+- Files owned: `integrations/demos/call-copilot/runner/src/prompt.ts`, `integrations/demos/call-copilot/runner/test/prompt.test.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/demo-call-copilot exec vitest run runner/test/prompt.test.ts` -> all PASS
+- Done when: Task 6's steps are all checked off and the gate output matches.
+
+### Packet 12-P7: Latency math (pure logic)
+- Tasks: 7
+- Depends on: 12-P6   Shared runtime: none
+- Files owned: `integrations/demos/call-copilot/runner/src/timing.ts`, `integrations/demos/call-copilot/runner/test/timing.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-call-copilot exec vitest run runner/test/timing.test.ts` -> all PASS
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 12-P8: TiDB knowledge base - schema, seed, and retrieval queries (thin I/O adapter, manual live run)
+- Tasks: 8
+- Depends on: 12-P7   Shared runtime: cloud-account
+- Files owned: `integrations/demos/call-copilot/fixtures/kb-facts.json`, `integrations/demos/call-copilot/runner/src/kb.ts`, `integrations/demos/call-copilot/runner/src/seed-kb.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 8's text; `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 8's steps are all checked off and the gate output matches.
+
+### Packet 12-P9: AssemblyAI streaming client (thin I/O adapter, manual live run)
+- Tasks: 9
+- Depends on: 12-P8   Shared runtime: tidb-playground
+- Files owned: `integrations/demos/call-copilot/runner/src/asr-client.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 9's text; `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
+- Done when: Task 9's steps are all checked off and the gate output matches.
+
+### Packet 12-P10: Synthetic mock-call script and fixture audio (manual, generates a committed fixture)
+- Tasks: 10
+- Depends on: 12-P9   Shared runtime: audio (coordinator only, user present for consent)
+- Files owned: `integrations/demos/call-copilot/fixtures/mock-call-script.json`, `integrations/demos/call-copilot/fixtures/mock-call.wav`
+- Model: coordinator   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 10's text; `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
+- Done when: Task 10's steps are all checked off and the gate output matches.
+
+### Packet 12-P11: Audio capture - BlackHole/sox mic source and fixture-file source (thin I/O adapter, manual live run)
+- Tasks: 11
+- Depends on: 12-P10   Shared runtime: audio (coordinator only, user present for consent)
+- Files owned: `integrations/demos/call-copilot/runner/src/audio-capture.ts`
+- Model: coordinator   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 11's text; `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
+- Done when: Task 11's steps are all checked off and the gate output matches.
+
+### Packet 12-P12: Runner main.ts - wire capture, ASR, retrieval, suggestion, lab events
+- Tasks: 12
+- Depends on: 12-P11   Shared runtime: audio (coordinator only, user present for consent)
+- Files owned: `integrations/demos/call-copilot/runner/main.ts`
+- Model: coordinator   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 12's text; `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
+- Done when: Task 12's steps are all checked off and the gate output matches.
+
+### Packet 12-P13: Post-call summary and follow-up draft (thin I/O adapter, manual live run)
+- Tasks: 13
+- Depends on: 12-P12   Shared runtime: none
+- Files owned: `integrations/demos/call-copilot/runner/src/summarize-call.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 13's text; `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
+- Done when: Task 13's steps are all checked off and the gate output matches.
+
+### Packet 12-P14: Redaction-at-rest and retention purge (thin I/O adapter, manual live run)
+- Tasks: 14
+- Depends on: 12-P13   Shared runtime: none
+- Files owned: `integrations/demos/call-copilot/runner/src/retention.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 14's text; `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
+- Done when: Task 14's steps are all checked off and the gate output matches.
+
+### Packet 12-P15: Hybrid retrieval eval set (pure logic over fixture data)
+- Tasks: 15
+- Depends on: 12-P14   Shared runtime: none
+- Files owned: `integrations/demos/call-copilot/runner/test/eval`, `integrations/demos/call-copilot/runner/test/eval/hybrid-eval.test.ts`, `integrations/demos/call-copilot/runner/test/eval/triggers.json`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-call-copilot exec vitest run runner/test/eval/hybrid-eval.test.ts` -> all PASS
+- Done when: Task 15's steps are all checked off and the gate output matches.
+
+### Packet 12-P16: README and TALK-TRACK
+- Tasks: 16
+- Depends on: 12-P15   Shared runtime: audio (coordinator only, user present for consent)
+- Files owned: `integrations/demos/call-copilot/README.md`, `integrations/demos/call-copilot/TALK-TRACK.md`, `integrations/demos/call-copilot/traces`
+- Model: coordinator   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 16's text; `pnpm --filter @lab/demo-call-copilot typecheck` -> exit 0
+- Done when: Task 16's steps are all checked off and the gate output matches.
+
+### Packet 12-R: Record and publish the featured trace
+- Tasks: section 8
+- Depends on: 12-P16   Shared runtime: cloud-account
+- Files owned: `integrations/demos/call-copilot/traces/featured.json`
+- Model: coordinator   Effort: M
+- Gate:
+  - `pnpm lab validate call-copilot` -> `call-copilot: manifest ok, featured trace ok (N events)`
+  - `pnpm lab check-public` -> `0 findings`
+  - teardown commands from section 5 run and confirmed
+- Done when: the replay tells the whole story in 3-6 minutes of playback at 1x.

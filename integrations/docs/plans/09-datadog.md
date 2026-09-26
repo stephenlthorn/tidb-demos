@@ -202,7 +202,7 @@ Write `demos/datadog/manifest.json`:
   "integrations": ["Datadog"],
   "pattern": "platform and SRE teams that will not approve a new database until its metrics, alerts, and traces land in the observability stack they already run",
   "publish": true,
-  "runner": { "command": ["node", "--import", "tsx", "main.ts"], "cwd": "runner" },
+  "runner": { "command": ["node", "--import", "tsx", "runner/main.ts"], "cwd": "." },
   "nodes": [
     { "id": "workload", "label": "Workload generator", "kind": "source", "x": 8, "y": 65 },
     { "id": "apm-service", "label": "APM-instrumented service", "kind": "service", "x": 30, "y": 62 },
@@ -751,7 +751,7 @@ Write `demos/datadog/package.json`:
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run", "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@lab/contract": "workspace:*",
@@ -761,8 +761,9 @@ Write `demos/datadog/package.json`:
     "mysql2": "^3.11.0"
   },
   "devDependencies": {
+    "@types/node": "^22.10.0",
     "tsx": "^4.19.0",
-    "vitest": "^2.1.0"
+    "vitest": "^3.2.0"
   }
 }
 ```
@@ -956,3 +957,183 @@ Commit: `git add demos/datadog/TALK-TRACK.md && git commit -m "datadog: add talk
 - **Trial account metric ingestion lag.** Unlike Prometheus's instant-query model, Datadog's metrics query API needs the Agent's points to have actually landed; a `latestValue` call made within the first 60-90 seconds of the Agent starting can return `undefined` even though the Agent check itself reports `OK`. Task 7.11's manual run step exists to catch this before it's mistaken for an integration bug during recording.
 - **`.monitor-ids.json` is per-session and gitignored.** Every recording session that creates fresh Monitors must also delete them in teardown (Section 5); a lingering Monitor named `Lab: TiDB *` in a shared trial account will confuse later sessions using the same account.
 - **`dd-trace/init` ordering.** If any other module in `apm-service/server.ts` is imported before `dd-trace/init`, `mysql2` auto-instrumentation silently does not attach and no span appears; this is the single most common reason Task 7.12's manual run shows no trace.
+
+## 10. Subagent work packets
+
+Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets in this plan run in the order listed; a later packet may edit a file an earlier packet created. Plan 00 must be complete first.
+
+### Packet 09-V1: Verify open facts before building
+- Tasks: none (docs only)
+- Depends on: 00-P10   Shared runtime: cloud-account
+- Files owned: `integrations/docs/plans/09-datadog.md` (section 4 only)
+- Model: sonnet   Effort: S
+- Items to confirm (run each item's confirm step, paste the real output into section 4, set VERIFIED or record the workaround):
+  - | TiDB Cloud's Datadog integration is documented separately for Starter (not available), Essential, Premium, and Dedicated (this plan's primary reference page covers Dedicated only) | https://docs.pingcap.com/tidbcloud/monitor-datadog-integration/ (note pointing to "Integrate TiDB Cloud Essential wi
+  - | Whether Datadog's dedicated Database Monitoring (DBM) product lists TiDB as a supported integration (as distinct from the generic Agent/OpenMetrics `tidb` check used in this plan) | Not opened in this planning pass; DBM's documented supported databases are Postgres, MySQL, SQL Server, and Oracle i
+- Gate:
+  - `grep -c UNVERIFIED integrations/docs/plans/09-datadog.md` -> lower than before, and every remaining item says why it cannot be checked yet
+- Done when: no packet below depends on an unconfirmed fact without a recorded workaround.
+
+### Packet 09-P7: 1 - RED: manifest test fails (no manifest yet)
+- Tasks: 7
+- Depends on: 09-V1   Shared runtime: none
+- Files owned: `integrations/demos/datadog/test/manifest.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-datadog exec vitest run test/manifest.test.ts` -> all PASS
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 09-P7: 2 - GREEN: write manifest.json
+- Tasks: 7
+- Depends on: 09-P7   Shared runtime: cloud-account
+- Files owned: `integrations/demos/datadog/manifest.json`, `integrations/demos/datadog/test/manifest.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-datadog exec vitest run test/manifest.test.ts` -> all PASS
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 09-P7: 3 - RED: Datadog query builders
+- Tasks: 7
+- Depends on: 09-P7   Shared runtime: cloud-account
+- Files owned: `integrations/demos/datadog/runner/test/datadogQuery.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-datadog exec vitest run runner/test/datadogQuery.test.ts` -> all PASS
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 09-P7: 4 - GREEN: Datadog query builders
+- Tasks: 7
+- Depends on: 09-P7   Shared runtime: cloud-account
+- Files owned: `integrations/demos/datadog/runner/src/datadogQuery.ts`, `integrations/demos/datadog/runner/test/datadogQuery.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-datadog exec vitest run runner/test/datadogQuery.test.ts` -> all PASS
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 09-P7: 5 - RED: detection latency math
+- Tasks: 7
+- Depends on: 09-P7   Shared runtime: none
+- Files owned: `integrations/demos/datadog/runner/test/latency.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-datadog exec vitest run runner/test/latency.test.ts` -> all PASS
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 09-P7: 6 - GREEN: detection latency math
+- Tasks: 7
+- Depends on: 09-P7   Shared runtime: none
+- Files owned: `integrations/demos/datadog/runner/src/latency.ts`, `integrations/demos/datadog/runner/test/latency.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-datadog exec vitest run runner/test/latency.test.ts` -> all PASS
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 09-P7: 7 - RED: digest correlation
+- Tasks: 7
+- Depends on: 09-P7   Shared runtime: none
+- Files owned: `integrations/demos/datadog/runner/test/digestCorrelation.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-datadog exec vitest run runner/test/digestCorrelation.test.ts` -> all PASS
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 09-P7: 8 - GREEN: digest correlation
+- Tasks: 7
+- Depends on: 09-P7   Shared runtime: none
+- Files owned: `integrations/demos/datadog/runner/src/digestCorrelation.ts`, `integrations/demos/datadog/runner/test/digestCorrelation.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-datadog exec vitest run runner/test/digestCorrelation.test.ts` -> all PASS
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 09-P7: 9 - Infra: Datadog Agent with the tidb integration (manual live run)
+- Tasks: 7
+- Depends on: 09-P7   Shared runtime: cloud-account
+- Files owned: `integrations/demos/datadog/infra/conf.d/tidb.yaml`, `integrations/demos/datadog/infra/docker-compose.yml`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-datadog typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 09-P7: 10 - Monitor definitions (manual live run)
+- Tasks: 7
+- Depends on: 09-P7   Shared runtime: cloud-account
+- Files owned: `integrations/demos/datadog/.monitor-ids.json`, `integrations/demos/datadog/infra/monitors`, `integrations/demos/datadog/infra/monitors/connection-surge.json`, `integrations/demos/datadog/infra/monitors/slow-query-storm.json`, `integrations/demos/datadog/infra/monitors/store-outage.json`, `integrations/demos/datadog/infra/monitors/write-hot-spot.json`, `integrations/demos/datadog/runner/src/monitorClient.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-datadog typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 09-P7: 11 - Thin I/O: Datadog metrics client (manual live run)
+- Tasks: 7
+- Depends on: 09-P7   Shared runtime: cloud-account
+- Files owned: `integrations/demos/datadog/runner/src/metricsClient.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-datadog typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 09-P7: 12 - APM-instrumented service (manual live run)
+- Tasks: 7
+- Depends on: 09-P7   Shared runtime: cloud-account
+- Files owned: `integrations/demos/datadog/apm-service/server.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-datadog typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 09-P7: 13 - Runner wiring (manual live run)
+- Tasks: 7
+- Depends on: 09-P7   Shared runtime: tidb-playground
+- Files owned: `integrations/demos/datadog/.env`, `integrations/demos/datadog/.env.example`, `integrations/demos/datadog/runner/main.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-datadog typecheck` -> exit 0
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 09-P7: 14 - Package scaffolding
+- Tasks: 7
+- Depends on: 09-P7   Shared runtime: tidb-playground
+- Files owned: `integrations/demos/datadog/.env.example`, `integrations/demos/datadog/package.json`, `integrations/demos/datadog/tsconfig.json`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-datadog typecheck` -> exit 0
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 09-P7: 15 - README.md
+- Tasks: 7
+- Depends on: 09-P7   Shared runtime: cloud-account
+- Files owned: `integrations/demos/datadog/.monitor-ids.json`, `integrations/demos/datadog/README.md`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-datadog typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 09-P7: 16 - TALK-TRACK.md
+- Tasks: 7
+- Depends on: 09-P7   Shared runtime: cloud-account
+- Files owned: `integrations/demos/datadog/TALK-TRACK.md`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-datadog typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 09-R: Record and publish the featured trace
+- Tasks: section 8
+- Depends on: 09-P7   Shared runtime: cloud-account
+- Files owned: `integrations/demos/datadog/traces/featured.json`
+- Model: coordinator   Effort: M
+- Gate:
+  - `pnpm lab validate datadog` -> `datadog: manifest ok, featured trace ok (N events)`
+  - `pnpm lab check-public` -> `0 findings`
+  - teardown commands from section 5 run and confirmed
+- Done when: the replay tells the whole story in 3-6 minutes of playback at 1x.

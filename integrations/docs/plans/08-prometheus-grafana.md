@@ -195,7 +195,7 @@ Write `demos/prometheus-grafana/manifest.json`:
   "integrations": ["Prometheus", "Grafana", "Alertmanager"],
   "pattern": "platform and SRE teams that will not approve a new database until its metrics, alerts, and traces land in the observability stack they already run",
   "publish": true,
-  "runner": { "command": ["node", "--import", "tsx", "main.ts"], "cwd": "runner" },
+  "runner": { "command": ["node", "--import", "tsx", "runner/main.ts"], "cwd": "." },
   "nodes": [
     { "id": "workload", "label": "Workload generator", "kind": "source", "x": 8, "y": 60 },
     { "id": "tidb", "label": "TiDB", "kind": "tidb", "x": 30, "y": 30 },
@@ -863,7 +863,7 @@ Write `demos/prometheus-grafana/package.json`:
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run", "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@lab/contract": "workspace:*",
@@ -871,8 +871,9 @@ Write `demos/prometheus-grafana/package.json`:
     "mysql2": "^3.11.0"
   },
   "devDependencies": {
+    "@types/node": "^22.10.0",
     "tsx": "^4.19.0",
-    "vitest": "^2.1.0"
+    "vitest": "^3.2.0"
   }
 }
 ```
@@ -1049,3 +1050,184 @@ Commit: `git add demos/prometheus-grafana/TALK-TRACK.md && git commit -m "promet
 - **Connection surge exhausting the pool.** `runConnectionSurge` opens real connections via `pool.getConnection()`; if `createTidbPool()`'s default pool size is smaller than 200, most of those "connections" will actually be pool waiters, not new TCP connections to TiDB, and `active-connections` will undercount the fault. Confirm the pool's `connectionLimit` is raised (e.g. via `TIDB_*` env or a pool-options override) to at least 250 before recording.
 - **Grafana dashboard drift between playground versions.** The playground always deploys "the latest stable" component versions (Section 4, `tiup-playground` doc); a newer TiDB release could rename a panel or add a metric. The alert rules in this plan reference raw metric names (verified in Section 4), not dashboard panel titles, so they are more stable than screenshots; re-verify metric names against `docs.pingcap.com/tidb/stable/alert-rules/` if a recording session shows an alert never firing.
 - **TiDB Cloud appendix cost creep.** If the optional Dedicated-cluster appendix is recorded, forgetting to pause or delete the cluster is the single most common way this demo accrues real cost; Section 5's teardown step exists specifically to prevent that.
+
+## 10. Subagent work packets
+
+Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets in this plan run in the order listed; a later packet may edit a file an earlier packet created. Plan 00 must be complete first.
+
+### Packet 08-V1: Verify open facts before building
+- Tasks: none (docs only)
+- Depends on: 00-P10   Shared runtime: tidb-playground
+- Files owned: `integrations/docs/plans/08-prometheus-grafana.md` (section 4 only)
+- Model: sonnet   Effort: S
+- Items to confirm (run each item's confirm step, paste the real output into section 4, set VERIFIED or record the workaround):
+  - | Whether a demo-local Prometheus can add scrape targets discovered from `tiup playground display` output (rather than static config) via file-based service discovery | Not checked against a live playground in this planning pass | **UNVERIFIED** - confirm in Task 7.2 by running `tiup playground disp
+- Gate:
+  - `grep -c UNVERIFIED integrations/docs/plans/08-prometheus-grafana.md` -> lower than before, and every remaining item says why it cannot be checked yet
+- Done when: no packet below depends on an unconfirmed fact without a recorded workaround.
+
+### Packet 08-P7: 1 - RED: manifest test fails (no manifest yet)
+- Tasks: 7
+- Depends on: 08-V1   Shared runtime: none
+- Files owned: `integrations/demos/prometheus-grafana/test/manifest.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-prometheus-grafana exec vitest run test/manifest.test.ts` -> all PASS
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 08-P7: 2 - GREEN: write manifest.json
+- Tasks: 7
+- Depends on: 08-P7   Shared runtime: none
+- Files owned: `integrations/demos/prometheus-grafana/manifest.json`, `integrations/demos/prometheus-grafana/test/manifest.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-prometheus-grafana exec vitest run test/manifest.test.ts` -> all PASS
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 08-P7: 3 - RED: PromQL builders
+- Tasks: 7
+- Depends on: 08-P7   Shared runtime: none
+- Files owned: `integrations/demos/prometheus-grafana/runner/test/promql.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-prometheus-grafana exec vitest run runner/test/promql.test.ts` -> all PASS
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 08-P7: 4 - GREEN: PromQL builders
+- Tasks: 7
+- Depends on: 08-P7   Shared runtime: none
+- Files owned: `integrations/demos/prometheus-grafana/runner/src/promql.ts`, `integrations/demos/prometheus-grafana/runner/test/promql.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-prometheus-grafana exec vitest run runner/test/promql.test.ts` -> all PASS
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 08-P7: 5 - RED: detection and recovery latency math
+- Tasks: 7
+- Depends on: 08-P7   Shared runtime: none
+- Files owned: `integrations/demos/prometheus-grafana/runner/test/latency.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-prometheus-grafana exec vitest run runner/test/latency.test.ts` -> all PASS
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 08-P7: 6 - GREEN: detection and recovery latency math
+- Tasks: 7
+- Depends on: 08-P7   Shared runtime: none
+- Files owned: `integrations/demos/prometheus-grafana/runner/src/latency.ts`, `integrations/demos/prometheus-grafana/runner/test/latency.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-prometheus-grafana exec vitest run runner/test/latency.test.ts` -> all PASS
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 08-P7: 7 - RED: fault state machine
+- Tasks: 7
+- Depends on: 08-P7   Shared runtime: none
+- Files owned: `integrations/demos/prometheus-grafana/runner/test/faultState.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-prometheus-grafana exec vitest run runner/test/faultState.test.ts` -> all PASS
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 08-P7: 8 - GREEN: fault state machine
+- Tasks: 7
+- Depends on: 08-P7   Shared runtime: none
+- Files owned: `integrations/demos/prometheus-grafana/runner/src/faultState.ts`, `integrations/demos/prometheus-grafana/runner/test/faultState.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-prometheus-grafana exec vitest run runner/test/faultState.test.ts` -> all PASS
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 08-P7: 9 - Thin I/O: Prometheus instant-query client (manual live run)
+- Tasks: 7
+- Depends on: 08-P7   Shared runtime: tidb-playground
+- Files owned: `integrations/demos/prometheus-grafana/infra/docker-compose.yml`, `integrations/demos/prometheus-grafana/runner/src/prometheusClient`, `integrations/demos/prometheus-grafana/runner/src/prometheusClient.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-prometheus-grafana typecheck` -> exit 0
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 08-P7: 10 - Thin I/O: webhook receiver (manual live run)
+- Tasks: 7
+- Depends on: 08-P7   Shared runtime: tidb-playground
+- Files owned: `integrations/demos/prometheus-grafana/runner/src/webhookReceiver`, `integrations/demos/prometheus-grafana/runner/src/webhookReceiver.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-prometheus-grafana typecheck` -> exit 0
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 08-P7: 11 - Thin I/O: workload generator (manual live run, exported for Plan 09)
+- Tasks: 7
+- Depends on: 08-P7   Shared runtime: none
+- Files owned: `integrations/demos/prometheus-grafana/runner/src/workload.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-prometheus-grafana typecheck` -> exit 0
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 08-P7: 12 - Thin I/O: fault injector (manual live run, exported for Plan 09)
+- Tasks: 7
+- Depends on: 08-P7   Shared runtime: tidb-playground
+- Files owned: `integrations/demos/prometheus-grafana/runner/src/faultInjector.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-prometheus-grafana typecheck` -> exit 0
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 08-P7: 13 - Infra: demo-local Prometheus + Alertmanager (manual live run)
+- Tasks: 7
+- Depends on: 08-P7   Shared runtime: tidb-playground
+- Files owned: `integrations/demos/prometheus-grafana/infra`, `integrations/demos/prometheus-grafana/infra/alert-rules.yml`, `integrations/demos/prometheus-grafana/infra/alertmanager.yml`, `integrations/demos/prometheus-grafana/infra/docker-compose.yml`, `integrations/demos/prometheus-grafana/infra/prometheus.yml`
+- Model: sonnet   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-prometheus-grafana typecheck` -> exit 0
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 08-P7: 14 - Runner wiring (manual live run)
+- Tasks: 7
+- Depends on: 08-P7   Shared runtime: tidb-playground
+- Files owned: `integrations/demos/prometheus-grafana/.env`, `integrations/demos/prometheus-grafana/.env.example`, `integrations/demos/prometheus-grafana/infra/docker-compose.yml`, `integrations/demos/prometheus-grafana/runner/main.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-prometheus-grafana typecheck` -> exit 0
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 08-P7: 15 - Package scaffolding
+- Tasks: 7
+- Depends on: 08-P7   Shared runtime: tidb-playground
+- Files owned: `integrations/demos/prometheus-grafana/.env.example`, `integrations/demos/prometheus-grafana/package.json`, `integrations/demos/prometheus-grafana/tsconfig.json`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-prometheus-grafana typecheck` -> exit 0
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 08-P7: 16 - README.md
+- Tasks: 7
+- Depends on: 08-P7   Shared runtime: cloud-account
+- Files owned: `integrations/demos/prometheus-grafana/README.md`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-prometheus-grafana typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 08-P7: 17 - TALK-TRACK.md
+- Tasks: 7
+- Depends on: 08-P7   Shared runtime: cloud-account
+- Files owned: `integrations/demos/prometheus-grafana/TALK-TRACK.md`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-prometheus-grafana typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 08-R: Record and publish the featured trace
+- Tasks: section 8
+- Depends on: 08-P7   Shared runtime: cloud-account
+- Files owned: `integrations/demos/prometheus-grafana/traces/featured.json`
+- Model: coordinator   Effort: M
+- Gate:
+  - `pnpm lab validate prometheus-grafana` -> `prometheus-grafana: manifest ok, featured trace ok (N events)`
+  - `pnpm lab check-public` -> `0 findings`
+  - teardown commands from section 5 run and confirmed
+- Done when: the replay tells the whole story in 3-6 minutes of playback at 1x.

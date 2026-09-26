@@ -186,7 +186,7 @@ Follow TDD strictly for every file in `runner/src/*.ts` that is pure logic. `okt
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run", "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@lab/contract": "workspace:*",
@@ -194,8 +194,10 @@ Follow TDD strictly for every file in `runner/src/*.ts` that is pure logic. `okt
     "mysql2": "^3.11.0"
   },
   "devDependencies": {
-    "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "tsx": "^4.20.0",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
   }
 }
 ```
@@ -539,7 +541,7 @@ describe('okta manifest', () => {
   "pattern": "Enterprise security team in a PoC asking many SSO setup questions and wanting to see identity lifecycle end to end before approving a new database.",
   "publish": true,
   "runner": {
-    "command": ["pnpm", "exec", "tsx", "runner/main.ts"],
+    "command": ["node", "--import", "tsx", "runner/main.ts"],
     "cwd": "."
   },
   "nodes": [
@@ -1148,3 +1150,159 @@ git commit -m "okta: add featured trace"
 - **Cloud Organization SSO cannot be disabled once enabled.** Never enable it against a shared or production TiDB Cloud organization for a Part A walkthrough; use a disposable or already-SSO-enabled demo organization.
 - **Password embedded in generated SQL strings.** `provisionUser` in `tidbSync.ts` interpolates the demo password directly into a `CREATE USER ... IDENTIFIED BY` statement because `mysql2`'s parameter binding does not cover `CREATE USER`/`GRANT` DDL; the password is a fixed, non-secret demo value (`Testpass123!`), never a real credential, and is never logged by the emitter.
 - **Okta Event Hooks remain the right production answer.** If a customer wants sub-second reaction instead of poll-interval latency, point them at Event Hooks with a real ingress and TLS termination, not at a local tunnel; this plan intentionally does not build that path live.
+
+## 10. Subagent work packets
+
+Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets in this plan run in the order listed; a later packet may edit a file an earlier packet created. Plan 00 must be complete first.
+
+### Packet 05-V1: Verify open facts before building
+- Tasks: none (docs only)
+- Depends on: 00-P10   Shared runtime: cloud-account
+- Files owned: `integrations/docs/plans/05-okta.md` (section 4 only)
+- Model: sonnet   Effort: S
+- Items to confirm (run each item's confirm step, paste the real output into section 4, set VERIFIED or record the workaround):
+  - | The literal OIDC redirect/callback URI value shown in the TiDB Cloud console | same page (does not print the literal value in fetched text) | **UNVERIFIED** - confirm by enabling OIDC in a live org and reading the console pane; record the literal value in `GUIDE-ORG-SSO.md` |
+  - | TiDB Cloud has no documented break-glass/emergency-admin feature | Absence in https://docs.pingcap.com/tidbcloud/tidb-cloud-org-sso-authentication/ | **UNVERIFIED as a negative** - re-check release notes at build time |
+  - | Whether an Okta Authorization Server can be configured so an ID/access token's `sub` claim equals an arbitrary TiDB username (e.g. via app username format) without custom code | Not found in fetched docs | **UNVERIFIED** - confirm in a real Okta org's Authorization Server / app "username format" s
+  - | Because Okta's LDAP Interface documents simple bind only, `authentication_ldap_simple` is the plausible pairing and `authentication_ldap_sasl` (SCRAM/GSSAPI) is not documented as supported against it | Inference from the two sources above | **UNVERIFIED** - no doc states this pairing explicitly ei
+  - | Okta's LDAP Interface is not listed among the features included in the Integrator Free Plan (SSO, Universal Directory, Adaptive MFA, Lifecycle Management, API Access Management, Workflows) | https://developer.okta.com/docs/reference/org-defaults/ | **UNVERIFIED** - the page does not explicitly say
+  - | Default rate limit for `GET /api/v1/logs` is commonly reported as 100 requests/minute, configurable up to 1000 requests/minute | https://devforum.okta.com/t/what-is-ratelimit-for-system-logs-api-v1-logs/35056 and https://developer.okta.com/docs/reference/rl2-monitor/ | **UNVERIFIED for this specif
+- Gate:
+  - `grep -c UNVERIFIED integrations/docs/plans/05-okta.md` -> lower than before, and every remaining item says why it cannot be checked yet
+- Done when: no packet below depends on an unconfirmed fact without a recorded workaround.
+
+### Packet 05-P1: Scaffold the demo package
+- Tasks: 1
+- Depends on: 05-V1   Shared runtime: none
+- Files owned: `integrations/demos/okta/package.json`, `integrations/demos/okta/tsconfig.json`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 1's text; `pnpm --filter @lab/demo-okta typecheck` -> exit 0
+- Done when: Task 1's steps are all checked off and the gate output matches.
+
+### Packet 05-P2: `groupRoleMap.ts` (pure: Okta group -> TiDB role)
+- Tasks: 2
+- Depends on: 05-P1   Shared runtime: cloud-account
+- Files owned: `integrations/demos/okta/runner/src/groupRoleMap.ts`, `integrations/demos/okta/runner/test/groupRoleMap.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-okta exec vitest run runner/test/groupRoleMap.test.ts` -> all PASS
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 2's steps are all checked off and the gate output matches.
+
+### Packet 05-P3: `sqlIdentifiers.ts` (pure: safe identifier quoting)
+- Tasks: 3
+- Depends on: 05-P2   Shared runtime: none
+- Files owned: `integrations/demos/okta/runner/src/sqlIdentifiers.ts`, `integrations/demos/okta/runner/test/sqlIdentifiers.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-okta exec vitest run runner/test/sqlIdentifiers.test.ts` -> all PASS
+- Done when: Task 3's steps are all checked off and the gate output matches.
+
+### Packet 05-P4: `grantDiff.ts` (pure: desired vs actual grant drift)
+- Tasks: 4
+- Depends on: 05-P3   Shared runtime: none
+- Files owned: `integrations/demos/okta/runner/src/grantDiff.ts`, `integrations/demos/okta/runner/test/grantDiff.test.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/demo-okta exec vitest run runner/test/grantDiff.test.ts` -> all PASS
+- Done when: Task 4's steps are all checked off and the gate output matches.
+
+### Packet 05-P5: `latency.ts` (pure: elapsed ms since an Okta event's published timestamp)
+- Tasks: 5
+- Depends on: 05-P4   Shared runtime: cloud-account
+- Files owned: `integrations/demos/okta/runner/src/latency.ts`, `integrations/demos/okta/runner/test/latency.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-okta exec vitest run runner/test/latency.test.ts` -> all PASS
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 5's steps are all checked off and the gate output matches.
+
+### Packet 05-P6: `manifest.json` and its test
+- Tasks: 6
+- Depends on: 05-P5   Shared runtime: cloud-account
+- Files owned: `integrations/demos/okta/manifest.json`, `integrations/demos/okta/test/manifest.test.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/demo-okta exec vitest run test/manifest.test.ts` -> all PASS
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 6's steps are all checked off and the gate output matches.
+
+### Packet 05-P7: `.env.example`
+- Tasks: 7
+- Depends on: 05-P6   Shared runtime: tidb-playground
+- Files owned: `integrations/demos/okta/.env.example`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-okta typecheck` -> exit 0
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 05-P8: `oktaPoller.ts` (I/O adapter, manual verification)
+- Tasks: 8
+- Depends on: 05-P7   Shared runtime: cloud-account
+- Files owned: `integrations/demos/okta/runner/src/oktaPoller.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 8's text; `pnpm --filter @lab/demo-okta typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 8's steps are all checked off and the gate output matches.
+
+### Packet 05-P9: `tidbSync.ts` (I/O adapter, manual verification)
+- Tasks: 9
+- Depends on: 05-P8   Shared runtime: none
+- Files owned: `integrations/demos/okta/runner/src/tidbSync.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 9's text; `pnpm --filter @lab/demo-okta typecheck` -> exit 0
+- Done when: Task 9's steps are all checked off and the gate output matches.
+
+### Packet 05-P10: `main.ts` (wiring, manual live-run)
+- Tasks: 10
+- Depends on: 05-P9   Shared runtime: cloud-account
+- Files owned: `integrations/demos/okta/runner/main.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 10's text; `pnpm --filter @lab/demo-okta typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 10's steps are all checked off and the gate output matches.
+
+### Packet 05-P11: `README.md`
+- Tasks: 11
+- Depends on: 05-P10   Shared runtime: cloud-account
+- Files owned: `integrations/demos/okta/README.md`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 11's text; `pnpm --filter @lab/demo-okta typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 11's steps are all checked off and the gate output matches.
+
+### Packet 05-P12: `TALK-TRACK.md`
+- Tasks: 12
+- Depends on: 05-P11   Shared runtime: cloud-account
+- Files owned: `integrations/demos/okta/TALK-TRACK.md`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 12's text; `pnpm --filter @lab/demo-okta typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 12's steps are all checked off and the gate output matches.
+
+### Packet 05-P13: `GUIDE-ORG-SSO.md` (Part A)
+- Tasks: 13
+- Depends on: 05-P12   Shared runtime: cloud-account
+- Files owned: `integrations/demos/okta/GUIDE-ORG-SSO.md`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 13's text; `pnpm --filter @lab/demo-okta typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 13's steps are all checked off and the gate output matches.
+
+### Packet 05-R: Record and publish the featured trace
+- Tasks: section 8
+- Depends on: 05-P13   Shared runtime: cloud-account
+- Files owned: `integrations/demos/okta/traces/featured.json`
+- Model: coordinator   Effort: M
+- Gate:
+  - `pnpm lab validate okta` -> `okta: manifest ok, featured trace ok (N events)`
+  - `pnpm lab check-public` -> `0 findings`
+  - teardown commands from section 5 run and confirmed
+- Done when: the replay tells the whole story in 3-6 minutes of playback at 1x.

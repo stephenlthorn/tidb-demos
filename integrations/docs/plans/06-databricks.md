@@ -205,17 +205,19 @@ Create the package skeleton (no tests yet, nothing to fail/pass - this is scaffo
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@lab/contract": "workspace:*",
     "@lab/runner-kit": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^22.10.0",
     "mysql2": "^3.11.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
   }
 }
 ```
@@ -308,7 +310,7 @@ Minimal implementation.
   "pattern": "Data platform teams on Databricks asking how an operational database fits next to the lakehouse.",
   "publish": true,
   "runner": {
-    "command": ["pnpm", "exec", "tsx", "runner/main.ts"],
+    "command": ["node", "--import", "tsx", "runner/main.ts"],
     "cwd": "."
   },
   "nodes": [
@@ -765,14 +767,25 @@ const isStatementState = (value: unknown): value is StatementState =>
   value === 'CANCELED' ||
   value === 'CLOSED';
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const toRawStatementResponse = (value: unknown): RawStatementResponse => (isRecord(value) ? value : {});
+
+const toStringRows = (value: unknown): readonly (readonly string[])[] => {
+  if (!Array.isArray(value)) return [];
+  return value.map((row) => (Array.isArray(row) ? row.map((cell) => String(cell)) : []));
+};
+
 export const parseStatementResponse = (json: unknown): StatementResponse => {
-  const raw = json as RawStatementResponse;
-  const state = isStatementState(raw.status?.state) ? raw.status.state : 'FAILED';
-  const rows = Array.isArray(raw.result?.data_array)
-    ? (raw.result?.data_array as readonly (readonly string[])[])
-    : [];
-  const rowCount = typeof raw.result?.row_count === 'number' ? raw.result.row_count : undefined;
-  const errorMessage = typeof raw.status?.error?.message === 'string' ? raw.status.error.message : undefined;
+  const raw = toRawStatementResponse(json);
+  const status = isRecord(raw.status) ? raw.status : {};
+  const result = isRecord(raw.result) ? raw.result : {};
+  const error = isRecord(status.error) ? status.error : {};
+  const state = isStatementState(status.state) ? status.state : 'FAILED';
+  const rows = toStringRows(result.data_array);
+  const rowCount = typeof result.row_count === 'number' ? result.row_count : undefined;
+  const errorMessage = typeof error.message === 'string' ? error.message : undefined;
   const statementId = typeof raw.statement_id === 'string' ? raw.statement_id : '';
   return { statementId, state, rowCount, rows, errorMessage };
 };
@@ -1096,15 +1109,21 @@ git commit -m "databricks demo: Statement Execution API client"
 
 - [ ] Not started
 
-Create the TiDB Cloud Starter cluster first (Section 5) and note its host, port 4000, username, and password. Then, in the Databricks SQL editor (attached to a running SQL warehouse), run in order:
+Create the TiDB Cloud Starter cluster first (Section 5) and note its host, port 4000, username, and password.
+
+Step 1: register the TiDB credentials as Databricks secrets, from a terminal:
+
+```bash
+databricks secrets create-scope --scope lab-tidb
+databricks secrets put-secret lab-tidb tidb-user
+databricks secrets put-secret lab-tidb tidb-password
+```
+
+Then, in the Databricks SQL editor (attached to a running SQL warehouse), run in order:
+
+Step 2: create the federation connection (read-only).
 
 ```sql
--- 1. Register the TiDB credentials as Databricks secrets before this step, from a terminal:
---    databricks secrets create-scope --scope lab-tidb
---    databricks secrets put-secret lab-tidb tidb-user
---    databricks secrets put-secret lab-tidb tidb-password
-
--- 2. Create the federation connection (read-only)
 CREATE CONNECTION IF NOT EXISTS tidb_lab_connection
 TYPE mysql
 OPTIONS (
@@ -1113,13 +1132,19 @@ OPTIONS (
   user secret ('lab-tidb', 'tidb-user'),
   password secret ('lab-tidb', 'tidb-password')
 );
+```
 
--- 3. Register TiDB's `lab` database as a foreign (read-only) catalog
+Step 3: register TiDB's `lab` database as a foreign (read-only) catalog.
+
+```sql
 CREATE FOREIGN CATALOG IF NOT EXISTS tidb_fed
 USING CONNECTION tidb_lab_connection
 OPTIONS (database 'lab');
+```
 
--- 4. Create the writable Delta table Databricks scores into
+Step 4: create the writable Delta table Databricks scores into.
+
+```sql
 CREATE SCHEMA IF NOT EXISTS main.lab_databricks;
 CREATE TABLE IF NOT EXISTS main.lab_databricks.risk_scores (
   customer_id BIGINT,
@@ -1127,8 +1152,11 @@ CREATE TABLE IF NOT EXISTS main.lab_databricks.risk_scores (
   rule STRING,
   scored_at TIMESTAMP
 );
+```
 
--- 5. Confirm the federated read reaches TiDB (run only after Task 12 has created events/heartbeats in TiDB)
+Step 5: confirm the federated read reaches TiDB (run only after Task 12 has created `events`/`heartbeats` in TiDB).
+
+```sql
 SELECT * FROM tidb_fed.lab.heartbeats;
 ```
 
@@ -1141,7 +1169,12 @@ cd demos/databricks
 DATABRICKS_HOST=<workspace-host> DATABRICKS_TOKEN=<token> DATABRICKS_WAREHOUSE_ID=<id> \
   pnpm exec tsx -e "
     import { runStatement } from './runner/src/statementExecutionClient';
-    const config = { host: process.env.DATABRICKS_HOST!, token: process.env.DATABRICKS_TOKEN!, warehouseId: process.env.DATABRICKS_WAREHOUSE_ID!, statementTimeoutMs: 30000 };
+    const need = (name: string): string => {
+      const value = process.env[name];
+      if (value === undefined || value === '') throw new Error('missing ' + name);
+      return value;
+    };
+    const config = { host: need('DATABRICKS_HOST'), token: need('DATABRICKS_TOKEN'), warehouseId: need('DATABRICKS_WAREHOUSE_ID'), statementTimeoutMs: 30000 };
     runStatement(config, 'SELECT 1 AS ok').then((r) => console.log(JSON.stringify(r)));
   "
 ```
@@ -1183,7 +1216,7 @@ BURST_EVENT_COUNT=200
 CUSTOMER_COUNT=50
 ```
 
-`demos/databricks/.env.example` (committed, the contract's standard block plus this demo's variables, values redacted):
+`demos/databricks/.env.example` (committed, the contract's standard block plus this demo's variables, values redacted). Unlike most demos in this folder, this one cannot point `TIDB_HOST`/`TIDB_TLS` at a local `tiup playground`, because Databricks compute must reach TiDB over the public internet; when filling in the real `.env`, set `TIDB_HOST` to the Starter cluster's public endpoint host (for example `<your-starter-cluster-host>.<region>.prod.aws.tidbcloud.com`) and `TIDB_TLS=true`:
 
 ```
 TIDB_HOST=127.0.0.1
@@ -1194,12 +1227,6 @@ TIDB_DATABASE=lab
 TIDB_TLS=false
 LAB_ENV_TIDB=tiup playground (local)
 LAB_ENV_NOTES=
-
-# This demo overrides the block above: TiDB must be a TiDB Cloud Starter cluster
-# reachable from Databricks over the public internet, not a local tiup playground.
-# TIDB_HOST=<your-starter-cluster-host>.<region>.prod.aws.tidbcloud.com
-# TIDB_TLS=true
-
 DATABRICKS_HOST=
 DATABRICKS_TOKEN=
 DATABRICKS_WAREHOUSE_ID=
@@ -1309,6 +1336,8 @@ let scoresCheckSent = false;
 
 const toDateTimeMs = (ms: number): string => new Date(ms).toISOString().slice(0, 23).replace('T', ' ');
 
+const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
 const qualifiedScoresTable = (): string =>
   `${federationConfig.scoresCatalog}.${federationConfig.scoresSchema}.${federationConfig.scoresTable}`;
 
@@ -1410,7 +1439,7 @@ const runScoringOnce = async (): Promise<void> => {
     const upsert = buildUpsertStatement(scoredRows);
     if (upsert.sql !== '') {
       const { ms } = await timed(async () => {
-        await pool.execute(upsert.sql, upsert.params as unknown[]);
+        await pool.execute(upsert.sql, [...upsert.params]);
       });
       const writeBackRate = scoredRows.length / Math.max(ms / 1000, 0.001);
       emitter.metric('write-back-rate', writeBackRate);
@@ -1431,8 +1460,8 @@ const runScoringOnce = async (): Promise<void> => {
     );
     emitter.phase('low-latency-serving');
   } catch (error) {
-    emitter.log('error', `scoring run failed: ${(error as Error).message}`, 'databricks');
-    emitter.node('databricks', 'degraded', (error as Error).message);
+    emitter.log('error', `scoring run failed: ${errorMessage(error)}`, 'databricks');
+    emitter.node('databricks', 'degraded', errorMessage(error));
   } finally {
     scoringInFlight = false;
   }
@@ -1444,7 +1473,7 @@ const runAdhocAnalytics = async (): Promise<void> => {
     const [rows] = await pool.query(
       '/*+ READ_FROM_STORAGE(TIFLASH[events]) */ SELECT event_type, COUNT(*) AS n, SUM(amount) AS total FROM events WHERE created_at >= NOW(3) - INTERVAL 5 MINUTE GROUP BY event_type',
     );
-    return rows as readonly unknown[];
+    return rows;
   });
   emitter.metric('analytics-query-ms', ms);
   emitter.flow('analytics-query', Array.isArray(value) ? value.length : 0);
@@ -1487,7 +1516,7 @@ const main = async (): Promise<void> => {
 };
 
 main().catch((error) => {
-  emitter.log('error', (error as Error).message);
+  emitter.log('error', errorMessage(error));
   process.exitCode = 1;
 });
 ```
@@ -1497,7 +1526,7 @@ main().catch((error) => {
 Run (manual, live, needs Tasks 11/12 done and `.env` populated):
 
 ```bash
-cd demos/databricks && pnpm exec tsx runner/main.ts
+cd demos/databricks && node --import tsx runner/main.ts
 ```
 
 Expected: no crash; after `EVENT_WRITE_INTERVAL_MS`, a stream of JSON lines on stdout starting with `{"type":"node",...}` and `{"type":"phase","phase":"steady-writes",...}`, then repeating `{"type":"metric","id":"event-write-rate",...}` and `{"type":"metric","id":"serving-p50",...}` lines every second, then after `SCORING_INTERVAL_MS` a burst of `{"type":"phase","phase":"federated-read",...}` through `{"type":"check","id":"loop-closed","status":"pass",...}` lines. Stop with Ctrl-C.
@@ -1522,7 +1551,7 @@ pnpm lab run databricks --port 7070
 
 Expected for `validate`: `manifest.json is valid` (or the equivalent success line the relay prints per Plan 00) with no schema errors.
 
-Expected for `run`: the relay prints it is spawning `pnpm exec tsx runner/main.ts` in `demos/databricks`, then `GET http://localhost:7070/health` (in a second terminal, `curl http://localhost:7070/health`) returns `{"ok":true,"demo":"databricks"}`.
+Expected for `run`: the relay prints it is spawning `node --import tsx runner/main.ts` in `demos/databricks`, then `GET http://localhost:7070/health` (in a second terminal, `curl http://localhost:7070/health`) returns `{"ok":true,"demo":"databricks"}`.
 
 Then exercise a control end to end:
 
@@ -1788,3 +1817,176 @@ git commit -m "databricks demo: README and talk track"
 - **Overlapping scoring runs.** The periodic `every({ intervalMs: scoringIntervalMs, ... })` loop and the `trigger-scoring` control both call `runScoringOnce`; the `scoringInFlight` guard in `runner/main.ts` makes a second call a no-op rather than letting two federated reads race. This is intentional, not a bug to fix later.
 - **String-built SQL for the scoring statement.** `buildScoringStatement` interpolates `rule.name` and the weight/window numbers directly into the SQL text rather than using the Statement Execution API's verified `:name` parameter markers (Section 4). This is safe here only because `ScoringRuleName` is a two-value union checked at compile time and every numeric field is validated finite before formatting (Task 4's test for a `NaN` weight). If this pattern is ever extended to accept a value that did not come from this file's own presets, switch to named parameters instead of interpolation.
 - **Databricks and TiDB region mismatch.** If the TiDB Cloud Starter cluster and the Databricks workspace are on different clouds or distant regions, `freshness-lag-ms` and `full-loop-time` will be dominated by cross-region network latency rather than anything TiDB- or Databricks-specific. Create both in the same cloud/region pairing where possible (Section 5).
+
+## 10. Subagent work packets
+
+Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets in this plan run in the order listed; a later packet may edit a file an earlier packet created. Plan 00 must be complete first.
+
+### Packet 06-V1: Verify open facts before building
+- Tasks: none (docs only)
+- Depends on: 00-P10   Shared runtime: cloud-account
+- Files owned: `integrations/docs/plans/06-databricks.md` (section 4 only)
+- Model: sonnet   Effort: S
+- Items to confirm (run each item's confirm step, paste the real output into section 4, set VERIFIED or record the workaround):
+  - **Environment note on verification method:** `WebFetch` was unavailable in the environment this plan was written in (every domain, including `example.com`, returned "Unable to verify if domain is safe to fetch"). All facts below were confirmed with `WebSearch`, which returns synthesized snippets plu
+  - | Databricks Free Edition runs on **serverless compute only**, must use Unity Catalog to reach external data sources, and its outbound network access is "restricted to a limited set of trusted domains" with "no specific IP you can whitelist." | [Databricks Free Edition limitations](https://docs.data
+- Gate:
+  - `grep -c UNVERIFIED integrations/docs/plans/06-databricks.md` -> lower than before, and every remaining item says why it cannot be checked yet
+- Done when: no packet below depends on an unconfirmed fact without a recorded workaround.
+
+### Packet 06-P1: Scaffold the demo package
+- Tasks: 1
+- Depends on: 06-V1   Shared runtime: none
+- Files owned: `integrations/demos/databricks/package.json`, `integrations/demos/databricks/runner/src`, `integrations/demos/databricks/runner/test`, `integrations/demos/databricks/test`, `integrations/demos/databricks/traces`, `integrations/demos/databricks/tsconfig.json`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 1's text; `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
+- Done when: Task 1's steps are all checked off and the gate output matches.
+
+### Packet 06-P2: Manifest
+- Tasks: 2
+- Depends on: 06-P1   Shared runtime: none
+- Files owned: `integrations/demos/databricks/manifest.json`, `integrations/demos/databricks/test/manifest.test.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/demo-databricks exec vitest run test/manifest.test.ts` -> all PASS
+- Done when: Task 2's steps are all checked off and the gate output matches.
+
+### Packet 06-P3: Scoring rule presets and the rule-toggle
+- Tasks: 3
+- Depends on: 06-P2   Shared runtime: none
+- Files owned: `integrations/demos/databricks/runner/src/scoringRule.ts`, `integrations/demos/databricks/runner/test/scoringRule.test.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/demo-databricks exec vitest run runner/test/scoringRule.test.ts` -> all PASS
+- Done when: Task 3's steps are all checked off and the gate output matches.
+
+### Packet 06-P4: Scoring and heartbeat SQL builders
+- Tasks: 4
+- Depends on: 06-P3   Shared runtime: none
+- Files owned: `integrations/demos/databricks/runner/src/scoringStatement.ts`, `integrations/demos/databricks/runner/test/scoringStatement.test.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/demo-databricks exec vitest run runner/test/scoringStatement.test.ts` -> all PASS
+- Done when: Task 4's steps are all checked off and the gate output matches.
+
+### Packet 06-P5: Reverse-ETL upsert builder
+- Tasks: 5
+- Depends on: 06-P4   Shared runtime: none
+- Files owned: `integrations/demos/databricks/runner/src/upsertStatement.ts`, `integrations/demos/databricks/runner/test/upsertStatement.test.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/demo-databricks exec vitest run runner/test/upsertStatement.test.ts` -> all PASS
+- Done when: Task 5's steps are all checked off and the gate output matches.
+
+### Packet 06-P6: Statement Execution API response parser and poll-decision state machine
+- Tasks: 6
+- Depends on: 06-P5   Shared runtime: none
+- Files owned: `integrations/demos/databricks/runner/src/statementResponse.ts`, `integrations/demos/databricks/runner/test/statementResponse.test.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/demo-databricks exec vitest run runner/test/statementResponse.test.ts` -> all PASS
+- Done when: Task 6's steps are all checked off and the gate output matches.
+
+### Packet 06-P7: Freshness and full-loop math
+- Tasks: 7
+- Depends on: 06-P6   Shared runtime: none
+- Files owned: `integrations/demos/databricks/runner/src/freshness.ts`, `integrations/demos/databricks/runner/test/freshness.test.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/demo-databricks exec vitest run runner/test/freshness.test.ts` -> all PASS
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 06-P8: Synthetic event generator
+- Tasks: 8
+- Depends on: 06-P7   Shared runtime: none
+- Files owned: `integrations/demos/databricks/runner/src/eventGenerator.ts`, `integrations/demos/databricks/runner/test/eventGenerator.test.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/demo-databricks exec vitest run runner/test/eventGenerator.test.ts` -> all PASS
+- Done when: Task 8's steps are all checked off and the gate output matches.
+
+### Packet 06-P9: TiDB schema DDL constants
+- Tasks: 9
+- Depends on: 06-P8   Shared runtime: none
+- Files owned: `integrations/demos/databricks/runner/src/tidbSchema.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 9's text; `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
+- Done when: Task 9's steps are all checked off and the gate output matches.
+
+### Packet 06-P10: Databricks Statement Execution API client
+- Tasks: 10
+- Depends on: 06-P9   Shared runtime: none
+- Files owned: `integrations/demos/databricks/runner/src/statementExecutionClient.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 10's text; `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
+- Done when: Task 10's steps are all checked off and the gate output matches.
+
+### Packet 06-P11: One-time Databricks-side setup (manual, live)
+- Tasks: 11
+- Depends on: 06-P10   Shared runtime: none
+- Files owned: none (manual or docs step)
+- Model: sonnet   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 11's text; `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
+- Done when: Task 11's steps are all checked off and the gate output matches.
+
+### Packet 06-P12: One-time TiDB-side setup (manual, live)
+- Tasks: 12
+- Depends on: 06-P11   Shared runtime: cloud-account
+- Files owned: `integrations/demos/databricks/.env.example`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 12's text; `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 12's steps are all checked off and the gate output matches.
+
+### Packet 06-P13: Wire the runner entry point
+- Tasks: 13
+- Depends on: 06-P12   Shared runtime: none
+- Files owned: `integrations/demos/databricks/runner/main.ts`
+- Model: sonnet   Effort: L
+- Gate:
+  - coordinator reviews the files against Task 13's text; `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
+- Done when: Task 13's steps are all checked off and the gate output matches.
+
+### Packet 06-P14: End-to-end live run through the relay
+- Tasks: 14
+- Depends on: 06-P13   Shared runtime: tidb-playground
+- Files owned: none (manual or docs step)
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 14's text; `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
+- Done when: Task 14's steps are all checked off and the gate output matches.
+
+### Packet 06-P15: Public-content gate
+- Tasks: 15
+- Depends on: 06-P14   Shared runtime: none
+- Files owned: none (manual or docs step)
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 15's text; `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
+- Done when: Task 15's steps are all checked off and the gate output matches.
+
+### Packet 06-P16: README and TALK-TRACK
+- Tasks: 16
+- Depends on: 06-P15   Shared runtime: cloud-account
+- Files owned: `integrations/demos/databricks/README.md`, `integrations/demos/databricks/TALK-TRACK.md`, `integrations/demos/databricks/traces`
+- Model: sonnet   Effort: L
+- Gate:
+  - coordinator reviews the files against Task 16's text; `pnpm --filter @lab/demo-databricks typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 16's steps are all checked off and the gate output matches.
+
+### Packet 06-R: Record and publish the featured trace
+- Tasks: section 8
+- Depends on: 06-P16   Shared runtime: cloud-account
+- Files owned: `integrations/demos/databricks/traces/featured.json`
+- Model: coordinator   Effort: M
+- Gate:
+  - `pnpm lab validate databricks` -> `databricks: manifest ok, featured trace ok (N events)`
+  - `pnpm lab check-public` -> `0 findings`
+  - teardown commands from section 5 run and confirmed
+- Done when: the replay tells the whole story in 3-6 minutes of playback at 1x.

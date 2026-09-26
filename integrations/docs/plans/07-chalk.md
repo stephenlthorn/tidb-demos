@@ -122,6 +122,8 @@ demos/chalk/
   README.md                         what it proves, prerequisites, run, record, teardown, cost notes
   TALK-TRACK.md                     presenter script per phase, discovery questions, objections and answers
   .env.example                      standard TIDB_*/LAB_ENV_* block plus CHALK_CLIENT_ID/CHALK_CLIENT_SECRET/CHALK_ENVIRONMENT/CHALK_API_HOST and RISK_MYSQL_* (Task 9's confirmed names)
+  requirements.txt                  pymysql, chalkpy (pinned per Task 10); lab_runner is installed editable from ../../packages/runner-kit-py, not listed here
+  .venv/                            local virtualenv (gitignored), created in Task 1, used by runner.command and every manual run/test step
   test/
     manifest.test.ts                parses manifest.json with DemoManifestSchema (TypeScript, uses @lab/contract, per platform contract)
   chalk/                            the Chalk project deployed with the Chalk CLI (not run by the relay)
@@ -209,8 +211,26 @@ RISK_MYSQL_DATABASE=lab
 
 `RISK_MYSQL_*` values are placeholders confirmed against the Chalk dashboard's MySQL integration form in Task 9 (see Section 4's UNVERIFIED note on the full variable list); if the dashboard requires different names, update this file to match exactly before Task 9's `chalk apply`.
 
-- [ ] Run: `ls demos/chalk` - expected: `package.json`, `tsconfig.json`, `.env.example` present. This is scaffolding, not logic, so there is no failing test for this task.
-- [ ] Commit: `git add demos/chalk/package.json demos/chalk/tsconfig.json demos/chalk/.env.example && git commit -m "chalk demo: scaffold package"`
+- [ ] Create `demos/chalk/requirements.txt`:
+
+```
+pymysql
+chalkpy
+```
+
+- [ ] Create the runner's virtualenv and install its dependencies, including the local `lab_runner` package editable, from `demos/chalk/`:
+
+```
+python3 -m venv .venv
+.venv/bin/pip install --upgrade pip
+.venv/bin/pip install -r requirements.txt
+.venv/bin/pip install -e ../../packages/runner-kit-py
+```
+
+- [ ] Add `.venv/` to `demos/chalk/.gitignore` (create the file if it does not exist): `.venv/`
+- [ ] Run: `ls demos/chalk` - expected: `package.json`, `tsconfig.json`, `.env.example`, `requirements.txt`, `.venv` present. This is scaffolding, not logic, so there is no failing test for this task.
+- [ ] Run: `.venv/bin/python -c "import lab_runner, pymysql, chalk"` from `demos/chalk` - expected: no import error, confirming the editable `lab_runner` install and both dependencies resolve.
+- [ ] Commit: `git add demos/chalk/package.json demos/chalk/tsconfig.json demos/chalk/.env.example demos/chalk/requirements.txt demos/chalk/.gitignore && git commit -m "chalk demo: scaffold package"`
 
 ### Task 2: Manifest and its validation test
 
@@ -258,8 +278,7 @@ describe('chalk demo manifest', () => {
   "pattern": "fintech ML platform team asking where TiDB fits versus a real-time feature platform (Chalk) and versus a key-value metric store.",
   "publish": true,
   "runner": {
-    "command": ["python3", "main.py"],
-    "cwd": "runner"
+    "command": [".venv/bin/python", "-u", "runner/main.py"]
   },
   "nodes": [
     { "id": "generator", "label": "Transaction generator", "kind": "source", "x": 10, "y": 20 },
@@ -396,7 +415,7 @@ def test_unknown_feature_id_raises():
         assert "not-a-real-feature" in str(exc)
 ```
 
-- [ ] Run: `cd demos/chalk/runner && python3 -m pytest test/test_baseline_sql.py` - expected FAIL: `ModuleNotFoundError: No module named 'src.baseline_sql'`.
+- [ ] Run: `cd demos/chalk/runner && ../.venv/bin/python -m pytest test/test_baseline_sql.py` - expected FAIL: `ModuleNotFoundError: No module named 'src.baseline_sql'`.
 
 - [ ] Create `demos/chalk/runner/src/baseline_sql.py`:
 
@@ -424,7 +443,7 @@ def build_baseline_query(feature_id: str, user_id: int, now: datetime) -> tuple[
     return _SELECTS[feature_id], {"user_id": user_id, "window_start": window_start}
 ```
 
-- [ ] Run: `cd demos/chalk/runner && python3 -m pytest test/test_baseline_sql.py` - expected PASS: 4 passed.
+- [ ] Run: `cd demos/chalk/runner && ../.venv/bin/python -m pytest test/test_baseline_sql.py` - expected PASS: 4 passed.
 - [ ] Commit: `git add demos/chalk/runner/src/baseline_sql.py demos/chalk/runner/test/test_baseline_sql.py && git commit -m "chalk demo: TDD baseline SQL builder"`
 
 ### Task 4: Pure logic - freshness lag
@@ -451,7 +470,7 @@ def test_negative_lag_raises():
         assert "observed_ts_ms" in str(exc)
 ```
 
-- [ ] Run: `cd demos/chalk/runner && python3 -m pytest test/test_freshness.py` - expected FAIL: `ModuleNotFoundError: No module named 'src.freshness'`.
+- [ ] Run: `cd demos/chalk/runner && ../.venv/bin/python -m pytest test/test_freshness.py` - expected FAIL: `ModuleNotFoundError: No module named 'src.freshness'`.
 
 - [ ] Create `demos/chalk/runner/src/freshness.py`:
 
@@ -462,7 +481,7 @@ def freshness_lag_ms(write_ts_ms: int, observed_ts_ms: int) -> int:
     return observed_ts_ms - write_ts_ms
 ```
 
-- [ ] Run: `cd demos/chalk/runner && python3 -m pytest test/test_freshness.py` - expected PASS: 3 passed.
+- [ ] Run: `cd demos/chalk/runner && ../.venv/bin/python -m pytest test/test_freshness.py` - expected PASS: 3 passed.
 - [ ] Commit: `git add demos/chalk/runner/src/freshness.py demos/chalk/runner/test/test_freshness.py && git commit -m "chalk demo: TDD freshness lag calculation"`
 
 ### Task 5: Pure logic - velocity flag evaluation
@@ -490,7 +509,7 @@ def test_custom_threshold_overrides_default():
     assert evaluate_velocity_flag(txn_count_1h=2, threshold=3) is False
 ```
 
-- [ ] Run: `cd demos/chalk/runner && python3 -m pytest test/test_velocity.py` - expected FAIL: `ModuleNotFoundError: No module named 'src.velocity'`.
+- [ ] Run: `cd demos/chalk/runner && ../.venv/bin/python -m pytest test/test_velocity.py` - expected FAIL: `ModuleNotFoundError: No module named 'src.velocity'`.
 
 - [ ] Create `demos/chalk/runner/src/velocity.py`:
 
@@ -502,7 +521,7 @@ def evaluate_velocity_flag(txn_count_1h: int, threshold: int = VELOCITY_THRESHOL
     return txn_count_1h >= threshold
 ```
 
-- [ ] Run: `cd demos/chalk/runner && python3 -m pytest test/test_velocity.py` - expected PASS: 4 passed.
+- [ ] Run: `cd demos/chalk/runner && ../.venv/bin/python -m pytest test/test_velocity.py` - expected PASS: 4 passed.
 - [ ] Commit: `git add demos/chalk/runner/src/velocity.py demos/chalk/runner/test/test_velocity.py && git commit -m "chalk demo: TDD velocity flag threshold"`
 
 ### Task 6: Pure logic - transaction generator
@@ -543,7 +562,7 @@ def test_row_is_immutable():
         pass
 ```
 
-- [ ] Run: `cd demos/chalk/runner && python3 -m pytest test/test_workload.py` - expected FAIL: `ModuleNotFoundError: No module named 'src.workload'`.
+- [ ] Run: `cd demos/chalk/runner && ../.venv/bin/python -m pytest test/test_workload.py` - expected FAIL: `ModuleNotFoundError: No module named 'src.workload'`.
 
 - [ ] Create `demos/chalk/runner/src/workload.py`:
 
@@ -579,7 +598,7 @@ def next_transaction(
     )
 ```
 
-- [ ] Run: `cd demos/chalk/runner && python3 -m pytest test/test_workload.py` - expected PASS: 4 passed.
+- [ ] Run: `cd demos/chalk/runner && ../.venv/bin/python -m pytest test/test_workload.py` - expected PASS: 4 passed.
 - [ ] Commit: `git add demos/chalk/runner/src/workload.py demos/chalk/runner/test/test_workload.py && git commit -m "chalk demo: TDD transaction generator"`
 
 ### Task 7: Manual - TiDB schema (thin I/O, no TDD)
@@ -611,7 +630,7 @@ create table if not exists transactions (
 
 ```
 mysql -h 127.0.0.1 -P 4000 -u root -e "create database if not exists lab;"
-mysql -h 127.0.0.1 -P 4000 -u root lab -e "$(python3 -c 'from demos.chalk.runner.src.schema import USERS_DDL, TRANSACTIONS_DDL; print(USERS_DDL); print(TRANSACTIONS_DDL)')"
+mysql -h 127.0.0.1 -P 4000 -u root lab -e "$(cd demos/chalk/runner && ../.venv/bin/python -c 'from src.schema import USERS_DDL, TRANSACTIONS_DDL; print(USERS_DDL); print(TRANSACTIONS_DDL)')"
 mysql -h 127.0.0.1 -P 4000 -u root lab -e "show tables;"
 ```
 
@@ -667,7 +686,7 @@ def run_baseline_query(conn: Any, feature_id: str, user_id: int, now: datetime) 
 
 ```
 cd demos/chalk/runner
-python3 -c "
+../.venv/bin/python -c "
 from src.tidb_io import seed_users
 seed_users(None, [1, 2, 3, 4, 5])
 "
@@ -774,7 +793,7 @@ Expected output: a result for each of the four features with no error, and integ
 
 ### Task 10: Manual - confirm the Chalk Python client's exact call shape
 
-- [ ] `pip install chalkpy` inside a virtualenv for `demos/chalk/runner`, and record the installed version in `demos/chalk/README.md`'s prerequisites.
+- [ ] `demos/chalk/.venv/bin/pip show chalkpy` (installed by Task 1's `requirements.txt`), and record the installed version in `demos/chalk/README.md`'s prerequisites.
 - [ ] Run, from a Python shell with `CHALK_CLIENT_ID`/`CHALK_CLIENT_SECRET` exported:
 
 ```python
@@ -866,7 +885,7 @@ def query_user_features(
 
 ```
 cd demos/chalk/runner
-python3 -c "
+../.venv/bin/python -c "
 from src.chalk_io import build_chalk_client, query_user_features
 client = build_chalk_client()
 print(query_user_features(client, user_id=1, fresh=True))
@@ -886,7 +905,7 @@ import os
 import time
 from datetime import datetime, timezone
 
-from lab_runner import createEmitter, createSampleWindow, every, onControl, summarize, tidb_connect_from_env
+from lab_runner import Emitter, on_control, summarize, tidb_connect_from_env
 
 from src.chalk_io import build_chalk_client, query_user_features
 from src.freshness import freshness_lag_ms
@@ -897,15 +916,21 @@ SAMPLED_USER_ID = 1
 BURST_USER_ID = 2
 MERCHANTS = ["coffee-shop", "grocery", "gas-station", "online-retail"]
 
-emitter = createEmitter()
+emitter = Emitter()
 chalk_client = build_chalk_client()
 tidb_conn = tidb_connect_from_env(os.environ)
 
 fresh_mode = False
 tick_count = 0
 write_count = 0
-chalk_samples = createSampleWindow()
-baseline_samples = createSampleWindow()
+chalk_samples: list[float] = []
+baseline_samples: list[float] = []
+
+
+def drain(samples: list[float]) -> list[float]:
+    values = list(samples)
+    samples.clear()
+    return values
 
 
 async def steady_state_tick() -> None:
@@ -919,7 +944,7 @@ async def steady_state_tick() -> None:
         amount_cents=1500,
         burst=False,
     )
-    write_start = emitter.elapsedMs()
+    write_start = emitter.elapsed_ms()
     insert_transaction(tidb_conn, row)
     write_count += 1
     emitter.flow("writes", 1)
@@ -928,14 +953,14 @@ async def steady_state_tick() -> None:
 
     chalk_start = time.perf_counter()
     chalk_result = query_user_features(chalk_client, SAMPLED_USER_ID, fresh=fresh_mode)
-    chalk_samples.add((time.perf_counter() - chalk_start) * 1000)
+    chalk_samples.append((time.perf_counter() - chalk_start) * 1000)
     emitter.flow("online-queries", 1)
 
     baseline_start = time.perf_counter()
     baseline_count = run_baseline_query(tidb_conn, "txn-count-1h", SAMPLED_USER_ID, now)
     baseline_sum = run_baseline_query(tidb_conn, "amount-sum-24h", SAMPLED_USER_ID, now)
     baseline_merchants = run_baseline_query(tidb_conn, "distinct-merchants-24h", SAMPLED_USER_ID, now)
-    baseline_samples.add((time.perf_counter() - baseline_start) * 1000)
+    baseline_samples.append((time.perf_counter() - baseline_start) * 1000)
     emitter.flow("baseline-sql", 1)
     emitter.flow("resolver-sql", 1)
 
@@ -950,17 +975,17 @@ async def steady_state_tick() -> None:
         observed=f"chalk={chalk_result} baseline=({baseline_count},{baseline_sum},{baseline_merchants})",
     )
 
-    lag_ms = freshness_lag_ms(write_ts_ms=write_start, observed_ts_ms=emitter.elapsedMs())
+    lag_ms = freshness_lag_ms(write_ts_ms=write_start, observed_ts_ms=emitter.elapsed_ms())
     emitter.metric("freshness-lag-ms", lag_ms)
     emitter.metric("tidb-write-rate", float(write_count))
     write_count = 0
 
-    chalk_summary = summarize(chalk_samples.drain())
+    chalk_summary = summarize(drain(chalk_samples))
     if chalk_summary is not None:
         emitter.metric("chalk-query-p50", chalk_summary.p50)
         emitter.metric("chalk-query-p99", chalk_summary.p99)
 
-    baseline_summary = summarize(baseline_samples.drain())
+    baseline_summary = summarize(drain(baseline_samples))
     if baseline_summary is not None:
         emitter.metric("baseline-sql-p99", baseline_summary.p99)
 
@@ -974,30 +999,37 @@ def handle_control(control_id: str) -> None:
         emitter.log("info", f"fresh_mode now {fresh_mode}")
 
 
+async def tick_loop(stop: "asyncio.Event") -> None:
+    while not stop.is_set():
+        tick_start = time.perf_counter()
+        await steady_state_tick()
+        elapsed = time.perf_counter() - tick_start
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=max(0.0, 1.0 - elapsed))
+        except asyncio.TimeoutError:
+            pass
+
+
 async def main() -> None:
     seed_users(None, [SAMPLED_USER_ID, BURST_USER_ID, 3, 4, 5])
     emitter.phase("seed")
     emitter.phase("steady-state")
-    onControl(handle_control)
+    on_control(handle_control)
 
     stop = asyncio.Event()
-    await every(intervalMs=1000, task=steady_state_tick, signal=stop_signal(stop))
-
-
-def stop_signal(stop: "asyncio.Event") -> "asyncio.AbstractEventLoop":
-    raise NotImplementedError("wired in Task 15 once the control loop and phase transitions are final")
+    await tick_loop(stop)
 
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-This first pass intentionally leaves `stop_signal` unfinished as a marker for Task 15, which replaces the steady-state-only loop with the full phase/control state machine; everything above it (writes, both query paths, `feature-parity`, freshness, rate, and cache metrics) is complete and independently runnable up to that point.
+This first pass intentionally leaves the `stop` event unwired to any signal as a marker for Task 15, which replaces the steady-state-only loop with the full phase/control state machine; everything above it (writes, both query paths, `feature-parity`, freshness, rate, and cache metrics) is complete and independently runnable up to that point.
 - [ ] Run, with `demos/chalk/.env` sourced and both TiDB and the Chalk branch reachable, for about 15 seconds then Ctrl-C:
 
 ```
 cd demos/chalk/runner
-python3 -c "
+../.venv/bin/python -c "
 import asyncio
 from main import seed_users, SAMPLED_USER_ID, BURST_USER_ID, steady_state_tick
 seed_users(None, [SAMPLED_USER_ID, BURST_USER_ID, 3, 4, 5])
@@ -1018,7 +1050,7 @@ burst_task: "asyncio.Task | None" = None
 
 
 async def run_velocity_burst() -> None:
-    burst_start_ms = emitter.elapsedMs()
+    burst_start_ms = emitter.elapsed_ms()
     emitter.check("fraud-flip", "pending")
     for i in range(60):
         row = next_transaction(
@@ -1032,11 +1064,11 @@ async def run_velocity_burst() -> None:
         emitter.flow("writes", 1)
         await asyncio.sleep(1.5)
 
-    deadline = emitter.elapsedMs() + 30_000
-    while emitter.elapsedMs() < deadline:
+    deadline = emitter.elapsed_ms() + 30_000
+    while emitter.elapsed_ms() < deadline:
         result = query_user_features(chalk_client, BURST_USER_ID, fresh=True)
         if result.velocity_flag:
-            flip_seconds = (emitter.elapsedMs() - burst_start_ms) / 1000.0
+            flip_seconds = (emitter.elapsed_ms() - burst_start_ms) / 1000.0
             emitter.metric("fraud-flag-flip-s", flip_seconds)
             emitter.check("fraud-flip", "pass", observed=f"flipped after {flip_seconds:.1f}s")
             return
@@ -1060,7 +1092,7 @@ def handle_control(control_id: str) -> None:
 
 ```
 cd demos/chalk/runner
-python3 -c "
+../.venv/bin/python -c "
 import asyncio
 from main import run_velocity_burst
 asyncio.run(run_velocity_burst())
@@ -1073,14 +1105,14 @@ Expected output: a `check` event for `fraud-flip` with `status: "pending"`, then
 ### Task 14: Manual - wire burst-writes control and finish the phase state machine
 
 - [ ] Add a `burst_writes_active` flag and a background task in `main.py` that, while active, calls `next_transaction`/`insert_transaction` for 10 randomly chosen non-burst user ids once every 100ms for 20 seconds, then clears the flag; wire `handle_control`'s `burst-writes` branch to start this task via `asyncio.get_event_loop().create_task(...)`, mirroring `run_velocity_burst`'s task-creation pattern.
-- [ ] Replace the placeholder `stop_signal` function with a real `asyncio.Event`-based signal wired to `SIGINT`/`SIGTERM` (`loop.add_signal_handler`), and add a final `emitter.phase("wrapup")` plus a printed summary of the last `check` events before exit.
-- [ ] Run: `cd demos/chalk/runner && python3 main.py` for about 60 seconds, then Ctrl-C - expected output: a continuous stream of `metric`/`flow`/`check` JSON lines on stdout, a clean `phase: wrapup` event, and process exit code `0`.
+- [ ] In `main()`, after creating `stop = asyncio.Event()`, wire it to real signals with `asyncio.get_event_loop().add_signal_handler(signal.SIGINT, stop.set)` and the same for `signal.SIGTERM` (import `signal`), so Ctrl-C sets `stop` instead of raising `KeyboardInterrupt` mid-tick; after `tick_loop(stop)` returns, add a final `emitter.phase("wrapup")` plus a printed summary of the last `check` events before exit.
+- [ ] Run: `cd demos/chalk && .venv/bin/python -u runner/main.py` for about 60 seconds, then Ctrl-C - expected output: a continuous stream of `metric`/`flow`/`check` JSON lines on stdout, a clean `phase: wrapup` event, and process exit code `0`.
 - [ ] Commit: `git add demos/chalk/runner/main.py && git commit -m "chalk demo: burst-writes control and full phase state machine"`
 
 ### Task 15: Manual - run through the relay end to end
 
 - [ ] From the `integrations/` workspace root: `pnpm lab validate chalk` - expected output: `manifest.json is valid` (and, once `traces/featured.json` exists after Section 8, that it validates too).
-- [ ] `pnpm lab run chalk --port 7070` - expected output: the relay reports it spawned `python3 main.py` in `demos/chalk/`, and `curl http://127.0.0.1:7070/health` returns `{"ok":true,"demo":"chalk"}`.
+- [ ] `pnpm lab run chalk --port 7070` - expected output: the relay reports it spawned `.venv/bin/python -u runner/main.py` in `demos/chalk/`, and `curl http://127.0.0.1:7070/health` returns `{"ok":true,"demo":"chalk"}`.
 - [ ] `curl http://127.0.0.1:7070/manifest` - expected output: the parsed manifest JSON, matching Task 2's file.
 - [ ] `curl -N http://127.0.0.1:7070/events` in one terminal while the runner is live - expected output: a stream of `metric`/`flow`/`check`/`phase` JSON lines.
 - [ ] `curl -X POST http://127.0.0.1:7070/control/velocity-burst` - expected output: `204` (or the relay's documented success response) and, in the events stream, a `control` event followed eventually by the `fraud-flip` check events from Task 13.
@@ -1110,3 +1142,171 @@ Expected output: a `check` event for `fraud-flip` with `status: "pending"`, then
 - **Clock skew between the runner process and TiDB.** `freshness_lag_ms` and the `${now}` SQL parameter both assume the runner's wall clock and TiDB's are close enough to not matter at demo scale (single machine, local playground); this would need revisiting for a distributed or cloud recording.
 - **The velocity burst takes 90-120 seconds end to end**, which is a meaningful fraction of a 3-6 minute recording; keep the rest of the phases tight (steady-state only needs to run long enough to show a handful of matching `feature-parity` ticks before the burst starts) so the total recording stays in budget.
 - **`chalk apply --branch` reuses the same branch name across re-recordings.** Re-running Task 9's `chalk apply` on an existing `chalk-tidb-demo` branch updates it in place; if a stale resolver definition is cached, redeploy with a fresh branch name and update `demos/chalk/.env` and `chalk_io.py`'s `branch=` argument together.
+
+## 10. Subagent work packets
+
+Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets in this plan run in the order listed; a later packet may edit a file an earlier packet created. Plan 00 must be complete first.
+
+### Packet 07-V1: Verify open facts before building
+- Tasks: none (docs only)
+- Depends on: 00-P10   Shared runtime: cloud-account
+- Files owned: `integrations/docs/plans/07-chalk.md` (section 4 only)
+- Model: sonnet   Effort: S
+- Items to confirm (run each item's confirm step, paste the real output into section 4, set VERIFIED or record the workaround):
+  - | TiDB itself is not named anywhere in Chalk's docs as a supported or tested MySQL-protocol target. Chalk's MySQL source is being pointed at TiDB on the strength of MySQL wire-protocol compatibility alone. | Absence confirmed by reviewing https://docs.chalk.ai/docs/integrations and https://docs.chal
+  - | The full set of environment variables a `MySQLSource` integration expects (beyond the confirmed `<NAME>_MYSQL_HOST` pattern - e.g. port, user, password, database names) is set via the Chalk dashboard "Add a data source" form, not fully enumerated in the docs page fetched. | https://docs.chalk.ai/d
+  - | The Python client is `chalkpy` (`pip install chalkpy`, Python 3.10-3.13), imported as `from chalk.client import ChalkClient`, constructed with `ChalkClient(client_id=..., client_secret=...)`, and queried with `client.query(input={...}, output=[...])` (some docs pages show `inputs`/`outputs` instea
+  - | A query response's `meta` field (`FeatureResolutionMeta`) carries "metadata pertaining to the feature, including the resolver run and whether the result was a cache hit," but the exact JSON/attribute field name for the cache-hit boolean was not shown on the pages fetched. | https://docs.chalk.ai/d
+  - | Chalk offers two deployment models: "Chalk Cloud" (Chalk-hosted) and "Customer Cloud" (customer runs the data plane in their own cloud, Chalk runs the metadata plane, or both planes can be self-hosted). | https://chalk.ai/blog/deploy-in-your-cloud (via search summary), https://docs.chalk.ai/docs/d
+  - | Getting started requires an existing Chalk project/account (`chalk init`, `chalk login`, a dashboard "Projects" page) and the marketing site's primary CTAs are "Login" and "Book Demo"; no self-serve signup flow (e.g. a public "Sign up free" form) was found on the pages fetched. | https://docs.chal
+- Gate:
+  - `grep -c UNVERIFIED integrations/docs/plans/07-chalk.md` -> lower than before, and every remaining item says why it cannot be checked yet
+- Done when: no packet below depends on an unconfirmed fact without a recorded workaround.
+
+### Packet 07-P1: Scaffold the demo package
+- Tasks: 1
+- Depends on: 07-V1   Shared runtime: cloud-account
+- Files owned: `integrations/demos/chalk/.env.example`, `integrations/demos/chalk/.gitignore`, `integrations/demos/chalk/package.json`, `integrations/demos/chalk/requirements.txt`, `integrations/demos/chalk/tsconfig.json`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 1's text; `pnpm --filter @lab/demo-chalk typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 1's steps are all checked off and the gate output matches.
+
+### Packet 07-P2: Manifest and its validation test
+- Tasks: 2
+- Depends on: 07-P1   Shared runtime: none
+- Files owned: `integrations/demos/chalk/manifest.json`, `integrations/demos/chalk/test/manifest.test.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/demo-chalk exec vitest run test/manifest.test.ts` -> all PASS
+- Done when: Task 2's steps are all checked off and the gate output matches.
+
+### Packet 07-P3: Pure logic - baseline SQL builder
+- Tasks: 3
+- Depends on: 07-P2   Shared runtime: none
+- Files owned: `integrations/demos/chalk/runner`, `integrations/demos/chalk/runner/src/baseline_sql.py`, `integrations/demos/chalk/runner/test/test_baseline_sql.py`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-chalk exec vitest run runner/test/test_baseline_sql.py` -> all PASS
+- Done when: Task 3's steps are all checked off and the gate output matches.
+
+### Packet 07-P4: Pure logic - freshness lag
+- Tasks: 4
+- Depends on: 07-P3   Shared runtime: none
+- Files owned: `integrations/demos/chalk/runner`, `integrations/demos/chalk/runner/src/freshness.py`, `integrations/demos/chalk/runner/test/test_freshness.py`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-chalk exec vitest run runner/test/test_freshness.py` -> all PASS
+- Done when: Task 4's steps are all checked off and the gate output matches.
+
+### Packet 07-P5: Pure logic - velocity flag evaluation
+- Tasks: 5
+- Depends on: 07-P4   Shared runtime: none
+- Files owned: `integrations/demos/chalk/runner`, `integrations/demos/chalk/runner/src/velocity.py`, `integrations/demos/chalk/runner/test/test_velocity.py`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-chalk exec vitest run runner/test/test_velocity.py` -> all PASS
+- Done when: Task 5's steps are all checked off and the gate output matches.
+
+### Packet 07-P6: Pure logic - transaction generator
+- Tasks: 6
+- Depends on: 07-P5   Shared runtime: none
+- Files owned: `integrations/demos/chalk/runner`, `integrations/demos/chalk/runner/src/workload.py`, `integrations/demos/chalk/runner/test/test_workload.py`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-chalk exec vitest run runner/test/test_workload.py` -> all PASS
+- Done when: Task 6's steps are all checked off and the gate output matches.
+
+### Packet 07-P7: Manual - TiDB schema (thin I/O, no TDD)
+- Tasks: 7
+- Depends on: 07-P6   Shared runtime: none
+- Files owned: `integrations/demos/chalk/runner`, `integrations/demos/chalk/runner/src/schema.py`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-chalk typecheck` -> exit 0
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 07-P8: Manual - seed data and transaction writer (thin I/O)
+- Tasks: 8
+- Depends on: 07-P7   Shared runtime: none
+- Files owned: `integrations/demos/chalk/.env`, `integrations/demos/chalk/runner`, `integrations/demos/chalk/runner/src/tidb_io.py`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 8's text; `pnpm --filter @lab/demo-chalk typecheck` -> exit 0
+- Done when: Task 8's steps are all checked off and the gate output matches.
+
+### Packet 07-P9: Manual - Chalk project, MySQL source against TiDB, SQL resolvers
+- Tasks: 9
+- Depends on: 07-P8   Shared runtime: cloud-account
+- Files owned: `integrations/demos/chalk/.env.example`, `integrations/demos/chalk/chalk`, `integrations/demos/chalk/chalk/requirements.txt`, `integrations/demos/chalk/chalk/src`, `integrations/demos/chalk/chalk/src/resolvers/amount_sum_24h.chalk.sql`, `integrations/demos/chalk/chalk/src/resolvers/distinct_merchants_24h.chalk.sql`, `integrations/demos/chalk/chalk/src/resolvers/txn_count_1h.chalk.sql`, `integrations/demos/chalk/chalk/src/resolvers/velocity_flag.py`, `integrations/demos/chalk/chalk/src/user.py`
+- Model: sonnet   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 9's text; `pnpm --filter @lab/demo-chalk typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 9's steps are all checked off and the gate output matches.
+
+### Packet 07-P10: Manual - confirm the Chalk Python client's exact call shape
+- Tasks: 10
+- Depends on: 07-P9   Shared runtime: none
+- Files owned: `integrations/demos/chalk/.venv/bin/pip`, `integrations/demos/chalk/README.md`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 10's text; `pnpm --filter @lab/demo-chalk typecheck` -> exit 0
+- Done when: Task 10's steps are all checked off and the gate output matches.
+
+### Packet 07-P11: Manual - Chalk client wrapper (thin I/O)
+- Tasks: 11
+- Depends on: 07-P10   Shared runtime: none
+- Files owned: `integrations/demos/chalk/runner`, `integrations/demos/chalk/runner/src/chalk_io.py`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 11's text; `pnpm --filter @lab/demo-chalk typecheck` -> exit 0
+- Done when: Task 11's steps are all checked off and the gate output matches.
+
+### Packet 07-P12: Manual - wire the steady-state tick loop and feature-parity check
+- Tasks: 12
+- Depends on: 07-P11   Shared runtime: none
+- Files owned: `integrations/demos/chalk/.env`, `integrations/demos/chalk/runner`, `integrations/demos/chalk/runner/main.py`
+- Model: sonnet   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 12's text; `pnpm --filter @lab/demo-chalk typecheck` -> exit 0
+- Done when: Task 12's steps are all checked off and the gate output matches.
+
+### Packet 07-P13: Manual - wire the velocity-burst control and fraud-flip check
+- Tasks: 13
+- Depends on: 07-P12   Shared runtime: tidb-playground
+- Files owned: `integrations/demos/chalk/runner`, `integrations/demos/chalk/runner/main.py`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 13's text; `pnpm --filter @lab/demo-chalk typecheck` -> exit 0
+- Done when: Task 13's steps are all checked off and the gate output matches.
+
+### Packet 07-P14: Manual - wire burst-writes control and finish the phase state machine
+- Tasks: 14
+- Depends on: 07-P13   Shared runtime: none
+- Files owned: `integrations/demos/chalk/runner/main.py`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 14's text; `pnpm --filter @lab/demo-chalk typecheck` -> exit 0
+- Done when: Task 14's steps are all checked off and the gate output matches.
+
+### Packet 07-P15: Manual - run through the relay end to end
+- Tasks: 15
+- Depends on: 07-P14   Shared runtime: tidb-playground
+- Files owned: none (manual or docs step)
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 15's text; `pnpm --filter @lab/demo-chalk typecheck` -> exit 0
+- Done when: Task 15's steps are all checked off and the gate output matches.
+
+### Packet 07-R: Record and publish the featured trace
+- Tasks: section 8
+- Depends on: 07-P15   Shared runtime: cloud-account
+- Files owned: `integrations/demos/chalk/traces/featured.json`
+- Model: coordinator   Effort: M
+- Gate:
+  - `pnpm lab validate chalk` -> `chalk: manifest ok, featured trace ok (N events)`
+  - `pnpm lab check-public` -> `0 findings`
+  - teardown commands from section 5 run and confirmed
+- Done when: the replay tells the whole story in 3-6 minutes of playback at 1x.

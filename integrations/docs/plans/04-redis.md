@@ -190,7 +190,7 @@ demos/redis/
     "integrations": ["Redis", "TiCDC", "Kafka"],
     "pattern": "Platform teams running Redis as a cache in front of MySQL or Aurora, fighting stale cache entries and dual-write bugs.",
     "publish": true,
-    "runner": { "command": ["node", "--import", "tsx/esm", "main.ts"], "cwd": "runner" },
+    "runner": { "command": ["node", "--import", "tsx", "runner/main.ts"] },
     "nodes": [
       { "id": "workload", "label": "Workload Generator", "kind": "client", "x": 8, "y": 50 },
       { "id": "tidb", "label": "TiDB", "kind": "tidb", "x": 50, "y": 20 },
@@ -251,7 +251,8 @@ demos/redis/
     "private": true,
     "type": "module",
     "scripts": {
-      "test": "vitest run"
+      "test": "vitest run",
+      "typecheck": "tsc -p tsconfig.json"
     },
     "dependencies": {
       "@lab/contract": "workspace:*",
@@ -262,9 +263,10 @@ demos/redis/
       "zod": "^4.0.0"
     },
     "devDependencies": {
+      "@types/node": "^22.10.0",
       "tsx": "^4.19.0",
-      "typescript": "^5.6.0",
-      "vitest": "^2.1.0"
+      "typescript": "^5.9.0",
+      "vitest": "^3.2.0"
     }
   }
   ```
@@ -297,7 +299,12 @@ demos/redis/
   REDIS_DEMO_READ_RATE_MS=50
   REDIS_DEMO_HOT_KEY_ID=1
   REDIS_DEMO_BURST_SIZE=25
+
+  LAB_ENV_COMPONENT_REDIS=redis:7-alpine
+  LAB_ENV_COMPONENT_KAFKA=apache/kafka:latest
   ```
+  Every non-TiDB component this demo runs (Redis, Kafka) gets its own `LAB_ENV_COMPONENT_<NAME>`
+  line so the relay copies its version into the trace's `environment.components`.
 - [ ] Run: `pnpm install` from the repo root - expected PASS (workspace links resolve, no missing package errors).
 - [ ] Commit: `git add demos/redis/package.json demos/redis/tsconfig.json demos/redis/.env.example && git commit -m "redis demo: scaffold package"`
 
@@ -601,7 +608,7 @@ This is a thin I/O / infra step, not TDD - it produces the fixture Task 7's pars
   ```
 - [ ] Create `demos/redis/runner/src/tidb-repo.ts`:
   ```ts
-  import type { Pool } from 'mysql2/promise';
+  import type { Pool, RowDataPacket } from 'mysql2/promise';
   import { createTableSql } from './schema.sql';
 
   export type CacheRow = {
@@ -620,13 +627,21 @@ This is a thin I/O / infra step, not TDD - it produces the fixture Task 7's pars
     await pool.query('INSERT IGNORE INTO cache_demo_rows (id, payload, version, written_at_ms) VALUES ?', [values]);
   };
 
+  type CacheRowRecord = RowDataPacket & {
+    readonly id: number;
+    readonly payload: string;
+    readonly version: number;
+    readonly writtenAtMs: number;
+  };
+
   export const readRowById = async (pool: Pool, id: number): Promise<CacheRow | undefined> => {
-    const [rows] = await pool.execute(
+    const [rows] = await pool.execute<CacheRowRecord[]>(
       'SELECT id, payload, version, written_at_ms AS writtenAtMs FROM cache_demo_rows WHERE id = ?',
       [id],
     );
-    const [row] = rows as CacheRow[];
-    return row;
+    const row = rows[0];
+    if (row === undefined) return undefined;
+    return { id: row.id, payload: row.payload, version: row.version, writtenAtMs: row.writtenAtMs };
   };
 
   export const writeRowById = async (pool: Pool, id: number, payload: string, writtenAtMs: number): Promise<void> => {
@@ -638,7 +653,7 @@ This is a thin I/O / infra step, not TDD - it produces the fixture Task 7's pars
   ```
 - [ ] Manual live-run: with `infra/tidb/playground.sh` running and `.env` copied from `.env.example`, run:
   ```bash
-  node --import tsx/esm -e "
+  node --import tsx -e "
     import { createTidbPool } from '@lab/runner-kit';
     import { initSchema, seedRows, readRowById, writeRowById } from './demos/redis/runner/src/tidb-repo.ts';
     const pool = createTidbPool(process.env);
@@ -696,7 +711,7 @@ This is a thin I/O / infra step, not TDD - it produces the fixture Task 7's pars
   ```
 - [ ] Manual live-run: `docker compose -f demos/redis/infra/docker-compose.yml up -d`, then:
   ```bash
-  node --import tsx/esm -e "
+  node --import tsx -e "
     import { createDemoRedisClient, setCachedPayload, getCachedPayload, deleteCachedPayload } from './demos/redis/runner/src/redis-cache.ts';
     const client = createDemoRedisClient('redis://127.0.0.1:6379');
     await client.connect();
@@ -869,6 +884,7 @@ This is a thin I/O / infra step, not TDD - it produces the fixture Task 7's pars
 
 - [ ] Create `demos/redis/runner/src/sampler.ts`:
   ```ts
+  import { z } from 'zod';
   import type { Pool } from 'mysql2/promise';
   import type { Emitter } from '@lab/runner-kit';
   import type { RedisClient } from './redis-cache';
@@ -878,6 +894,8 @@ This is a thin I/O / infra step, not TDD - it produces the fixture Task 7's pars
   import { isStaleRead } from './staleness';
 
   export type SampledRow = { readonly id: number };
+
+  const CachedPayloadSchema = z.object({ version: z.number() });
 
   export const sampleStaleness = async (
     pool: Pool,
@@ -892,8 +910,9 @@ This is a thin I/O / infra step, not TDD - it produces the fixture Task 7's pars
       emitter.flow('sampler-tidb', 1);
       emitter.flow('sampler-redis', 1);
       if (cachedRaw === undefined || tidbRow === undefined) continue;
-      const cachedVersion = (JSON.parse(cachedRaw) as { version: number }).version;
-      if (isStaleRead({ cachedVersion, tidbVersion: tidbRow.version })) staleCount += 1;
+      const cachedPayload = CachedPayloadSchema.safeParse(JSON.parse(cachedRaw));
+      if (!cachedPayload.success) continue;
+      if (isStaleRead({ cachedVersion: cachedPayload.data.version, tidbVersion: tidbRow.version })) staleCount += 1;
     }
     return sampleIds.length === 0 ? 0 : Math.round((staleCount / sampleIds.length) * 10_000) / 100;
   };
@@ -1299,3 +1318,142 @@ This is a thin I/O / infra step, not TDD - it produces the fixture Task 7's pars
   This is intentional - the storm's point is to compare `redis-read-p50/p99` against
   `tidb-read-p50/p99` under contention, not to stress the staleness check - but call this out in
   the live narration so the audience doesn't misread a flat staleness line during the storm.
+
+## 10. Subagent work packets
+
+### Packet 04-P1: Verify: TiCDC changefeed, canal-json shape, prepared plan cache
+- Tasks: 6, 8 (verification steps only)
+- Depends on: none   Shared runtime: tidb-playground
+- Files owned: `demos/redis/infra/create-changefeed.sh`, `demos/redis/fixtures/sample-canal-json-message.json`, `integrations/docs/plans/04-redis.md` (section 4 rows only)
+- Model: sonnet   Effort: M
+- Gate (coordinator runs these, all must pass):
+  - `./infra/tidb/playground.sh` (background) -> prints a TiDB version string
+  - `docker compose -f infra/kafka/docker-compose.yml up -d` -> `lab-kafka` healthy
+  - `CDC_VERSION=<printed version> demos/redis/infra/create-changefeed.sh` -> includes `Create changefeed successfully!`
+  - `mysql -h 127.0.0.1 -P 4000 -u root -e "EXPLAIN SELECT id, payload, version, written_at_ms FROM cache_demo_rows WHERE id = 1;"` -> prints the real point-get operator name
+  - `mysql -h 127.0.0.1 -P 4000 -u root -e "SHOW VARIABLES LIKE '%plan_cache%';"` -> prints the real prepared-plan-cache variable and value
+  - `cat demos/redis/fixtures/sample-canal-json-message.json` -> one line of valid JSON with a `data` array
+- Done when: all three UNVERIFIED rows in section 4 are updated with the real observed values and flipped to VERIFIED (or a recorded workaround), and the fixture file exists for Packet 04-P5 to consume.
+
+### Packet 04-P2: keys.ts - Redis key naming
+- Tasks: 3
+- Depends on: none   Shared runtime: none
+- Files owned: `demos/redis/runner/src/keys.ts`, `demos/redis/runner/test/keys.test.ts`
+- Model: sonnet   Effort: S
+- Gate (coordinator runs these, all must pass):
+  - `pnpm --filter @lab/demo-redis test -- keys` -> PASS
+- Done when: `redisKeyForRow` is implemented and its tests pass.
+
+### Packet 04-P3: staleness.ts - hit ratio, staleness predicate, invalidation lag
+- Tasks: 4
+- Depends on: none   Shared runtime: none
+- Files owned: `demos/redis/runner/src/staleness.ts`, `demos/redis/runner/test/staleness.test.ts`
+- Model: sonnet   Effort: S
+- Gate (coordinator runs these, all must pass):
+  - `pnpm --filter @lab/demo-redis test -- staleness` -> PASS
+- Done when: `computeHitRatioPercent`, `isStaleRead`, `computeInvalidationLagMs` are implemented and their tests pass.
+
+### Packet 04-P4: mode.ts - invalidation-mode and control state machine
+- Tasks: 5
+- Depends on: none   Shared runtime: none
+- Files owned: `demos/redis/runner/src/mode.ts`, `demos/redis/runner/test/mode.test.ts`
+- Model: sonnet   Effort: S
+- Gate (coordinator runs these, all must pass):
+  - `pnpm --filter @lab/demo-redis test -- mode` -> PASS
+- Done when: `initialDemoState`, `applyControl`, `isHotKeyStormActive` are implemented and their tests pass.
+
+### Packet 04-P5: canal.ts - parse a canal-json message
+- Tasks: 7
+- Depends on: 04-P1 (needs the captured fixture)   Shared runtime: none
+- Files owned: `demos/redis/runner/src/canal.ts`, `demos/redis/runner/test/canal.test.ts`
+- Model: sonnet   Effort: S
+- Gate (coordinator runs these, all must pass):
+  - `pnpm --filter @lab/demo-redis test -- canal` -> PASS
+- Done when: `parseCanalJsonMessage` matches the real captured fixture's field names and its tests pass.
+
+### Packet 04-P6: config.ts - demo env parsing
+- Tasks: 10
+- Depends on: none   Shared runtime: none
+- Files owned: `demos/redis/runner/src/config.ts`, `demos/redis/runner/test/config.test.ts`
+- Model: sonnet   Effort: S
+- Gate (coordinator runs these, all must pass):
+  - `pnpm --filter @lab/demo-redis test -- config` -> PASS
+- Done when: `loadDemoConfig` is implemented and its tests pass.
+
+### Packet 04-P7: manifest, package scaffold
+- Tasks: 1, 2
+- Depends on: none   Shared runtime: none
+- Files owned: `demos/redis/manifest.json`, `demos/redis/test/manifest.test.ts`, `demos/redis/package.json`, `demos/redis/tsconfig.json`, `demos/redis/.env.example`
+- Model: sonnet   Effort: S
+- Gate (coordinator runs these, all must pass):
+  - `pnpm --filter @lab/demo-redis test -- manifest` -> PASS
+  - `pnpm install` (from repo root) -> PASS, no missing workspace package errors
+- Done when: `manifest.json` parses against `DemoManifestSchema` as demo id `redis`, number `4`, and the package scaffold resolves `@lab/contract` / `@lab/runner-kit` via `workspace:*`.
+
+### Packet 04-P8: tidb-repo.ts - TiDB I/O adapter
+- Tasks: 8 (adapter code only; verification already done by 04-P1)
+- Depends on: 04-P1, 04-P7   Shared runtime: tidb-playground
+- Files owned: `demos/redis/runner/src/schema.sql.ts`, `demos/redis/runner/src/tidb-repo.ts`
+- Model: sonnet   Effort: M
+- Gate (coordinator runs these, all must pass):
+  - Manual live-run script from Task 8 -> prints `{ id: 1, payload: 'updated', version: 2, writtenAtMs: <recent ms> }`
+- Done when: `initSchema`, `seedRows`, `readRowById`, `writeRowById` work against a live playground with no type assertions.
+
+### Packet 04-P9: redis-cache.ts - Redis I/O adapter
+- Tasks: 9
+- Depends on: 04-P7   Shared runtime: none
+- Files owned: `demos/redis/infra/docker-compose.yml`, `demos/redis/runner/src/redis-cache.ts`
+- Model: sonnet   Effort: S
+- Gate (coordinator runs these, all must pass):
+  - `docker compose -f demos/redis/infra/docker-compose.yml up -d` -> `lab-redis-demo` running
+  - Manual live-run script from Task 9 -> prints the cached JSON string, then `undefined`
+- Done when: `createDemoRedisClient`, `getCachedPayload`, `setCachedPayload`, `deleteCachedPayload` work against the demo-local Redis container.
+
+### Packet 04-P10: workload.ts - write and read loops
+- Tasks: 11
+- Depends on: 04-P2, 04-P4, 04-P6, 04-P8, 04-P9   Shared runtime: tidb-playground
+- Files owned: `demos/redis/runner/src/workload.ts`
+- Model: sonnet   Effort: M
+- Gate (coordinator runs these, all must pass):
+  - Manual live-run driver from Task 11 -> mostly misses on the first pass per row, then hits once each row's key is warm
+- Done when: `runWriteTick`, `runCacheReadTick`, `runDirectReadTick` are implemented and exercised live against TiDB and Redis.
+
+### Packet 04-P11: sampler.ts and invalidator.ts - staleness sampling and CDC invalidation
+- Tasks: 12
+- Depends on: 04-P1, 04-P5, 04-P9   Shared runtime: kafka
+- Files owned: `demos/redis/runner/src/sampler.ts`, `demos/redis/runner/src/invalidator.ts`
+- Model: sonnet   Effort: M
+- Gate (coordinator runs these, all must pass):
+  - Manual live-run from Task 12 (changefeed active, invalidator started, one write in `cdc` mode) -> `getCachedPayload` returns `undefined` immediately after the delete
+- Done when: `sampleStaleness` and `runInvalidator` are implemented and a real Kafka change event drives a Redis `DEL` within a few hundred milliseconds.
+
+### Packet 04-P12: main.ts - wire everything together and validate
+- Tasks: 13, 14
+- Depends on: 04-P7, 04-P8, 04-P9, 04-P10, 04-P11   Shared runtime: tidb-playground
+- Files owned: `demos/redis/runner/main.ts`
+- Model: sonnet   Effort: M
+- Gate (coordinator runs these, all must pass):
+  - `pnpm lab run redis` (from `integrations/`, with TiDB, Redis, Kafka running) -> `GET /health` returns `{"ok":true,"demo":"redis"}`
+  - `pnpm lab validate redis` -> PASS, no unknown node/edge/metric/phase/check/control ids
+- Done when: the runner wires config, TiDB pool, Redis client, Kafka consumer, emitter, and the `every()` loops together, and `pnpm lab validate redis` passes. If an id mismatch is found, the fix lands in `demos/redis/manifest.json` (owned by 04-P7) as a follow-up, not in this packet's files.
+
+### Packet 04-P13: README.md and TALK-TRACK.md
+- Tasks: 15, 16
+- Depends on: 04-P1   Shared runtime: none
+- Files owned: `demos/redis/README.md`, `demos/redis/TALK-TRACK.md`
+- Model: sonnet   Effort: S
+- Gate (coordinator runs these, all must pass):
+  - `pnpm lab check-public` -> PASS (no denylisted terms, no internal URLs, anywhere under `demos/redis/`)
+- Done when: both files exist with the real verified-facts values from 04-P1 pasted into README's "Verified facts used by this demo" section (no placeholder brackets remain).
+
+### Packet 04-P14: Record the featured trace
+- Tasks: section 8 (recording steps)
+- Depends on: 04-P12, 04-P13   Shared runtime: tidb-playground, kafka
+- Files owned: `demos/redis/traces/featured.json`
+- Model: sonnet   Effort: M
+- Gate (coordinator runs these, all must pass):
+  - `pnpm lab run redis --record` driven through all three phases -> trace file written under `demos/redis/traces/`
+  - `pnpm lab validate redis` -> PASS, including `eventReferenceErrors` returning no errors for every event in `featured.json`
+  - `pnpm lab check-public` -> PASS
+  - Teardown: `docker compose -f demos/redis/infra/docker-compose.yml down -v && docker compose -f infra/kafka/docker-compose.yml down -v && tiup clean lab`
+- Done when: `demos/redis/traces/featured.json` covers all three phases, both checks (`cdc-zero-stale`, `versions-converge`) show `pass`, and teardown is confirmed with `docker ps` and `ps aux | grep '[t]iup'` showing nothing left running.

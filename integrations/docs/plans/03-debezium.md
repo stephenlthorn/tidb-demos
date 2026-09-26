@@ -161,12 +161,15 @@ demos/debezium/
     "mysql2": "^3.11.0"
   },
   "devDependencies": {
-    "vitest": "^2.0.0",
-    "typescript": "^5.5.0",
+    "tsx": "^4.20.0",
+    "@types/node": "^22.10.0",
+    "vitest": "^3.2.0",
+    "typescript": "^5.9.0",
     "@types/pg": "^8.11.0"
   },
   "scripts": {
     "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
     "start": "tsx runner/main.ts"
   }
 }
@@ -211,7 +214,7 @@ describe('debezium demo manifest', () => {
   "integrations": ["Debezium", "Kafka Connect", "TiCDC", "PostgreSQL"],
   "pattern": "data platform teams that have already standardized on Debezium and Kafka Connect",
   "publish": true,
-  "runner": { "command": ["tsx", "runner/main.ts"], "cwd": "." },
+  "runner": { "command": ["node", "--import", "tsx", "runner/main.ts"], "cwd": "." },
   "nodes": [
     { "id": "postgres", "label": "PostgreSQL", "kind": "source", "x": 5, "y": 20 },
     { "id": "debezium-pg-source", "label": "Debezium PG source", "kind": "service", "x": 20, "y": 20 },
@@ -1080,3 +1083,141 @@ TiDB - both spoken in Debezium's own format."
 - **`op` code differences:** real Debezium and TiCDC's Debezium output may not agree on every operation code fixture-for-fixture (for example update vs. read/snapshot codes). `parseDebeziumEnvelope`'s test fixtures use `"c"` (create); before recording, capture one real message from each topic and confirm the op codes the consumer needs to branch on.
 - **Heartbeat table replication order:** because `accounts` and `heartbeat` are separate tables replicated independently, a heartbeat row observed in TiDB does not strictly guarantee every earlier `accounts` row has also landed; treat `replication-lag-ms` as a lag estimate for the connector pipeline as a whole, not a per-row guarantee, and say so in the talk track if asked.
 - **Container networking:** the JDBC sink connector (running inside the `connect` container) reaches the host's TiDB playground via `host.docker.internal:4000` (Docker Desktop on macOS, per Plan 00's shared-infrastructure notes), not `127.0.0.1:4000` - a common setup mistake that produces a connection-refused failure that looks like a TiDB availability problem.
+
+## 10. Subagent work packets
+
+Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets in this plan run in the order listed; a later packet may edit a file an earlier packet created. Plan 00 must be complete first.
+
+### Packet 03-V1: Verify open facts before building
+- Tasks: none (docs only)
+- Depends on: 00-P10   Shared runtime: tidb-playground
+- Files owned: `integrations/docs/plans/03-debezium.md` (section 4 only)
+- Model: sonnet   Effort: S
+- Items to confirm (run each item's confirm step, paste the real output into section 4, set VERIFIED or record the workaround):
+  - | Whether Debezium's JDBC sink connector's `dialect` auto-detection or an explicit MySQL-compatible dialect setting works correctly against TiDB (rather than real MySQL or Postgres) is not confirmed by the pages fetched for this plan. | n/a | **UNVERIFIED** - before Task 6, connect the JDBC sink con
+  - | Whether the exact tiup-playground-installed TiCDC version defaults to the classic or the new architecture (and therefore whether Act C's DDL propagates through the TiCDC-Debezium topic at all without `newarch=true`) is not confirmed by the pages fetched for this plan. | n/a | **UNVERIFIED** - befo
+  - | The Kafka Connect REST API exposes `GET /connectors/{name}/status` (connector + per-task state: `RUNNING`, `PAUSED`, `FAILED`, `UNASSIGNED`) and `GET /connectors/{name}/tasks`, and Kafka Connect's REST endpoint defaults to port 8083. | [Kafka Connect REST Interface](https://docs.confluent.io/platf
+  - | The Debezium JDBC sink connector is not bundled in the base `quay.io/debezium/connect` image by default; it must be added to the Connect worker's plugin path. | [Debezium connector for JDBC](https://debezium.io/documentation/reference/stable/connectors/jdbc.html) | **UNVERIFIED** - confirm the exa
+- Gate:
+  - `grep -c UNVERIFIED integrations/docs/plans/03-debezium.md` -> lower than before, and every remaining item says why it cannot be checked yet
+- Done when: no packet below depends on an unconfirmed fact without a recorded workaround.
+
+### Packet 03-P1: Scaffold the demo package and a failing manifest test
+- Tasks: 1
+- Depends on: 03-V1   Shared runtime: none
+- Files owned: `integrations/demos/debezium/manifest.json`, `integrations/demos/debezium/package.json`, `integrations/demos/debezium/test/manifest.test.ts`, `integrations/demos/debezium/tsconfig.json`
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/demo-debezium exec vitest run test/manifest.test.ts` -> all PASS
+- Done when: Task 1's steps are all checked off and the gate output matches.
+
+### Packet 03-P2: Debezium envelope parser (pure)
+- Tasks: 2
+- Depends on: 03-P1   Shared runtime: none
+- Files owned: `integrations/demos/debezium/runner/src/debeziumEnvelope.ts`, `integrations/demos/debezium/runner/test/debeziumEnvelope.test.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/demo-debezium exec vitest run runner/test/debeziumEnvelope.test.ts` -> all PASS
+- Done when: Task 2's steps are all checked off and the gate output matches.
+
+### Packet 03-P3: Heartbeat SQL and lag computation (pure)
+- Tasks: 3
+- Depends on: 03-P2   Shared runtime: none
+- Files owned: `integrations/demos/debezium/runner/src/heartbeat.ts`, `integrations/demos/debezium/runner/test/heartbeat.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-debezium exec vitest run runner/test/heartbeat.test.ts` -> all PASS
+- Done when: Task 3's steps are all checked off and the gate output matches.
+
+### Packet 03-P4: Connector status summarizer (pure)
+- Tasks: 4
+- Depends on: 03-P3   Shared runtime: none
+- Files owned: `integrations/demos/debezium/runner/src/connectStatus.ts`, `integrations/demos/debezium/runner/test/connectStatus.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-debezium exec vitest run runner/test/connectStatus.test.ts` -> all PASS
+- Done when: Task 4's steps are all checked off and the gate output matches.
+
+### Packet 03-P5: Parse rate tracker (pure)
+- Tasks: 5
+- Depends on: 03-P4   Shared runtime: none
+- Files owned: `integrations/demos/debezium/runner/src/parseRate.ts`, `integrations/demos/debezium/runner/test/parseRate.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-debezium exec vitest run runner/test/parseRate.test.ts` -> all PASS
+- Done when: Task 5's steps are all checked off and the gate output matches.
+
+### Packet 03-P6: Schema propagation timer (pure)
+- Tasks: 6
+- Depends on: 03-P5   Shared runtime: none
+- Files owned: `integrations/demos/debezium/runner/src/schemaPropagation.ts`, `integrations/demos/debezium/runner/test/schemaPropagation.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-debezium exec vitest run runner/test/schemaPropagation.test.ts` -> all PASS
+- Done when: Task 6's steps are all checked off and the gate output matches.
+
+### Packet 03-P7: Demo-local infra - Postgres and Kafka Connect (manual, I/O)
+- Tasks: 7
+- Depends on: 03-P6   Shared runtime: tidb-playground + kafka
+- Files owned: `integrations/demos/debezium/infra/connect-plugins`, `integrations/demos/debezium/infra/docker-compose.yml`
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 7's text; `pnpm --filter @lab/demo-debezium typecheck` -> exit 0
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 03-P8: Create the source table, heartbeat table, and both connectors (manual, I/O)
+- Tasks: 8
+- Depends on: 03-P7   Shared runtime: tidb-playground
+- Files owned: none (manual or docs step)
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 8's text; `pnpm --filter @lab/demo-debezium typecheck` -> exit 0
+- Done when: Task 8's steps are all checked off and the gate output matches.
+
+### Packet 03-P9: Create the TiCDC Debezium changefeed (manual, I/O)
+- Tasks: 9
+- Depends on: 03-P8   Shared runtime: none
+- Files owned: none (manual or docs step)
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 9's text; `pnpm --filter @lab/demo-debezium typecheck` -> exit 0
+- Done when: Task 9's steps are all checked off and the gate output matches.
+
+### Packet 03-P10: Thin I/O adapters
+- Tasks: 10
+- Depends on: 03-P9   Shared runtime: none
+- Files owned: `integrations/demos/debezium/runner/src/connectApi.ts`, `integrations/demos/debezium/runner/src/kafkaConsumer.ts`, `integrations/demos/debezium/runner/src/postgresClient.ts`, `integrations/demos/debezium/runner/src/ticdcApi.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 10's text; `pnpm --filter @lab/demo-debezium typecheck` -> exit 0
+- Done when: Task 10's steps are all checked off and the gate output matches.
+
+### Packet 03-P11: Wire the runner's main.ts
+- Tasks: 11
+- Depends on: 03-P10   Shared runtime: none
+- Files owned: `integrations/demos/debezium/runner/main.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 11's text; `pnpm --filter @lab/demo-debezium typecheck` -> exit 0
+- Done when: Task 11's steps are all checked off and the gate output matches.
+
+### Packet 03-P12: README and TALK-TRACK
+- Tasks: 12
+- Depends on: 03-P11   Shared runtime: cloud-account
+- Files owned: `integrations/demos/debezium/README.md`, `integrations/demos/debezium/TALK-TRACK.md`, `integrations/demos/debezium/traces`, `integrations/demos/debezium/traces/featured.json`
+- Model: sonnet   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 12's text; `pnpm --filter @lab/demo-debezium typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 12's steps are all checked off and the gate output matches.
+
+### Packet 03-R: Record and publish the featured trace
+- Tasks: section 8
+- Depends on: 03-P12   Shared runtime: cloud-account
+- Files owned: `integrations/demos/debezium/traces/featured.json`
+- Model: coordinator   Effort: M
+- Gate:
+  - `pnpm lab validate debezium` -> `debezium: manifest ok, featured trace ok (N events)`
+  - `pnpm lab check-public` -> `0 findings`
+  - teardown commands from section 5 run and confirmed
+- Done when: the replay tells the whole story in 3-6 minutes of playback at 1x.

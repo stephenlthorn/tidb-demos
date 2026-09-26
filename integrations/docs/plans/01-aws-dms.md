@@ -249,6 +249,7 @@ describe('aws-dms manifest', () => {
   "type": "module",
   "scripts": {
     "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
     "start": "node --import tsx runner/main.ts"
   },
   "dependencies": {
@@ -259,9 +260,10 @@ describe('aws-dms manifest', () => {
     "@aws-sdk/client-cloudwatch": "^3.700.0"
   },
   "devDependencies": {
+    "@types/node": "^22.10.0",
     "tsx": "^4.19.0",
-    "vitest": "^2.1.0",
-    "typescript": "^5.6.0"
+    "vitest": "^3.2.0",
+    "typescript": "^5.9.0"
   }
 }
 ```
@@ -2188,3 +2190,146 @@ an estimate."
 - **Checksum canonical encoding depends on the load generator's own write discipline.** The JSON `metadata` column's key-order-must-match-between-engines assumption (Section 7, Task 4) only holds if `pg-client.ts`'s `insertAccountsAndOrders` always writes `metadata` with the same fixed key order; if the load generator is extended to write richer JSON, re-verify `checksum-match` still passes after a full sync.
 - **Terraform's fixed IAM role names.** `dms-vpc-role` and `dms-cloudwatch-logs-role` are account-wide DMS conventions (Section 4); if a prior DMS setup in the same account already created them, `terraform apply` fails and the fix is `terraform import`, not renaming the Terraform resource.
 - **Cost creep from an idle Aurora/DMS/TiDB Cloud stack.** Follow the exact teardown commands in Section 5 immediately after recording; re-verify with the listed `aws dms`/`aws rds`/`aws logs` describe calls and the TiDB Cloud console before ending the work session.
+
+## 10. Subagent work packets
+
+Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets in this plan run in the order listed; a later packet may edit a file an earlier packet created. Plan 00 must be complete first.
+
+### Packet 01-V1: Verify open facts before building
+- Tasks: none (docs only)
+- Depends on: 00-P10   Shared runtime: cloud-account
+- Files owned: `integrations/docs/plans/01-aws-dms.md` (section 4 only)
+- Model: sonnet   Effort: S
+- Items to confirm (run each item's confirm step, paste the real output into section 4, set VERIFIED or record the workaround):
+  - | AWS DMS Serverless (the auto-provisioned-capacity replication mode, billed in DMS Capacity Units/DCUs of 2 GiB RAM each) lists "PostgreSQL-compatible databases" as a supported source and "MySQL-compatible databases" as a supported target, so this pair is supported in principle. | [AWS DMS Serverle
+  - | CloudWatch metric `CDCLatencySource` measures delay (seconds) between the last captured source commit and the replication instance's current time; `CDCLatencyTarget` measures delay between the first unapplied change's source commit time and current time, and is always >= `CDCLatencySource`. | [AWS
+  - | `DescribeTableStatistics` returns per-table `FullLoadRows`, `AppliedInserts`, `AppliedUpdates`, `AppliedDeletes`, `ValidationFailedRecords`, and `TableState`. | Prior knowledge of the AWS DMS API, not fetched from `docs.aws.amazon.com/dms/latest/APIReference` in this session. | **UNVERIFIED**: con
+  - | AWS DMS data validation (`Turn on validation` at task creation) independently re-reads source and target rows and reports per-table failures; this demo turns it on and also computes its own row-count and checksum comparisons rather than only trusting the vendor's validation state. | [Migrate from 
+  - | AWS DMS pricing (replication instance hourly rate by instance class, plus storage) is on the DMS pricing page; there is no fixed dollar figure recorded in this plan. | [AWS DMS pricing](https://aws.amazon.com/dms/pricing/) | Not fetched this session; URL given for the runner/README to link to. **U
+  - | TiDB Cloud pricing (Dedicated node-hour rate, or Essential/Serverless request-based pricing) is on the TiDB Cloud pricing page; no fixed dollar figure is recorded in this plan. | [TiDB Cloud pricing](https://www.pingcap.com/tidb-cloud-pricing/) | Not fetched this session; URL given for the runner/
+  - | Aurora PostgreSQL pricing (instance hour by class, storage, I/O) is on the Amazon Aurora pricing page. | [Amazon Aurora pricing](https://aws.amazon.com/rds/aurora/pricing/) | Not fetched this session; URL given for teardown/cost section. **UNVERIFIED**: confirm current instance-class rate at build
+- Gate:
+  - `grep -c UNVERIFIED integrations/docs/plans/01-aws-dms.md` -> lower than before, and every remaining item says why it cannot be checked yet
+- Done when: no packet below depends on an unconfirmed fact without a recorded workaround.
+
+### Packet 01-P1: Manifest
+- Tasks: 1
+- Depends on: 01-V1   Shared runtime: none
+- Files owned: `integrations/demos/aws-dms/manifest.json`, `integrations/demos/aws-dms/package.json`, `integrations/demos/aws-dms/test/manifest.test.ts`, `integrations/demos/aws-dms/tsconfig.json`
+- Model: sonnet   Effort: M
+- Gate:
+  - `pnpm --filter @lab/demo-aws-dms exec vitest run test/manifest.test.ts` -> all PASS
+- Done when: Task 1's steps are all checked off and the gate output matches.
+
+### Packet 01-P2: Infrastructure (manual live-run, I/O-heavy Terraform, no unit tests)
+- Tasks: 2
+- Depends on: 01-P1   Shared runtime: cloud-account
+- Files owned: `integrations/demos/aws-dms/infra/terraform`, `integrations/demos/aws-dms/infra/terraform/main.tf`, `integrations/demos/aws-dms/infra/terraform/outputs.tf`, `integrations/demos/aws-dms/infra/terraform/table-mappings.json`, `integrations/demos/aws-dms/infra/terraform/variables.tf`, `integrations/demos/aws-dms/infra/terraform/versions.tf`
+- Model: sonnet   Effort: L
+- Gate:
+  - coordinator reviews the files against Task 2's text; `pnpm --filter @lab/demo-aws-dms typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 2's steps are all checked off and the gate output matches.
+
+### Packet 01-P3: Schema (manual live-run, DDL has no pure logic to unit test)
+- Tasks: 3
+- Depends on: 01-P2   Shared runtime: none
+- Files owned: `integrations/demos/aws-dms/infra/sql`, `integrations/demos/aws-dms/infra/sql/schema-tidb.sql`, `integrations/demos/aws-dms/infra/sql/schema.sql`
+- Model: sonnet   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 3's text; `pnpm --filter @lab/demo-aws-dms typecheck` -> exit 0
+- Done when: Task 3's steps are all checked off and the gate output matches.
+
+### Packet 01-P4: Pure logic - checksum with canonical row encoding, and row-count-diff
+- Tasks: 4
+- Depends on: 01-P3   Shared runtime: none
+- Files owned: `integrations/demos/aws-dms/runner/src/checksum.ts`, `integrations/demos/aws-dms/runner/src/row-count-diff.ts`, `integrations/demos/aws-dms/test/checksum.test.ts`, `integrations/demos/aws-dms/test/row-count-diff.test.ts`
+- Model: sonnet   Effort: L
+- Gate:
+  - `pnpm --filter @lab/demo-aws-dms exec vitest run test/checksum.test.ts test/row-count-diff.test.ts` -> all PASS
+- Done when: Task 4's steps are all checked off and the gate output matches.
+
+### Packet 01-P5: Pure logic - freshness and cutover timer
+- Tasks: 5
+- Depends on: 01-P4   Shared runtime: none
+- Files owned: `integrations/demos/aws-dms/runner/src/cutover-timer.ts`, `integrations/demos/aws-dms/runner/src/freshness.ts`, `integrations/demos/aws-dms/test/cutover-timer.test.ts`, `integrations/demos/aws-dms/test/freshness.test.ts`
+- Model: sonnet   Effort: S
+- Gate:
+  - `pnpm --filter @lab/demo-aws-dms exec vitest run test/cutover-timer.test.ts test/freshness.test.ts` -> all PASS
+- Done when: Task 5's steps are all checked off and the gate output matches.
+
+### Packet 01-P6: Pure logic - DescribeTableStatistics parsing and CloudWatch GetMetricData
+- Tasks: 6
+- Depends on: 01-P5   Shared runtime: none
+- Files owned: `integrations/demos/aws-dms/runner/src/cloudwatch-query.ts`, `integrations/demos/aws-dms/runner/src/table-stats.ts`, `integrations/demos/aws-dms/test/cloudwatch-query.test.ts`, `integrations/demos/aws-dms/test/table-stats.test.ts`
+- Model: sonnet   Effort: L
+- Gate:
+  - `pnpm --filter @lab/demo-aws-dms exec vitest run test/cloudwatch-query.test.ts test/table-stats.test.ts` -> all PASS
+- Done when: Task 6's steps are all checked off and the gate output matches.
+
+### Packet 01-P7: Pure logic - cutover state machine and workload generator schedule
+- Tasks: 7
+- Depends on: 01-P6   Shared runtime: none
+- Files owned: `integrations/demos/aws-dms/runner/src/cutover-state.ts`, `integrations/demos/aws-dms/runner/src/workload.ts`, `integrations/demos/aws-dms/test/cutover-state.test.ts`, `integrations/demos/aws-dms/test/workload.test.ts`
+- Model: sonnet   Effort: L
+- Gate:
+  - `pnpm --filter @lab/demo-aws-dms exec vitest run test/cutover-state.test.ts test/workload.test.ts` -> all PASS
+- Done when: Task 7's steps are all checked off and the gate output matches.
+
+### Packet 01-P8: I/O adapters - DMS and CloudWatch pollers (manual live-run)
+- Tasks: 8
+- Depends on: 01-P7   Shared runtime: cloud-account
+- Files owned: `integrations/demos/aws-dms/infra/cloudwatch-query-sample.json`, `integrations/demos/aws-dms/runner/src/cloudwatch-poller.ts`, `integrations/demos/aws-dms/runner/src/dms-poller.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 8's text; `pnpm --filter @lab/demo-aws-dms typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 8's steps are all checked off and the gate output matches.
+
+### Packet 01-P9: I/O adapters - PostgreSQL client, load generator, heartbeat (manual live-run)
+- Tasks: 9
+- Depends on: 01-P8   Shared runtime: none
+- Files owned: `integrations/demos/aws-dms/runner/src/load-generator.ts`, `integrations/demos/aws-dms/runner/src/pg-client.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 9's text; `pnpm --filter @lab/demo-aws-dms typecheck` -> exit 0
+- Done when: Task 9's steps are all checked off and the gate output matches.
+
+### Packet 01-P10: Runner main and control wiring
+- Tasks: 10
+- Depends on: 01-P9   Shared runtime: tidb-playground
+- Files owned: `integrations/demos/aws-dms/runner/main.ts`
+- Model: sonnet   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 10's text; `pnpm --filter @lab/demo-aws-dms typecheck` -> exit 0
+- Done when: Task 10's steps are all checked off and the gate output matches.
+
+### Packet 01-P11: README and TALK-TRACK
+- Tasks: 11
+- Depends on: 01-P10   Shared runtime: cloud-account
+- Files owned: `integrations/demos/aws-dms/README.md`, `integrations/demos/aws-dms/TALK-TRACK.md`, `integrations/demos/aws-dms/traces`, `integrations/demos/aws-dms/traces/featured.json`
+- Model: sonnet   Effort: M
+- Gate:
+  - coordinator reviews the files against Task 11's text; `pnpm --filter @lab/demo-aws-dms typecheck` -> exit 0
+  - teardown confirmed with this plan's section 5 commands before the next cloud packet starts
+- Done when: Task 11's steps are all checked off and the gate output matches.
+
+### Packet 01-P12: Validation and public-content gate
+- Tasks: 12
+- Depends on: 01-P11   Shared runtime: none
+- Files owned: none (manual or docs step)
+- Model: sonnet   Effort: S
+- Gate:
+  - coordinator reviews the files against Task 12's text; `pnpm --filter @lab/demo-aws-dms typecheck` -> exit 0
+- Done when: Task 12's steps are all checked off and the gate output matches.
+
+### Packet 01-R: Record and publish the featured trace
+- Tasks: section 8
+- Depends on: 01-P12   Shared runtime: cloud-account
+- Files owned: `integrations/demos/aws-dms/traces/featured.json`
+- Model: coordinator   Effort: M
+- Gate:
+  - `pnpm lab validate aws-dms` -> `aws-dms: manifest ok, featured trace ok (N events)`
+  - `pnpm lab check-public` -> `0 findings`
+  - teardown commands from section 5 run and confirmed
+- Done when: the replay tells the whole story in 3-6 minutes of playback at 1x.
