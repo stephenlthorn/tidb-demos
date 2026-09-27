@@ -1,0 +1,2415 @@
+{
+  "schemaVersion": 1,
+  "manifest": {
+    "id": "example",
+    "number": 0,
+    "title": "Lab self-test",
+    "tagline": "Synthetic events that exercise every part of the lab UI",
+    "integrations": [
+      "Synthetic"
+    ],
+    "pattern": "Platform self-test; no real systems are involved and every number is simulated",
+    "publish": false,
+    "runner": {
+      "command": [
+        "node",
+        "--import",
+        "tsx",
+        "runner/main.ts"
+      ],
+      "cwd": "."
+    },
+    "nodes": [
+      {
+        "id": "generator",
+        "label": "Load generator",
+        "kind": "client",
+        "x": 10,
+        "y": 50
+      },
+      {
+        "id": "queue",
+        "label": "Queue (simulated)",
+        "kind": "queue",
+        "x": 35,
+        "y": 30
+      },
+      {
+        "id": "tidb",
+        "label": "TiDB (simulated)",
+        "kind": "tidb",
+        "x": 60,
+        "y": 50
+      },
+      {
+        "id": "consumer",
+        "label": "Consumer",
+        "kind": "sink",
+        "x": 88,
+        "y": 50
+      }
+    ],
+    "edges": [
+      {
+        "id": "generator-to-queue",
+        "from": "generator",
+        "to": "queue",
+        "label": "events",
+        "unit": "events"
+      },
+      {
+        "id": "queue-to-tidb",
+        "from": "queue",
+        "to": "tidb",
+        "label": "rows",
+        "unit": "rows"
+      },
+      {
+        "id": "tidb-to-consumer",
+        "from": "tidb",
+        "to": "consumer",
+        "label": "changes",
+        "unit": "rows"
+      }
+    ],
+    "metrics": [
+      {
+        "id": "write-rate",
+        "label": "Write rate (simulated)",
+        "unit": "rows/s",
+        "display": "both",
+        "better": "higher",
+        "group": "Throughput",
+        "howMeasured": "Simulated: base rate ramped over 10 s, times 10 during a burst"
+      },
+      {
+        "id": "write-p99",
+        "label": "Write p99 (simulated)",
+        "unit": "ms",
+        "display": "both",
+        "better": "lower",
+        "target": 20,
+        "group": "Latency",
+        "howMeasured": "Simulated: nearest-rank p99 over one tick of generated latency samples"
+      },
+      {
+        "id": "rows-stored",
+        "label": "Rows stored (simulated)",
+        "unit": "rows",
+        "display": "tile",
+        "better": "neutral",
+        "howMeasured": "Simulated: cumulative sum of write-rate ticks"
+      }
+    ],
+    "phases": [
+      {
+        "id": "warmup",
+        "label": "Warm up",
+        "narration": "The generator ramps up while every component reports healthy."
+      },
+      {
+        "id": "steady",
+        "label": "Steady state",
+        "narration": "Rows flow end to end at a steady rate with flat latency."
+      },
+      {
+        "id": "burst",
+        "label": "Burst",
+        "narration": "A burst multiplies the write rate by ten; watch latency stay under target."
+      },
+      {
+        "id": "verify",
+        "label": "Verify",
+        "narration": "The run stops and the counts check proves nothing was lost."
+      }
+    ],
+    "checks": [
+      {
+        "id": "counts-match",
+        "label": "Counts match",
+        "description": "Rows generated equal rows stored (simulated)"
+      }
+    ],
+    "controls": [
+      {
+        "id": "burst",
+        "label": "Burst x10",
+        "description": "Multiply the simulated write rate by ten for ten seconds"
+      }
+    ]
+  },
+  "recordedAt": "2026-09-27T11:31:33.615Z",
+  "environment": {
+    "tidb": "none (synthetic self-test)",
+    "components": {},
+    "notes": "Every number in this demo is simulated."
+  },
+  "durationMs": 58996,
+  "events": [
+    {
+      "type": "node",
+      "t": 1,
+      "node": "generator",
+      "status": "healthy"
+    },
+    {
+      "type": "node",
+      "t": 1,
+      "node": "queue",
+      "status": "healthy"
+    },
+    {
+      "type": "node",
+      "t": 1,
+      "node": "tidb",
+      "status": "healthy"
+    },
+    {
+      "type": "node",
+      "t": 1,
+      "node": "consumer",
+      "status": "healthy"
+    },
+    {
+      "type": "check",
+      "t": 2,
+      "id": "counts-match",
+      "status": "pending"
+    },
+    {
+      "type": "phase",
+      "t": 3,
+      "phase": "warmup"
+    },
+    {
+      "type": "flow",
+      "t": 3,
+      "edge": "generator-to-queue",
+      "count": 20
+    },
+    {
+      "type": "flow",
+      "t": 3,
+      "edge": "queue-to-tidb",
+      "count": 20
+    },
+    {
+      "type": "flow",
+      "t": 4,
+      "edge": "tidb-to-consumer",
+      "count": 20
+    },
+    {
+      "type": "metric",
+      "t": 4,
+      "id": "write-rate",
+      "value": 20
+    },
+    {
+      "type": "metric",
+      "t": 4,
+      "id": "write-p99",
+      "value": 7.045140762155024
+    },
+    {
+      "type": "metric",
+      "t": 4,
+      "id": "rows-stored",
+      "value": 20
+    },
+    {
+      "type": "flow",
+      "t": 1003,
+      "edge": "generator-to-queue",
+      "count": 40
+    },
+    {
+      "type": "flow",
+      "t": 1003,
+      "edge": "queue-to-tidb",
+      "count": 40
+    },
+    {
+      "type": "flow",
+      "t": 1003,
+      "edge": "tidb-to-consumer",
+      "count": 40
+    },
+    {
+      "type": "metric",
+      "t": 1003,
+      "id": "write-rate",
+      "value": 40
+    },
+    {
+      "type": "metric",
+      "t": 1003,
+      "id": "write-p99",
+      "value": 7.1383858989840885
+    },
+    {
+      "type": "metric",
+      "t": 1003,
+      "id": "rows-stored",
+      "value": 60
+    },
+    {
+      "type": "flow",
+      "t": 2002,
+      "edge": "generator-to-queue",
+      "count": 60
+    },
+    {
+      "type": "flow",
+      "t": 2002,
+      "edge": "queue-to-tidb",
+      "count": 60
+    },
+    {
+      "type": "flow",
+      "t": 2002,
+      "edge": "tidb-to-consumer",
+      "count": 60
+    },
+    {
+      "type": "metric",
+      "t": 2002,
+      "id": "write-rate",
+      "value": 60
+    },
+    {
+      "type": "metric",
+      "t": 2002,
+      "id": "write-p99",
+      "value": 7.34354129082054
+    },
+    {
+      "type": "metric",
+      "t": 2002,
+      "id": "rows-stored",
+      "value": 120
+    },
+    {
+      "type": "flow",
+      "t": 3002,
+      "edge": "generator-to-queue",
+      "count": 80
+    },
+    {
+      "type": "flow",
+      "t": 3002,
+      "edge": "queue-to-tidb",
+      "count": 80
+    },
+    {
+      "type": "flow",
+      "t": 3002,
+      "edge": "tidb-to-consumer",
+      "count": 80
+    },
+    {
+      "type": "metric",
+      "t": 3002,
+      "id": "write-rate",
+      "value": 80
+    },
+    {
+      "type": "metric",
+      "t": 3002,
+      "id": "write-p99",
+      "value": 7.36174415008416
+    },
+    {
+      "type": "metric",
+      "t": 3002,
+      "id": "rows-stored",
+      "value": 200
+    },
+    {
+      "type": "flow",
+      "t": 4003,
+      "edge": "generator-to-queue",
+      "count": 100
+    },
+    {
+      "type": "flow",
+      "t": 4003,
+      "edge": "queue-to-tidb",
+      "count": 100
+    },
+    {
+      "type": "flow",
+      "t": 4003,
+      "edge": "tidb-to-consumer",
+      "count": 100
+    },
+    {
+      "type": "metric",
+      "t": 4003,
+      "id": "write-rate",
+      "value": 100
+    },
+    {
+      "type": "metric",
+      "t": 4003,
+      "id": "write-p99",
+      "value": 7.424458997838519
+    },
+    {
+      "type": "metric",
+      "t": 4003,
+      "id": "rows-stored",
+      "value": 300
+    },
+    {
+      "type": "flow",
+      "t": 5003,
+      "edge": "generator-to-queue",
+      "count": 120
+    },
+    {
+      "type": "flow",
+      "t": 5003,
+      "edge": "queue-to-tidb",
+      "count": 120
+    },
+    {
+      "type": "flow",
+      "t": 5003,
+      "edge": "tidb-to-consumer",
+      "count": 120
+    },
+    {
+      "type": "metric",
+      "t": 5003,
+      "id": "write-rate",
+      "value": 120
+    },
+    {
+      "type": "metric",
+      "t": 5003,
+      "id": "write-p99",
+      "value": 7.681689861176637
+    },
+    {
+      "type": "metric",
+      "t": 5003,
+      "id": "rows-stored",
+      "value": 420
+    },
+    {
+      "type": "flow",
+      "t": 6003,
+      "edge": "generator-to-queue",
+      "count": 140
+    },
+    {
+      "type": "flow",
+      "t": 6003,
+      "edge": "queue-to-tidb",
+      "count": 140
+    },
+    {
+      "type": "flow",
+      "t": 6003,
+      "edge": "tidb-to-consumer",
+      "count": 140
+    },
+    {
+      "type": "metric",
+      "t": 6003,
+      "id": "write-rate",
+      "value": 140
+    },
+    {
+      "type": "metric",
+      "t": 6003,
+      "id": "write-p99",
+      "value": 7.767641225858679
+    },
+    {
+      "type": "metric",
+      "t": 6003,
+      "id": "rows-stored",
+      "value": 560
+    },
+    {
+      "type": "flow",
+      "t": 7003,
+      "edge": "generator-to-queue",
+      "count": 160
+    },
+    {
+      "type": "flow",
+      "t": 7003,
+      "edge": "queue-to-tidb",
+      "count": 160
+    },
+    {
+      "type": "flow",
+      "t": 7003,
+      "edge": "tidb-to-consumer",
+      "count": 160
+    },
+    {
+      "type": "metric",
+      "t": 7003,
+      "id": "write-rate",
+      "value": 160
+    },
+    {
+      "type": "metric",
+      "t": 7003,
+      "id": "write-p99",
+      "value": 7.88353069100227
+    },
+    {
+      "type": "metric",
+      "t": 7003,
+      "id": "rows-stored",
+      "value": 720
+    },
+    {
+      "type": "flow",
+      "t": 8002,
+      "edge": "generator-to-queue",
+      "count": 180
+    },
+    {
+      "type": "flow",
+      "t": 8002,
+      "edge": "queue-to-tidb",
+      "count": 180
+    },
+    {
+      "type": "flow",
+      "t": 8002,
+      "edge": "tidb-to-consumer",
+      "count": 180
+    },
+    {
+      "type": "metric",
+      "t": 8002,
+      "id": "write-rate",
+      "value": 180
+    },
+    {
+      "type": "metric",
+      "t": 8002,
+      "id": "write-p99",
+      "value": 8.046658808362809
+    },
+    {
+      "type": "metric",
+      "t": 8002,
+      "id": "rows-stored",
+      "value": 900
+    },
+    {
+      "type": "flow",
+      "t": 9001,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 9001,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 9001,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 9001,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 9001,
+      "id": "write-p99",
+      "value": 8.188827525778105
+    },
+    {
+      "type": "metric",
+      "t": 9001,
+      "id": "rows-stored",
+      "value": 1100
+    },
+    {
+      "type": "phase",
+      "t": 10002,
+      "phase": "steady"
+    },
+    {
+      "type": "flow",
+      "t": 10002,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 10002,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 10002,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 10002,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 10002,
+      "id": "write-p99",
+      "value": 8.198334027318378
+    },
+    {
+      "type": "metric",
+      "t": 10002,
+      "id": "rows-stored",
+      "value": 1300
+    },
+    {
+      "type": "flow",
+      "t": 11001,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 11001,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 11001,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 11002,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 11002,
+      "id": "write-p99",
+      "value": 8.173596181935135
+    },
+    {
+      "type": "metric",
+      "t": 11002,
+      "id": "rows-stored",
+      "value": 1500
+    },
+    {
+      "type": "flow",
+      "t": 12002,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 12002,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 12002,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 12002,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 12002,
+      "id": "write-p99",
+      "value": 8.167984116552997
+    },
+    {
+      "type": "metric",
+      "t": 12002,
+      "id": "rows-stored",
+      "value": 1700
+    },
+    {
+      "type": "flow",
+      "t": 13002,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 13002,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 13002,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 13002,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 13002,
+      "id": "write-p99",
+      "value": 8.029516538027746
+    },
+    {
+      "type": "metric",
+      "t": 13002,
+      "id": "rows-stored",
+      "value": 1900
+    },
+    {
+      "type": "flow",
+      "t": 14001,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 14001,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 14001,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 14001,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 14001,
+      "id": "write-p99",
+      "value": 8.092720560123052
+    },
+    {
+      "type": "metric",
+      "t": 14001,
+      "id": "rows-stored",
+      "value": 2100
+    },
+    {
+      "type": "flow",
+      "t": 15002,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 15002,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 15002,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 15002,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 15002,
+      "id": "write-p99",
+      "value": 8.141292800394876
+    },
+    {
+      "type": "metric",
+      "t": 15002,
+      "id": "rows-stored",
+      "value": 2300
+    },
+    {
+      "type": "flow",
+      "t": 16001,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 16001,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 16001,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 16001,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 16001,
+      "id": "write-p99",
+      "value": 8.185070478610395
+    },
+    {
+      "type": "metric",
+      "t": 16001,
+      "id": "rows-stored",
+      "value": 2500
+    },
+    {
+      "type": "flow",
+      "t": 17001,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 17001,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 17001,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 17001,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 17001,
+      "id": "write-p99",
+      "value": 8.18544723416029
+    },
+    {
+      "type": "metric",
+      "t": 17001,
+      "id": "rows-stored",
+      "value": 2700
+    },
+    {
+      "type": "flow",
+      "t": 18001,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 18001,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 18001,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 18001,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 18001,
+      "id": "write-p99",
+      "value": 8.193074498845089
+    },
+    {
+      "type": "metric",
+      "t": 18001,
+      "id": "rows-stored",
+      "value": 2900
+    },
+    {
+      "type": "flow",
+      "t": 19000,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 19000,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 19000,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 19000,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 19000,
+      "id": "write-p99",
+      "value": 8.148935295883643
+    },
+    {
+      "type": "metric",
+      "t": 19000,
+      "id": "rows-stored",
+      "value": 3100
+    },
+    {
+      "type": "flow",
+      "t": 20001,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 20001,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 20001,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 20001,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 20001,
+      "id": "write-p99",
+      "value": 8.12730055976358
+    },
+    {
+      "type": "metric",
+      "t": 20001,
+      "id": "rows-stored",
+      "value": 3300
+    },
+    {
+      "type": "flow",
+      "t": 21000,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 21000,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 21000,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 21000,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 21000,
+      "id": "write-p99",
+      "value": 8.157252881687963
+    },
+    {
+      "type": "metric",
+      "t": 21000,
+      "id": "rows-stored",
+      "value": 3500
+    },
+    {
+      "type": "flow",
+      "t": 22001,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 22001,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 22001,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 22001,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 22001,
+      "id": "write-p99",
+      "value": 8.162378712221834
+    },
+    {
+      "type": "metric",
+      "t": 22001,
+      "id": "rows-stored",
+      "value": 3700
+    },
+    {
+      "type": "flow",
+      "t": 23000,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 23000,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 23000,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 23000,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 23000,
+      "id": "write-p99",
+      "value": 8.157558619458722
+    },
+    {
+      "type": "metric",
+      "t": 23000,
+      "id": "rows-stored",
+      "value": 3900
+    },
+    {
+      "type": "flow",
+      "t": 24000,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 24000,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 24000,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 24000,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 24000,
+      "id": "write-p99",
+      "value": 7.9797144969063085
+    },
+    {
+      "type": "metric",
+      "t": 24000,
+      "id": "rows-stored",
+      "value": 4100
+    },
+    {
+      "type": "flow",
+      "t": 25001,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 25001,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 25001,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 25001,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 25001,
+      "id": "write-p99",
+      "value": 8.171602760670066
+    },
+    {
+      "type": "metric",
+      "t": 25001,
+      "id": "rows-stored",
+      "value": 4300
+    },
+    {
+      "type": "flow",
+      "t": 26001,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 26001,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 26001,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 26001,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 26001,
+      "id": "write-p99",
+      "value": 8.128905474570455
+    },
+    {
+      "type": "metric",
+      "t": 26001,
+      "id": "rows-stored",
+      "value": 4500
+    },
+    {
+      "type": "flow",
+      "t": 27001,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 27001,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 27001,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 27001,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 27001,
+      "id": "write-p99",
+      "value": 8.132498898393532
+    },
+    {
+      "type": "metric",
+      "t": 27001,
+      "id": "rows-stored",
+      "value": 4700
+    },
+    {
+      "type": "flow",
+      "t": 28000,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 28000,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 28000,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 28000,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 28000,
+      "id": "write-p99",
+      "value": 8.162493993324642
+    },
+    {
+      "type": "metric",
+      "t": 28000,
+      "id": "rows-stored",
+      "value": 4900
+    },
+    {
+      "type": "flow",
+      "t": 29000,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 29000,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 29000,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 29000,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 29000,
+      "id": "write-p99",
+      "value": 8.19923722499443
+    },
+    {
+      "type": "metric",
+      "t": 29000,
+      "id": "rows-stored",
+      "value": 5100
+    },
+    {
+      "type": "phase",
+      "t": 30000,
+      "phase": "burst"
+    },
+    {
+      "type": "flow",
+      "t": 30000,
+      "edge": "generator-to-queue",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 30000,
+      "edge": "queue-to-tidb",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 30000,
+      "edge": "tidb-to-consumer",
+      "count": 2000
+    },
+    {
+      "type": "metric",
+      "t": 30000,
+      "id": "write-rate",
+      "value": 2000
+    },
+    {
+      "type": "metric",
+      "t": 30000,
+      "id": "write-p99",
+      "value": 18.984155308673508
+    },
+    {
+      "type": "metric",
+      "t": 30000,
+      "id": "rows-stored",
+      "value": 7100
+    },
+    {
+      "type": "node",
+      "t": 30000,
+      "node": "tidb",
+      "status": "busy"
+    },
+    {
+      "type": "flow",
+      "t": 31000,
+      "edge": "generator-to-queue",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 31000,
+      "edge": "queue-to-tidb",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 31000,
+      "edge": "tidb-to-consumer",
+      "count": 2000
+    },
+    {
+      "type": "metric",
+      "t": 31000,
+      "id": "write-rate",
+      "value": 2000
+    },
+    {
+      "type": "metric",
+      "t": 31000,
+      "id": "write-p99",
+      "value": 18.901763025411128
+    },
+    {
+      "type": "metric",
+      "t": 31000,
+      "id": "rows-stored",
+      "value": 9100
+    },
+    {
+      "type": "flow",
+      "t": 32000,
+      "edge": "generator-to-queue",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 32000,
+      "edge": "queue-to-tidb",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 32000,
+      "edge": "tidb-to-consumer",
+      "count": 2000
+    },
+    {
+      "type": "metric",
+      "t": 32000,
+      "id": "write-rate",
+      "value": 2000
+    },
+    {
+      "type": "metric",
+      "t": 32000,
+      "id": "write-p99",
+      "value": 18.883047955142274
+    },
+    {
+      "type": "metric",
+      "t": 32000,
+      "id": "rows-stored",
+      "value": 11100
+    },
+    {
+      "type": "flow",
+      "t": 32999,
+      "edge": "generator-to-queue",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 32999,
+      "edge": "queue-to-tidb",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 32999,
+      "edge": "tidb-to-consumer",
+      "count": 2000
+    },
+    {
+      "type": "metric",
+      "t": 32999,
+      "id": "write-rate",
+      "value": 2000
+    },
+    {
+      "type": "metric",
+      "t": 32999,
+      "id": "write-p99",
+      "value": 18.980844006423467
+    },
+    {
+      "type": "metric",
+      "t": 32999,
+      "id": "rows-stored",
+      "value": 13100
+    },
+    {
+      "type": "flow",
+      "t": 33998,
+      "edge": "generator-to-queue",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 33998,
+      "edge": "queue-to-tidb",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 33998,
+      "edge": "tidb-to-consumer",
+      "count": 2000
+    },
+    {
+      "type": "metric",
+      "t": 33998,
+      "id": "write-rate",
+      "value": 2000
+    },
+    {
+      "type": "metric",
+      "t": 33998,
+      "id": "write-p99",
+      "value": 18.997617922294012
+    },
+    {
+      "type": "metric",
+      "t": 33998,
+      "id": "rows-stored",
+      "value": 15100
+    },
+    {
+      "type": "flow",
+      "t": 34998,
+      "edge": "generator-to-queue",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 34998,
+      "edge": "queue-to-tidb",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 34998,
+      "edge": "tidb-to-consumer",
+      "count": 2000
+    },
+    {
+      "type": "metric",
+      "t": 34998,
+      "id": "write-rate",
+      "value": 2000
+    },
+    {
+      "type": "metric",
+      "t": 34998,
+      "id": "write-p99",
+      "value": 18.98415983015613
+    },
+    {
+      "type": "metric",
+      "t": 34998,
+      "id": "rows-stored",
+      "value": 17100
+    },
+    {
+      "type": "flow",
+      "t": 35997,
+      "edge": "generator-to-queue",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 35997,
+      "edge": "queue-to-tidb",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 35997,
+      "edge": "tidb-to-consumer",
+      "count": 2000
+    },
+    {
+      "type": "metric",
+      "t": 35997,
+      "id": "write-rate",
+      "value": 2000
+    },
+    {
+      "type": "metric",
+      "t": 35997,
+      "id": "write-p99",
+      "value": 18.986672046135823
+    },
+    {
+      "type": "metric",
+      "t": 35997,
+      "id": "rows-stored",
+      "value": 19100
+    },
+    {
+      "type": "flow",
+      "t": 36996,
+      "edge": "generator-to-queue",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 36997,
+      "edge": "queue-to-tidb",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 36997,
+      "edge": "tidb-to-consumer",
+      "count": 2000
+    },
+    {
+      "type": "metric",
+      "t": 36997,
+      "id": "write-rate",
+      "value": 2000
+    },
+    {
+      "type": "metric",
+      "t": 36997,
+      "id": "write-p99",
+      "value": 18.844224814743484
+    },
+    {
+      "type": "metric",
+      "t": 36997,
+      "id": "rows-stored",
+      "value": 21100
+    },
+    {
+      "type": "log",
+      "t": 37029,
+      "level": "info",
+      "msg": "Burst requested from the UI",
+      "node": "generator"
+    },
+    {
+      "type": "control",
+      "t": 37533,
+      "id": "burst"
+    },
+    {
+      "type": "flow",
+      "t": 37996,
+      "edge": "generator-to-queue",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 37996,
+      "edge": "queue-to-tidb",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 37996,
+      "edge": "tidb-to-consumer",
+      "count": 2000
+    },
+    {
+      "type": "metric",
+      "t": 37996,
+      "id": "write-rate",
+      "value": 2000
+    },
+    {
+      "type": "metric",
+      "t": 37996,
+      "id": "write-p99",
+      "value": 18.905629027931354
+    },
+    {
+      "type": "metric",
+      "t": 37996,
+      "id": "rows-stored",
+      "value": 23100
+    },
+    {
+      "type": "flow",
+      "t": 38996,
+      "edge": "generator-to-queue",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 38996,
+      "edge": "queue-to-tidb",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 38996,
+      "edge": "tidb-to-consumer",
+      "count": 2000
+    },
+    {
+      "type": "metric",
+      "t": 38996,
+      "id": "write-rate",
+      "value": 2000
+    },
+    {
+      "type": "metric",
+      "t": 38996,
+      "id": "write-p99",
+      "value": 18.97920795819482
+    },
+    {
+      "type": "metric",
+      "t": 38996,
+      "id": "rows-stored",
+      "value": 25100
+    },
+    {
+      "type": "flow",
+      "t": 39996,
+      "edge": "generator-to-queue",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 39996,
+      "edge": "queue-to-tidb",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 39996,
+      "edge": "tidb-to-consumer",
+      "count": 2000
+    },
+    {
+      "type": "metric",
+      "t": 39996,
+      "id": "write-rate",
+      "value": 2000
+    },
+    {
+      "type": "metric",
+      "t": 39996,
+      "id": "write-p99",
+      "value": 18.971486581586305
+    },
+    {
+      "type": "metric",
+      "t": 39996,
+      "id": "rows-stored",
+      "value": 27100
+    },
+    {
+      "type": "flow",
+      "t": 40996,
+      "edge": "generator-to-queue",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 40996,
+      "edge": "queue-to-tidb",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 40996,
+      "edge": "tidb-to-consumer",
+      "count": 2000
+    },
+    {
+      "type": "metric",
+      "t": 40996,
+      "id": "write-rate",
+      "value": 2000
+    },
+    {
+      "type": "metric",
+      "t": 40996,
+      "id": "write-p99",
+      "value": 18.849834684056077
+    },
+    {
+      "type": "metric",
+      "t": 40996,
+      "id": "rows-stored",
+      "value": 29100
+    },
+    {
+      "type": "flow",
+      "t": 41996,
+      "edge": "generator-to-queue",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 41996,
+      "edge": "queue-to-tidb",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 41996,
+      "edge": "tidb-to-consumer",
+      "count": 2000
+    },
+    {
+      "type": "metric",
+      "t": 41996,
+      "id": "write-rate",
+      "value": 2000
+    },
+    {
+      "type": "metric",
+      "t": 41996,
+      "id": "write-p99",
+      "value": 18.93680594361649
+    },
+    {
+      "type": "metric",
+      "t": 41996,
+      "id": "rows-stored",
+      "value": 31100
+    },
+    {
+      "type": "flow",
+      "t": 42995,
+      "edge": "generator-to-queue",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 42995,
+      "edge": "queue-to-tidb",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 42995,
+      "edge": "tidb-to-consumer",
+      "count": 2000
+    },
+    {
+      "type": "metric",
+      "t": 42995,
+      "id": "write-rate",
+      "value": 2000
+    },
+    {
+      "type": "metric",
+      "t": 42995,
+      "id": "write-p99",
+      "value": 18.927792640524785
+    },
+    {
+      "type": "metric",
+      "t": 42995,
+      "id": "rows-stored",
+      "value": 33100
+    },
+    {
+      "type": "flow",
+      "t": 43996,
+      "edge": "generator-to-queue",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 43996,
+      "edge": "queue-to-tidb",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 43996,
+      "edge": "tidb-to-consumer",
+      "count": 2000
+    },
+    {
+      "type": "metric",
+      "t": 43996,
+      "id": "write-rate",
+      "value": 2000
+    },
+    {
+      "type": "metric",
+      "t": 43996,
+      "id": "write-p99",
+      "value": 18.987919605639036
+    },
+    {
+      "type": "metric",
+      "t": 43996,
+      "id": "rows-stored",
+      "value": 35100
+    },
+    {
+      "type": "phase",
+      "t": 44996,
+      "phase": "verify"
+    },
+    {
+      "type": "flow",
+      "t": 44996,
+      "edge": "generator-to-queue",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 44996,
+      "edge": "queue-to-tidb",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 44996,
+      "edge": "tidb-to-consumer",
+      "count": 2000
+    },
+    {
+      "type": "metric",
+      "t": 44996,
+      "id": "write-rate",
+      "value": 2000
+    },
+    {
+      "type": "metric",
+      "t": 44996,
+      "id": "write-p99",
+      "value": 18.99719538581303
+    },
+    {
+      "type": "metric",
+      "t": 44996,
+      "id": "rows-stored",
+      "value": 37100
+    },
+    {
+      "type": "flow",
+      "t": 45996,
+      "edge": "generator-to-queue",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 45996,
+      "edge": "queue-to-tidb",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 45996,
+      "edge": "tidb-to-consumer",
+      "count": 2000
+    },
+    {
+      "type": "metric",
+      "t": 45996,
+      "id": "write-rate",
+      "value": 2000
+    },
+    {
+      "type": "metric",
+      "t": 45996,
+      "id": "write-p99",
+      "value": 18.965421979442908
+    },
+    {
+      "type": "metric",
+      "t": 45996,
+      "id": "rows-stored",
+      "value": 39100
+    },
+    {
+      "type": "flow",
+      "t": 46995,
+      "edge": "generator-to-queue",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 46996,
+      "edge": "queue-to-tidb",
+      "count": 2000
+    },
+    {
+      "type": "flow",
+      "t": 46996,
+      "edge": "tidb-to-consumer",
+      "count": 2000
+    },
+    {
+      "type": "metric",
+      "t": 46996,
+      "id": "write-rate",
+      "value": 2000
+    },
+    {
+      "type": "metric",
+      "t": 46996,
+      "id": "write-p99",
+      "value": 18.835051423280674
+    },
+    {
+      "type": "metric",
+      "t": 46996,
+      "id": "rows-stored",
+      "value": 41100
+    },
+    {
+      "type": "node",
+      "t": 46996,
+      "node": "tidb",
+      "status": "healthy"
+    },
+    {
+      "type": "flow",
+      "t": 47996,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 47996,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 47996,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 47996,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 47996,
+      "id": "write-p99",
+      "value": 8.173618767632501
+    },
+    {
+      "type": "metric",
+      "t": 47996,
+      "id": "rows-stored",
+      "value": 41300
+    },
+    {
+      "type": "flow",
+      "t": 48995,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 48995,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 48995,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 48995,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 48995,
+      "id": "write-p99",
+      "value": 8.099003465721761
+    },
+    {
+      "type": "metric",
+      "t": 48995,
+      "id": "rows-stored",
+      "value": 41500
+    },
+    {
+      "type": "flow",
+      "t": 49995,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 49995,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 49995,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 49995,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 49995,
+      "id": "write-p99",
+      "value": 7.939846669126564
+    },
+    {
+      "type": "metric",
+      "t": 49995,
+      "id": "rows-stored",
+      "value": 41700
+    },
+    {
+      "type": "flow",
+      "t": 50996,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 50996,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 50996,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 50996,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 50996,
+      "id": "write-p99",
+      "value": 8.052730652106401
+    },
+    {
+      "type": "metric",
+      "t": 50996,
+      "id": "rows-stored",
+      "value": 41900
+    },
+    {
+      "type": "flow",
+      "t": 51996,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 51996,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 51996,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 51996,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 51996,
+      "id": "write-p99",
+      "value": 8.180173772803482
+    },
+    {
+      "type": "metric",
+      "t": 51996,
+      "id": "rows-stored",
+      "value": 42100
+    },
+    {
+      "type": "flow",
+      "t": 52995,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 52995,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 52995,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 52995,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 52995,
+      "id": "write-p99",
+      "value": 8.139186899094238
+    },
+    {
+      "type": "metric",
+      "t": 52995,
+      "id": "rows-stored",
+      "value": 42300
+    },
+    {
+      "type": "flow",
+      "t": 53994,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 53994,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 53994,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 53994,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 53994,
+      "id": "write-p99",
+      "value": 8.199932820224785
+    },
+    {
+      "type": "metric",
+      "t": 53994,
+      "id": "rows-stored",
+      "value": 42500
+    },
+    {
+      "type": "flow",
+      "t": 54995,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 54995,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 54995,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 54995,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 54995,
+      "id": "write-p99",
+      "value": 8.141459249236231
+    },
+    {
+      "type": "metric",
+      "t": 54995,
+      "id": "rows-stored",
+      "value": 42700
+    },
+    {
+      "type": "flow",
+      "t": 55995,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 55995,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 55995,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 55995,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 55995,
+      "id": "write-p99",
+      "value": 8.125615220692634
+    },
+    {
+      "type": "metric",
+      "t": 55995,
+      "id": "rows-stored",
+      "value": 42900
+    },
+    {
+      "type": "flow",
+      "t": 56994,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 56995,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 56995,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 56995,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 56995,
+      "id": "write-p99",
+      "value": 8.161568737385277
+    },
+    {
+      "type": "metric",
+      "t": 56995,
+      "id": "rows-stored",
+      "value": 43100
+    },
+    {
+      "type": "flow",
+      "t": 57995,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 57995,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 57995,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 57995,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 57995,
+      "id": "write-p99",
+      "value": 8.158779940673593
+    },
+    {
+      "type": "metric",
+      "t": 57995,
+      "id": "rows-stored",
+      "value": 43300
+    },
+    {
+      "type": "flow",
+      "t": 58995,
+      "edge": "generator-to-queue",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 58995,
+      "edge": "queue-to-tidb",
+      "count": 200
+    },
+    {
+      "type": "flow",
+      "t": 58995,
+      "edge": "tidb-to-consumer",
+      "count": 200
+    },
+    {
+      "type": "metric",
+      "t": 58995,
+      "id": "write-rate",
+      "value": 200
+    },
+    {
+      "type": "metric",
+      "t": 58995,
+      "id": "write-p99",
+      "value": 8.12017882777327
+    },
+    {
+      "type": "metric",
+      "t": 58995,
+      "id": "rows-stored",
+      "value": 43500
+    },
+    {
+      "type": "check",
+      "t": 58996,
+      "id": "counts-match",
+      "status": "pass",
+      "observed": "43500 generated = 43500 stored (simulated)"
+    },
+    {
+      "type": "node",
+      "t": 58996,
+      "node": "generator",
+      "status": "done"
+    },
+    {
+      "type": "node",
+      "t": 58996,
+      "node": "queue",
+      "status": "done"
+    },
+    {
+      "type": "node",
+      "t": 58996,
+      "node": "tidb",
+      "status": "done"
+    },
+    {
+      "type": "node",
+      "t": 58996,
+      "node": "consumer",
+      "status": "done"
+    }
+  ]
+}

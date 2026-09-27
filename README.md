@@ -21,3 +21,7 @@ A collection of TiDB demo repositories showcasing various use cases and applicat
 
 - [TiDB POV Kit (Self-Service)](https://github.com/stephenlthorn/tidb-pov-kit-self-service) — Self-service proof-of-value kit for running TiDB POCs
 - [AI 30-Minute Demo](https://github.com/stephenlthorn/ai-30-min-demo) — FastAPI booth deck for a 30-minute AI demo on TiDB
+
+## Integration Lab
+
+- [TiDB Integration Lab](integrations/) - Animated, measured demos of TiDB with Kafka, AWS DMS, Debezium, Redis, Okta, Databricks, Chalk, Prometheus/Grafana, Datadog, Terraform/EKS, Power BI, and a live call copilot.
