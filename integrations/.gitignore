@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.venv/
+__pycache__/
+demos/*/traces/*.json
+!demos/*/traces/featured.json
+packages/ui/public/data/
+*.tfstate
+*.tfstate.*
+.terraform/

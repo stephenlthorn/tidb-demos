@@ -1,0 +1,13 @@
+{
+  "name": "@lab/contract",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts", "./testing": "./test/fixtures.ts" },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": { "zod": "^4.1.0" },
+  "devDependencies": { "typescript": "^5.9.0", "vitest": "^3.2.0" }
+}

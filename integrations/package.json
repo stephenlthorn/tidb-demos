@@ -1,0 +1,18 @@
+{
+  "name": "tidb-integration-lab",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lab": "pnpm --filter @lab/relay exec tsx src/cli.ts",
+    "dev": "LAB_INCLUDE_UNPUBLISHED=true pnpm lab collect-site && pnpm --filter @lab/ui dev",
+    "build:site": "pnpm lab check-public && pnpm lab collect-site && pnpm --filter @lab/ui build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}
