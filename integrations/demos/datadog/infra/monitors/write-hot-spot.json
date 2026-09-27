@@ -1,0 +1,8 @@
+{
+  "name": "Lab: TiDB write hot spot",
+  "type": "metric alert",
+  "query": "avg(last_1m):sum:tidb_cluster.process_cpu_seconds_total{component:tikv}.as_rate() * 100 > 80",
+  "message": "A TiKV process is over 80% CPU, indicating a write hot spot.",
+  "tags": ["demo:datadog", "fault:write-hot-spot"],
+  "options": { "thresholds": { "critical": 80 }, "notify_no_data": false }
+}

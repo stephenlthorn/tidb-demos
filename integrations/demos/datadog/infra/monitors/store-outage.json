@@ -1,0 +1,8 @@
+{
+  "name": "Lab: TiKV store outage",
+  "type": "metric alert",
+  "query": "avg(last_2m):sum:tidb_cluster.tikv_store_size_bytes{*}.as_count() < 1",
+  "message": "No tidb_cluster.tikv_store_size_bytes samples in the last 2 minutes; the TiKV store the Agent scrapes appears to be down.",
+  "tags": ["demo:datadog", "fault:store-outage"],
+  "options": { "thresholds": { "critical": 1 }, "notify_no_data": true, "no_data_timeframe": 2 }
+}

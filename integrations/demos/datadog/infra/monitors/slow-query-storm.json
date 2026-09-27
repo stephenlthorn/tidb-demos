@@ -1,0 +1,8 @@
+{
+  "name": "Lab: TiDB slow query storm",
+  "type": "metric alert",
+  "query": "avg(last_1m):(sum:tidb_cluster.tidb_server_handle_query_duration_seconds.sum{*}.as_rate() / sum:tidb_cluster.tidb_server_handle_query_duration_seconds.count{*}.as_rate()) * 1000 > 200",
+  "message": "TiDB mean query latency exceeds 200ms.",
+  "tags": ["demo:datadog", "fault:slow-query-storm"],
+  "options": { "thresholds": { "critical": 200 }, "notify_no_data": false }
+}

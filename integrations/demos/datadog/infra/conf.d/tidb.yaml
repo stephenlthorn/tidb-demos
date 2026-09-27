@@ -1,0 +1,17 @@
+init_config:
+
+instances:
+  - pd_metric_url: http://host.docker.internal:2379/metrics
+    send_distribution_buckets: true
+    tags:
+      - cluster_name:lab-09
+
+  - tidb_metric_url: http://host.docker.internal:10080/metrics
+    send_distribution_buckets: true
+    tags:
+      - cluster_name:lab-09
+
+  - tikv_metric_url: http://host.docker.internal:20180/metrics
+    send_distribution_buckets: true
+    tags:
+      - cluster_name:lab-09

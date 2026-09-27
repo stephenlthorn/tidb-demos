@@ -1,0 +1,15 @@
+services:
+  dd-agent:
+    image: gcr.io/datadoghq/agent:latest
+    container_name: lab-datadog-agent
+    environment:
+      DD_API_KEY: ${DD_API_KEY}
+      DD_SITE: ${DD_SITE:-datadoghq.com}
+      DD_HOSTNAME: lab-datadog-demo
+    ports:
+      - "8126:8126"
+    volumes:
+      - ./conf.d/tidb.yaml:/etc/datadog-agent/conf.d/tidb.d/conf.yaml:ro
+networks:
+  default:
+    name: lab

@@ -1,0 +1,8 @@
+{
+  "name": "Lab: TiDB connection surge",
+  "type": "metric alert",
+  "query": "avg(last_1m):sum:tidb_cluster.tidb_server_connections{*} > 150",
+  "message": "TiDB active connection count exceeds 150.",
+  "tags": ["demo:datadog", "fault:connection-surge"],
+  "options": { "thresholds": { "critical": 150 }, "notify_no_data": false }
+}
