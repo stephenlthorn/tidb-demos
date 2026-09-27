@@ -74,11 +74,19 @@ const snapshotLiteral = (snapshot: Date): string => {
   return `'${iso.slice(0, 23).replace('T', ' ')}'`;
 };
 
+const SET_UTC_TIME_ZONE_SQL = "SET time_zone = '+00:00'";
+
+export type SnapshotConnection = {
+  execute(sql: string): Promise<readonly [unknown, unknown]>;
+  query(sql: string): Promise<readonly [unknown, unknown]>;
+};
+
 export const readTotalAsOf = async (
-  connection: PoolConnection,
+  connection: SnapshotConnection,
   engine: RoutingEngine,
   snapshot: Date,
 ): Promise<number> => {
+  await connection.execute(SET_UTC_TIME_ZONE_SQL);
   await connection.execute(setIsolationEnginesStatement(engine));
   const [rows] = await connection.query(
     `SELECT COALESCE(SUM(amount), 0) AS total FROM orders AS OF TIMESTAMP ${snapshotLiteral(snapshot)} WHERE is_heartbeat = 0`,
