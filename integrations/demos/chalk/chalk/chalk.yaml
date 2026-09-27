@@ -1,0 +1,5 @@
+project: chalk-tidb-demo
+environments:
+  dev:
+    runtime: python312
+    requirements: requirements.txt
