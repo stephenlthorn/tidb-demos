@@ -1,0 +1,56 @@
+{
+  "id": "redis",
+  "number": 4,
+  "title": "Redis Cache Invalidation with TiCDC",
+  "tagline": "Stop guessing when your cache is stale - let TiCDC tell you.",
+  "integrations": ["Redis", "TiCDC", "Kafka"],
+  "pattern": "Platform teams running Redis as a cache in front of MySQL or Aurora, fighting stale cache entries and dual-write bugs.",
+  "publish": true,
+  "runner": { "command": ["node", "--import", "tsx", "runner/main.ts"] },
+  "nodes": [
+    { "id": "workload", "label": "Workload Generator", "kind": "client", "x": 8, "y": 50 },
+    { "id": "tidb", "label": "TiDB", "kind": "tidb", "x": 50, "y": 20 },
+    { "id": "ticdc", "label": "TiCDC Changefeed", "kind": "service", "x": 70, "y": 8 },
+    { "id": "kafka", "label": "Kafka", "kind": "queue", "x": 85, "y": 20 },
+    { "id": "invalidator", "label": "Invalidator", "kind": "service", "x": 85, "y": 50 },
+    { "id": "redis", "label": "Redis", "kind": "cache", "x": 50, "y": 80 },
+    { "id": "sampler", "label": "Staleness Sampler", "kind": "observability", "x": 18, "y": 80 }
+  ],
+  "edges": [
+    { "id": "writes", "from": "workload", "to": "tidb", "label": "writes", "unit": "rows/s" },
+    { "id": "cache-reads", "from": "workload", "to": "redis", "label": "cache reads", "unit": "req/s" },
+    { "id": "direct-reads", "from": "workload", "to": "tidb", "label": "direct reads", "unit": "req/s" },
+    { "id": "row-changes", "from": "tidb", "to": "ticdc", "label": "row changes", "unit": "rows/s" },
+    { "id": "change-events", "from": "ticdc", "to": "kafka", "label": "change events", "unit": "msgs/s" },
+    { "id": "consumed-events", "from": "kafka", "to": "invalidator", "label": "change events", "unit": "msgs/s" },
+    { "id": "invalidations", "from": "invalidator", "to": "redis", "label": "key invalidations", "unit": "req/s" },
+    { "id": "sampler-tidb", "from": "sampler", "to": "tidb", "label": "version checks", "unit": "req/s" },
+    { "id": "sampler-redis", "from": "sampler", "to": "redis", "label": "version checks", "unit": "req/s" }
+  ],
+  "metrics": [
+    { "id": "cache-hit-ratio", "label": "Cache hit ratio", "unit": "%", "display": "both", "better": "higher", "group": "cache", "howMeasured": "Workload generator counts Redis GET hits vs misses on the cache-read path each tick; ratio = hits / (hits + misses) over the last tick, as a percentage." },
+    { "id": "stale-read-rate", "label": "Stale read rate", "unit": "%", "display": "both", "better": "lower", "group": "cache", "howMeasured": "Sampler compares each sampled row's cached version (Redis GET) against its TiDB version (prepared point-get) each tick; percentage of sampled rows where the cached version is behind." },
+    { "id": "invalidation-lag-p50", "label": "Invalidation lag p50", "unit": "ms", "display": "both", "better": "lower", "group": "lag", "howMeasured": "Invalidator computes Date.now() minus the row's written_at_ms (read from the consumed canal-json message) at the moment it issues the Redis DEL; p50 of the last tick's samples via runner-kit summarize." },
+    { "id": "invalidation-lag-p99", "label": "Invalidation lag p99", "unit": "ms", "display": "both", "better": "lower", "group": "lag", "howMeasured": "Same samples as invalidation-lag-p50; p99 via runner-kit summarize." },
+    { "id": "redis-read-p50", "label": "Redis read p50", "unit": "ms", "display": "both", "better": "lower", "group": "latency", "howMeasured": "Workload generator times each Redis GET on the cache-read path with runner-kit timed(); p50 of the last tick's samples." },
+    { "id": "redis-read-p99", "label": "Redis read p99", "unit": "ms", "display": "both", "better": "lower", "group": "latency", "howMeasured": "Same samples as redis-read-p50; p99." },
+    { "id": "tidb-read-p50", "label": "TiDB read p50", "unit": "ms", "display": "both", "better": "lower", "group": "latency", "howMeasured": "Workload generator times each direct TiDB point-get (prepared statement via pool.execute) with runner-kit timed(); p50 of the last tick's samples." },
+    { "id": "tidb-read-p99", "label": "TiDB read p99", "unit": "ms", "display": "both", "better": "lower", "group": "latency", "howMeasured": "Same samples as tidb-read-p50; p99." },
+    { "id": "tidb-qps", "label": "TiDB QPS", "unit": "req/s", "display": "both", "better": "neutral", "group": "throughput", "howMeasured": "Count of completed direct-TiDB-read-path queries in the last tick, divided by the tick interval in seconds." },
+    { "id": "redis-ops-s", "label": "Redis ops/s", "unit": "req/s", "display": "both", "better": "neutral", "group": "throughput", "howMeasured": "Count of completed Redis GET/DEL operations in the last tick, divided by the tick interval in seconds." }
+  ],
+  "phases": [
+    { "id": "ttl-only", "label": "Cache-aside with TTL", "narration": "This is the pattern most platform teams already run: Redis in front of the database with a TTL. Watch the stale read rate. Every row carries a version number, so we don't have to guess - when a write lands, the cache doesn't know until the TTL expires, and every read in that window is provably stale." },
+    { "id": "cdc-invalidation", "label": "CDC-driven invalidation", "narration": "Now a TiCDC changefeed streams every committed row change to Kafka, and an invalidator service deletes the Redis key the moment it sees it. No dual-write code in the application, no TTL guesswork. Watch the stale read rate drop to zero, and watch the invalidation lag - that's the real number, not a marketing number." },
+    { "id": "tidb-direct", "label": "Do you still need Redis?", "narration": "So do you still need Redis? Watch the same read mix go straight to TiDB by primary key. TiDB is slower than an in-memory cache - it's not trying to beat Redis - but it's fast enough that some read paths can drop Redis and its staleness problem entirely. Now watch what happens when we hammer a single hot key: that's exactly where Redis still wins outright." }
+  ],
+  "checks": [
+    { "id": "cdc-zero-stale", "label": "Zero stale reads in CDC mode", "description": "In cdc mode, once one invalidation-lag-p99 worth of milliseconds has elapsed since the last write-burst, the next full sampling tick's stale-read-rate must read exactly 0." },
+    { "id": "versions-converge", "label": "Cache and DB versions converge after burst", "description": "After a write-burst control fires, the sampler finds every sampled row's cached version equal to its TiDB version within one invalidation cycle (cdc mode) or one TTL period (ttl mode)." }
+  ],
+  "controls": [
+    { "id": "write-burst", "label": "Write burst", "description": "Fires a fixed number of UPDATEs in quick succession against a random subset of demo rows, each bumping version and written_at_ms." },
+    { "id": "toggle-mode", "label": "Toggle invalidation mode (TTL / CDC)", "description": "Flips the invalidation-mode state between ttl (Redis keys expire only by TTL) and cdc (the invalidator consumes Kafka and deletes keys on every row change)." },
+    { "id": "hot-key-storm", "label": "Hot-key storm", "description": "Points the read workload at a single configured row id at a high fixed rate for a fixed duration." }
+  ]
+}
