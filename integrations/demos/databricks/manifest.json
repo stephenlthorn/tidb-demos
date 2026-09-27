@@ -1,0 +1,57 @@
+{
+  "id": "databricks",
+  "number": 6,
+  "title": "TiDB + Databricks: Operational Store Meets the Lakehouse",
+  "tagline": "TiDB serves live features while Databricks trains and scores on the same fresh data.",
+  "integrations": ["Databricks", "Databricks SQL Lakehouse Federation", "TiFlash"],
+  "pattern": "Data platform teams on Databricks asking how an operational database fits next to the lakehouse.",
+  "publish": true,
+  "runner": {
+    "command": ["node", "--import", "tsx", "runner/main.ts"],
+    "cwd": "."
+  },
+  "nodes": [
+    { "id": "app", "label": "Operational App", "kind": "client", "x": 8, "y": 30 },
+    { "id": "tidb", "label": "TiDB Cloud (Starter)", "kind": "tidb", "x": 50, "y": 45 },
+    { "id": "tiflash", "label": "TiFlash (columnar)", "kind": "tidb", "x": 50, "y": 80 },
+    { "id": "databricks", "label": "Databricks Lakehouse", "kind": "cloud", "x": 88, "y": 30 }
+  ],
+  "edges": [
+    { "id": "writes", "from": "app", "to": "tidb", "label": "events written", "unit": "rows/s" },
+    { "id": "federated-read", "from": "tidb", "to": "databricks", "label": "federated read (JDBC)", "unit": "rows/s" },
+    { "id": "reverse-etl", "from": "databricks", "to": "tidb", "label": "scores written back", "unit": "rows/s" },
+    { "id": "serving-reads", "from": "tidb", "to": "app", "label": "serving reads", "unit": "req/s" },
+    { "id": "replication", "from": "tidb", "to": "tiflash", "label": "columnar replication", "unit": "rows/s" },
+    { "id": "analytics-query", "from": "tiflash", "to": "app", "label": "ad hoc analytics results", "unit": "req/s" }
+  ],
+  "metrics": [
+    { "id": "event-write-rate", "label": "Operational Write Rate", "unit": "rows/s", "display": "both", "better": "higher", "group": "operational", "howMeasured": "Rows inserted into TiDB's events table since the last event-loop tick, divided by EVENT_WRITE_INTERVAL_MS / 1000." },
+    { "id": "freshness-lag-ms", "label": "Freshness Lag: TiDB -> Delta", "unit": "ms", "display": "both", "better": "lower", "group": "sync", "target": 5000, "howMeasured": "computeFreshnessLagMs(heartbeatWrittenAtMs, observedAtMs): heartbeatWrittenAtMs parsed from the federated MAX(written_at) read; observedAtMs is Date.now() when that read resolves." },
+    { "id": "rows-synced", "label": "Rows Read by Databricks", "unit": "rows", "display": "tile", "better": "neutral", "group": "sync", "howMeasured": "The row_count field of the Statement Execution API response for the scoring INSERT ... SELECT statement." },
+    { "id": "write-back-rate", "label": "Reverse-ETL Write Rate", "unit": "rows/s", "display": "both", "better": "higher", "group": "sync", "howMeasured": "Scored rows in the upsert batch divided by the wall-clock seconds timed() measured for the single TiDB upsert statement." },
+    { "id": "serving-p50", "label": "Serving Read p50", "unit": "ms", "display": "both", "better": "lower", "group": "serving", "howMeasured": "summarize() of timed() latencies for SELECT ... FROM customer_risk_scores ORDER BY RAND() LIMIT 1, .p50 field, recomputed each event-loop tick." },
+    { "id": "serving-p99", "label": "Serving Read p99", "unit": "ms", "display": "both", "better": "lower", "group": "serving", "target": 200, "howMeasured": "Same summarize() call as serving-p50, .p99 field." },
+    { "id": "full-loop-time", "label": "Event to Servable Feature", "unit": "s", "display": "both", "better": "lower", "group": "loop", "target": 30, "howMeasured": "computeFullLoopSeconds(loopStartMs, writeBackAtMs): loopStartMs is the runner's Date.now() at the last event write before the scoring run started; writeBackAtMs is Date.now() right after the scored rows are read back from Databricks." },
+    { "id": "analytics-query-ms", "label": "Ad Hoc TiFlash Query Latency", "unit": "ms", "display": "tile", "better": "lower", "group": "analytics", "howMeasured": "timed() around the single TiFlash-hinted aggregate SELECT issued directly against TiDB when the run-analytics control fires." }
+  ],
+  "phases": [
+    { "id": "steady-writes", "label": "Steady-State Writes", "narration": "This is just an app writing to TiDB - purchases, refunds, chargebacks, one row at a time, like any OLTP workload." },
+    { "id": "federated-read", "label": "Databricks Reads TiDB Live", "narration": "Databricks is now querying TiDB directly - no export job, no staging bucket, just a live JDBC read through Unity Catalog." },
+    { "id": "score-write-back", "label": "Reverse ETL: Scores Back to TiDB", "narration": "The scores Databricks just computed are landing back in TiDB, in a table the app already knows how to query." },
+    { "id": "low-latency-serving", "label": "Serving Fresh Scores", "narration": "The app is reading those scores right now, in single-digit milliseconds, while new events keep landing." },
+    { "id": "adhoc-analytics", "label": "Ad Hoc Analytics on Fresh Data", "narration": "Same fresh data, same cluster, now answered by the columnar engine instead of the row store - no second database." },
+    { "id": "rule-change", "label": "Changing the Rule Live", "narration": "Swapping the scoring rule is a SQL change on the Databricks side - nothing in TiDB or the app has to redeploy." }
+  ],
+  "checks": [
+    { "id": "federation-reachable", "label": "Databricks Can Read TiDB", "description": "The first federated SELECT MAX(written_at) against the TiDB foreign catalog returns a row." },
+    { "id": "scores-written-back", "label": "Scores Land Back in TiDB", "description": "The reverse-ETL upsert into customer_risk_scores completes without error." },
+    { "id": "loop-closed", "label": "Full Loop Closes", "description": "computeFullLoopSeconds returns a finite, non-negative duration for the run." },
+    { "id": "writes-continue-during-scoring", "label": "OLTP Writes Never Pause", "description": "No tick during the scoring/write-back window recorded zero event writes." }
+  ],
+  "controls": [
+    { "id": "trigger-scoring", "label": "Run scoring now", "description": "Immediately runs the federated-read -> score -> write-back sequence." },
+    { "id": "burst-events", "label": "Burst events", "description": "Writes BURST_EVENT_COUNT synthetic events back-to-back." },
+    { "id": "change-rule", "label": "Change scoring rule", "description": "Toggles the scoring rule between velocity and amount for the next run." },
+    { "id": "run-analytics", "label": "Run ad hoc analytics", "description": "Runs one TiFlash-hinted aggregate query against TiDB and times it." }
+  ]
+}
