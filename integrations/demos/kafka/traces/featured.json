@@ -25,50 +25,50 @@
         "id": "producer",
         "label": "Payment producer",
         "kind": "source",
-        "x": 5,
-        "y": 20
+        "x": 12,
+        "y": 22
       },
       {
         "id": "payments-topic",
         "label": "payments topic",
         "kind": "queue",
-        "x": 25,
-        "y": 20
+        "x": 38,
+        "y": 22
       },
       {
         "id": "ingester",
         "label": "Ingester",
         "kind": "service",
-        "x": 40,
-        "y": 20
+        "x": 64,
+        "y": 22
       },
       {
         "id": "tidb",
         "label": "TiDB",
         "kind": "tidb",
-        "x": 50,
+        "x": 86,
         "y": 50
       },
       {
         "id": "ticdc",
         "label": "TiCDC changefeed",
         "kind": "service",
-        "x": 62,
-        "y": 35
+        "x": 64,
+        "y": 80
       },
       {
         "id": "changes-topic",
         "label": "tidb-changes topic",
         "kind": "queue",
-        "x": 78,
-        "y": 35
+        "x": 38,
+        "y": 80
       },
       {
         "id": "risk-consumer",
         "label": "Risk-alert consumer",
         "kind": "sink",
-        "x": 92,
-        "y": 35
+        "x": 12,
+        "y": 80
       }
     ],
     "edges": [
