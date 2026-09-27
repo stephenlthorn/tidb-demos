@@ -1,5 +1,5 @@
 import { Pool } from 'pg';
-import { buildChecksumQuery, type ChecksumColumn } from './checksum';
+import { buildChecksumQuery, quotePostgresIdentifier, type ChecksumColumn } from './checksum';
 
 export type PgClient = {
   readonly insertHeartbeat: () => Promise<{ readonly heartbeatId: number; readonly insertedAtMs: number }>;
@@ -16,8 +16,6 @@ export type PgClient = {
 type HeartbeatRow = { readonly heartbeat_id: number; readonly inserted_at: Date };
 type CountRow = { readonly count: string };
 type ChecksumRow = { readonly checksum: string };
-
-const quotePgIdentifier = (name: string): string => `"${name.replaceAll('"', '""')}"`;
 
 export const createPgClient = (env: NodeJS.ProcessEnv = process.env): PgClient => {
   const pool = new Pool({
@@ -38,7 +36,7 @@ export const createPgClient = (env: NodeJS.ProcessEnv = process.env): PgClient =
   };
 
   const countRows = async (table: string): Promise<number> => {
-    const result = await pool.query<CountRow>(`SELECT COUNT(*) AS count FROM ${quotePgIdentifier(table)}`);
+    const result = await pool.query<CountRow>(`SELECT COUNT(*) AS count FROM ${quotePostgresIdentifier(table)}`);
     const row = result.rows[0];
     if (row === undefined) throw new Error(`count query returned no row for table ${table}`);
     return Number(row.count);

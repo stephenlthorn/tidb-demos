@@ -1,3 +1,5 @@
+import { quoteIdentifier } from '@lab/runner-kit';
+
 export type ChecksumDialect = 'postgres' | 'mysql';
 
 export type ColumnType = 'text' | 'boolean' | 'timestamptz' | 'numeric' | 'json';
@@ -13,24 +15,32 @@ export type NormalizedColumnOptions = ChecksumColumn & {
   readonly dialect: ChecksumDialect;
 };
 
-const NULL_TOKEN = "'\\N'";
+const NULL_TOKEN = "'\x01__NULL__\x01'";
+
+export const POSTGRES_JSON_CANONICAL_FUNCTION = 'lab_jsonb_canonical';
+
+export const quotePostgresIdentifier = (name: string): string => `"${name.replaceAll('"', '""')}"`;
+
+const quoteIdentifierForDialect = (dialect: ChecksumDialect, name: string): string =>
+  dialect === 'postgres' ? quotePostgresIdentifier(name) : quoteIdentifier(name);
 
 export const normalizedColumnExpression = (options: NormalizedColumnOptions): string => {
   const { dialect, column, type, precision, scale } = options;
+  const quotedColumn = quoteIdentifierForDialect(dialect, column);
 
   if (type === 'boolean') {
     const raw =
       dialect === 'postgres'
-        ? `CASE WHEN ${column} THEN '1' ELSE '0' END`
-        : `CAST(${column} AS CHAR)`;
+        ? `CASE WHEN ${quotedColumn} IS NULL THEN NULL WHEN ${quotedColumn} THEN '1' ELSE '0' END`
+        : `CAST(${quotedColumn} AS CHAR)`;
     return `COALESCE(${raw}, ${NULL_TOKEN})`;
   }
 
   if (type === 'timestamptz') {
     const raw =
       dialect === 'postgres'
-        ? `to_char(${column} AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')`
-        : `DATE_FORMAT(${column}, '%Y-%m-%d %H:%i:%s')`;
+        ? `to_char(${quotedColumn} AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')`
+        : `DATE_FORMAT(${quotedColumn}, '%Y-%m-%d %H:%i:%s')`;
     return `COALESCE(${raw}, ${NULL_TOKEN})`;
   }
 
@@ -39,17 +49,20 @@ export const normalizedColumnExpression = (options: NormalizedColumnOptions): st
     const s = scale ?? 2;
     const raw =
       dialect === 'postgres'
-        ? `CAST(${column} AS NUMERIC(${p},${s}))::text`
-        : `CAST(CAST(${column} AS DECIMAL(${p},${s})) AS CHAR)`;
+        ? `CAST(${quotedColumn} AS NUMERIC(${p},${s}))::text`
+        : `CAST(CAST(${quotedColumn} AS DECIMAL(${p},${s})) AS CHAR)`;
     return `COALESCE(${raw}, ${NULL_TOKEN})`;
   }
 
   if (type === 'json') {
-    const raw = dialect === 'postgres' ? `${column}::jsonb::text` : `CAST(${column} AS JSON)`;
+    const raw =
+      dialect === 'postgres'
+        ? `${POSTGRES_JSON_CANONICAL_FUNCTION}(${quotedColumn})`
+        : `CAST(${quotedColumn} AS JSON)`;
     return `COALESCE(${raw}, ${NULL_TOKEN})`;
   }
 
-  const raw = dialect === 'postgres' ? `${column}::text` : `CAST(${column} AS CHAR)`;
+  const raw = dialect === 'postgres' ? `${quotedColumn}::text` : `CAST(${quotedColumn} AS CHAR)`;
   return `COALESCE(${raw}, ${NULL_TOKEN})`;
 };
 
@@ -71,8 +84,7 @@ export const buildChecksumQuery = (options: ChecksumQueryOptions): string => {
       ? `('x' || substr(md5(${concatExpression}), 1, 8))::bit(32)::bigint`
       : `CONV(SUBSTRING(MD5(${concatExpression}), 1, 8), 16, 10)`;
 
-  return (
-    `SELECT COALESCE(SUM(${hashExpression}), 0) AS checksum ` +
-    `FROM ${options.table} ORDER BY ${options.primaryKey}`
-  );
+  const quotedTable = quoteIdentifierForDialect(options.dialect, options.table);
+
+  return `SELECT COALESCE(SUM(${hashExpression}), 0) AS checksum FROM ${quotedTable}`;
 };
