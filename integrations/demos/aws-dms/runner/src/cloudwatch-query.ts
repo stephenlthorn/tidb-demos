@@ -85,10 +85,16 @@ export const parseGetMetricDataResponse = (response: RawGetMetricDataResponse): 
     const values = result.Values ?? [];
     if (result.Id === undefined || timestamps.length === 0 || values.length === 0) continue;
     let latestIndex = 0;
+    let latestTimestamp = timestamps[0];
     for (let i = 1; i < timestamps.length; i += 1) {
-      if (timestamps[i].getTime() > timestamps[latestIndex].getTime()) latestIndex = i;
+      const candidate = timestamps[i];
+      if (latestTimestamp !== undefined && candidate !== undefined && candidate.getTime() > latestTimestamp.getTime()) {
+        latestIndex = i;
+        latestTimestamp = candidate;
+      }
     }
-    results[result.Id] = values[latestIndex];
+    const latestValue = values[latestIndex];
+    if (latestValue !== undefined) results[result.Id] = latestValue;
   }
   return results;
 };
