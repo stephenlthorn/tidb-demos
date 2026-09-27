@@ -1,0 +1,10 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: lab-redis-demo
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--save", ""]
+networks:
+  default:
+    name: lab
