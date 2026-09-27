@@ -1,0 +1,61 @@
+{
+  "id": "datadog",
+  "number": 9,
+  "title": "Datadog metrics, APM, and Monitors",
+  "tagline": "TiDB metrics in the Datadog Agent, a slow query traced to a SQL digest, four Monitors that detect and resolve",
+  "integrations": ["Datadog"],
+  "pattern": "platform and SRE teams that will not approve a new database until its metrics, alerts, and traces land in the observability stack they already run",
+  "publish": true,
+  "runner": { "command": ["node", "--import", "tsx", "runner/main.ts"], "cwd": "." },
+  "nodes": [
+    { "id": "workload", "label": "Workload generator", "kind": "source", "x": 8, "y": 65 },
+    { "id": "apm-service", "label": "APM-instrumented service", "kind": "service", "x": 30, "y": 62 },
+    { "id": "tidb", "label": "TiDB", "kind": "tidb", "x": 45, "y": 30 },
+    { "id": "pd", "label": "PD", "kind": "service", "x": 45, "y": 10 },
+    { "id": "tikv", "label": "TiKV", "kind": "service", "x": 45, "y": 45 },
+    { "id": "dd-agent", "label": "Datadog Agent", "kind": "observability", "x": 65, "y": 30 },
+    { "id": "datadog", "label": "Datadog", "kind": "cloud", "x": 88, "y": 30 }
+  ],
+  "edges": [
+    { "id": "workload-tidb", "from": "workload", "to": "tidb", "label": "queries", "unit": "rows/s" },
+    { "id": "apm-tidb", "from": "apm-service", "to": "tidb", "label": "instrumented queries", "unit": "rows/s" },
+    { "id": "tidb-tikv", "from": "tidb", "to": "tikv", "label": "kv requests", "unit": "req/s" },
+    { "id": "tidb-pd", "from": "tidb", "to": "pd", "label": "tso/heartbeat", "unit": "req/s" },
+    { "id": "tidb-dd-agent", "from": "tidb", "to": "dd-agent", "label": "scrape", "unit": "count" },
+    { "id": "tikv-dd-agent", "from": "tikv", "to": "dd-agent", "label": "scrape", "unit": "count" },
+    { "id": "pd-dd-agent", "from": "pd", "to": "dd-agent", "label": "scrape", "unit": "count" },
+    { "id": "dd-agent-datadog", "from": "dd-agent", "to": "datadog", "label": "forward metrics", "unit": "count" },
+    { "id": "apm-datadog", "from": "apm-service", "to": "datadog", "label": "forward traces", "unit": "count" }
+  ],
+  "metrics": [
+    { "id": "qps", "label": "Queries per second", "unit": "req/s", "display": "both", "better": "higher", "howMeasured": "Datadog Metrics query API GET /api/v1/query with query=sum:tidb_cluster.tidb_executor_statement_total{*}.as_rate(), polled once per tick" },
+    { "id": "p99-latency", "label": "Query mean latency", "unit": "ms", "display": "both", "better": "lower", "howMeasured": "Datadog Metrics query API with query=(sum:tidb_cluster.tidb_server_handle_query_duration_seconds.sum{*}.as_rate() / sum:tidb_cluster.tidb_server_handle_query_duration_seconds.count{*}.as_rate()) * 1000; this is a mean, not a true p99, because the Agent integration only ships count/sum for this histogram" },
+    { "id": "tikv-cpu", "label": "TiKV CPU usage", "unit": "%", "display": "both", "better": "lower", "howMeasured": "Datadog Metrics query API with query=sum:tidb_cluster.process_cpu_seconds_total{component:tikv}.as_rate() * 100" },
+    { "id": "active-connections", "label": "Active connections", "unit": "count", "display": "both", "better": "neutral", "howMeasured": "Datadog Metrics query API with query=sum:tidb_cluster.tidb_server_connections{*}" },
+    { "id": "trace-count", "label": "APM spans with DB tag", "unit": "count", "display": "tile", "better": "higher", "howMeasured": "count of spans the instrumented service reports locally with a db.type: mysql tag, incremented in-process by the runner" },
+    { "id": "detection-latency", "label": "Time to detect (last fault)", "unit": "s", "display": "tile", "better": "lower", "howMeasured": "Monitor overall_state observed as Alert via 5-second polling of GET /api/v1/monitor/{id}, minus the fault injection timestamp, recorded in-process by the runner" }
+  ],
+  "phases": [
+    { "id": "intro", "label": "Steady state", "narration": "This is the same steady workload from the Prometheus demo, but now it's also flowing through a Datadog Agent and an APM-instrumented service." },
+    { "id": "slow-query-storm", "label": "Slow query storm", "narration": "Watch this slow query show up as a red span in Datadog APM, tagged with the exact SQL." },
+    { "id": "write-hot-spot", "label": "Write hot spot", "narration": "Same hot-spot pattern as before, this time visible in the Datadog TiKV CPU metric." },
+    { "id": "store-outage", "label": "TiKV store outage", "narration": "A node failure, and Datadog's own Monitor catches it." },
+    { "id": "connection-surge", "label": "Connection surge", "narration": "A connection leak, the same failure every on-call engineer has paged for." },
+    { "id": "recovery", "label": "Recovery", "narration": "Every Datadog Monitor we just triggered resolves on its own." },
+    { "id": "wrap-up", "label": "Wrap-up", "narration": "Four faults, four Datadog Monitors, one slow trace correlated straight back to a SQL digest in TiDB." }
+  ],
+  "checks": [
+    { "id": "detect-slow-query-storm", "label": "Slow query storm monitor fired", "description": "Polling GET /api/v1/monitor/{id} for the slow-query monitor shows overall_state Alert within its evaluation window plus one Agent collection interval of injection" },
+    { "id": "detect-write-hot-spot", "label": "Write hot spot monitor fired", "description": "Same polling pattern for the TiKV CPU monitor" },
+    { "id": "detect-store-outage", "label": "Store outage monitor fired", "description": "Same polling pattern for the store-size-staleness monitor" },
+    { "id": "detect-connection-surge", "label": "Connection surge monitor fired", "description": "Same polling pattern for the connections monitor" },
+    { "id": "slow-span-correlated", "label": "Slow span matches a TiDB SQL digest", "description": "The slowest reported span's sql tag matches a QUERY_SAMPLE_TEXT row in information_schema.statements_summary" }
+  ],
+  "controls": [
+    { "id": "inject-slow-query-storm", "label": "Inject slow query storm", "description": "Runs the slow query through the instrumented APM service and starts runSlowQueryStorm, moves to phase slow-query-storm" },
+    { "id": "inject-write-hot-spot", "label": "Inject write hot spot", "description": "Starts runWriteHotSpot, moves to phase write-hot-spot" },
+    { "id": "inject-store-outage", "label": "Inject TiKV store outage", "description": "Starts stopTikvStore, moves to phase store-outage" },
+    { "id": "inject-connection-surge", "label": "Inject connection surge", "description": "Starts runConnectionSurge, moves to phase connection-surge" },
+    { "id": "clear-faults", "label": "Clear all faults", "description": "Calls clearAllFaults, restarts any stopped TiKV store, moves to phase recovery" }
+  ]
+}
