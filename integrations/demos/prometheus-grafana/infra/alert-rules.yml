@@ -1,0 +1,31 @@
+groups:
+  - name: lab-prometheus-grafana
+    rules:
+      - alert: LabSlowQueryStorm
+        expr: histogram_quantile(0.99, sum(rate(tidb_server_handle_query_duration_seconds_bucket[1m])) by (le)) > 0.5
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "TiDB p99 query latency exceeds 500ms"
+      - alert: LabWriteHotSpot
+        expr: sum(rate(tikv_thread_cpu_seconds_total{name=~"raftstore_.*"}[1m])) by (instance) > 0.8
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "A TiKV raftstore thread pool is over 80% busy, indicating a write hot spot"
+      - alert: LabStoreOutage
+        expr: sum(pd_cluster_status{type="store_down_count"}) > 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "PD reports at least one TiKV store down"
+      - alert: LabConnectionSurge
+        expr: sum(tidb_server_connections) > 150
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "TiDB active connection count exceeds 150"
