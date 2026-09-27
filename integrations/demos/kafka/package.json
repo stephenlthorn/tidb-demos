@@ -1,0 +1,24 @@
+{
+  "name": "@lab/demo-kafka",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@lab/contract": "workspace:*",
+    "@lab/runner-kit": "workspace:*",
+    "@confluentinc/kafka-javascript": "^1.0.0",
+    "mysql2": "^3.11.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.0",
+    "@types/node": "^22.10.0",
+    "vitest": "^3.2.0",
+    "typescript": "^5.9.0"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "start": "node --import tsx runner/main.ts"
+  }
+}

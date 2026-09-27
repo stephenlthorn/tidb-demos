@@ -1,0 +1,57 @@
+{
+  "id": "kafka",
+  "number": 2,
+  "title": "Kafka: fintech risk pipeline",
+  "tagline": "Payments flow through Kafka into TiDB, and every committed change flows back out through TiCDC.",
+  "integrations": ["Apache Kafka", "TiCDC"],
+  "pattern": "fintech risk pipeline: payment events stream through Kafka into TiDB, risk state lives in TiDB, and TiCDC streams every change back out to Kafka for downstream consumers",
+  "publish": true,
+  "runner": { "command": ["node", "--import", "tsx", "runner/main.ts"], "cwd": "." },
+  "nodes": [
+    { "id": "producer", "label": "Payment producer", "kind": "source", "x": 5, "y": 20 },
+    { "id": "payments-topic", "label": "payments topic", "kind": "queue", "x": 25, "y": 20 },
+    { "id": "ingester", "label": "Ingester", "kind": "service", "x": 40, "y": 20 },
+    { "id": "tidb", "label": "TiDB", "kind": "tidb", "x": 50, "y": 50 },
+    { "id": "ticdc", "label": "TiCDC changefeed", "kind": "service", "x": 62, "y": 35 },
+    { "id": "changes-topic", "label": "tidb-changes topic", "kind": "queue", "x": 78, "y": 35 },
+    { "id": "risk-consumer", "label": "Risk-alert consumer", "kind": "sink", "x": 92, "y": 35 }
+  ],
+  "edges": [
+    { "id": "produce", "from": "producer", "to": "payments-topic", "label": "payments produced", "unit": "msgs/s" },
+    { "id": "consume-payments", "from": "payments-topic", "to": "ingester", "label": "payments consumed", "unit": "msgs/s" },
+    { "id": "upsert", "from": "ingester", "to": "tidb", "label": "rows upserted", "unit": "rows/s" },
+    { "id": "capture", "from": "tidb", "to": "ticdc", "label": "rows captured", "unit": "rows/s" },
+    { "id": "publish-change", "from": "ticdc", "to": "changes-topic", "label": "changes published", "unit": "msgs/s" },
+    { "id": "consume-changes", "from": "changes-topic", "to": "risk-consumer", "label": "changes consumed", "unit": "msgs/s" }
+  ],
+  "metrics": [
+    { "id": "produce-rate", "label": "Produce rate", "unit": "msgs/s", "display": "both", "better": "higher", "group": "throughput", "howMeasured": "Acked messages per tick from the producer's Kafka client, divided by tick seconds." },
+    { "id": "ingest-rate", "label": "Ingest rate", "unit": "rows/s", "display": "both", "better": "higher", "group": "throughput", "howMeasured": "affectedRows from the batched upsert per tick, divided by tick seconds." },
+    { "id": "consumer-lag-payments", "label": "Ingester consumer lag", "unit": "count", "display": "tile", "better": "lower", "group": "lag", "howMeasured": "High-water mark minus committed offset for the ingester's consumer group on payments, summed across partitions via the Kafka admin client." },
+    { "id": "consumer-lag-changes", "label": "Risk consumer lag", "unit": "count", "display": "tile", "better": "lower", "group": "lag", "howMeasured": "High-water mark minus committed offset for the risk consumer's group on tidb-changes." },
+    { "id": "tidb-write-p99", "label": "TiDB upsert p99", "unit": "ms", "display": "both", "better": "lower", "group": "latency", "howMeasured": "summarize() over per-batch upsert wall-clock times measured with timed(), emitted once per tick." },
+    { "id": "ticdc-checkpoint-lag", "label": "TiCDC checkpoint lag", "unit": "ms", "display": "both", "better": "lower", "group": "lag", "howMeasured": "now minus Date.parse(checkpoint_time) from GET /api/v2/changefeeds/{id} on the local TiCDC OpenAPI v2." },
+    { "id": "e2e-latency-p50", "label": "End-to-end latency p50", "unit": "ms", "display": "series", "better": "lower", "group": "latency", "howMeasured": "p50 of (CDC event consumed at) minus (produce_ts embedded in the payment payload), over the tick's samples." },
+    { "id": "e2e-latency-p99", "label": "End-to-end latency p99", "unit": "ms", "display": "series", "better": "lower", "group": "latency", "howMeasured": "p99 of the same sample set as e2e-latency-p50." },
+    { "id": "duplicates-observed", "label": "Duplicate CDC events observed", "unit": "count", "display": "tile", "better": "lower", "group": "correctness", "howMeasured": "Cumulative count of (payment_id, commit_ts) pairs seen more than once on tidb-changes, tracked by the risk consumer's dedupe set." }
+  ],
+  "phases": [
+    { "id": "warm-up", "label": "Warming up", "narration": "We're standing up a normal Kafka-to-TiDB pipeline: nothing custom, just a consumer doing upserts." },
+    { "id": "steady-state", "label": "Steady state", "narration": "At steady state every payment event becomes a row in TiDB, and TiCDC re-publishes that row change within milliseconds." },
+    { "id": "burst", "label": "10x burst", "narration": "Now we 10x the load. Watch ingest rate and TiCDC checkpoint lag - TiDB absorbs it, TiCDC catches up." },
+    { "id": "ingester-restart", "label": "Ingester restart", "narration": "We kill the ingester consumer. Kafka holds its committed offset, so when it reconnects it resumes exactly where it left off - no loss, no duplicate rows in TiDB." },
+    { "id": "changefeed-pause-resume", "label": "Pause and resume the changefeed", "narration": "We pause the changefeed itself. TiDB keeps taking writes. When we resume, TiCDC catches up from its checkpoint - and this is exactly where Kafka's at-least-once delivery shows up as visible duplicates downstream." },
+    { "id": "wrap-up", "label": "Wrap-up", "narration": "Produced count equals rows in TiDB equals distinct CDC events. Duplicates happened, and we caught every one of them." }
+  ],
+  "checks": [
+    { "id": "produced-equals-tidb-rows", "label": "Produced count equals TiDB row count", "description": "Producer's cumulative event count equals SELECT COUNT(*) FROM payments once the producer is idle." },
+    { "id": "tidb-rows-equals-cdc-distinct", "label": "TiDB rows equal distinct CDC events", "description": "Count of distinct (payment_id, commit_ts) pairs seen on tidb-changes equals the TiDB row count." },
+    { "id": "zero-duplicate-rows-in-tidb", "label": "Zero duplicate rows in TiDB", "description": "SELECT payment_id, COUNT(*) FROM payments GROUP BY payment_id HAVING COUNT(*) > 1 returns no rows." }
+  ],
+  "controls": [
+    { "id": "burst", "label": "Burst 10x for 30s", "description": "Multiplies producer rate by 10 for 30 seconds, then returns to baseline." },
+    { "id": "restart-ingester", "label": "Kill ingester", "description": "Tears down and recreates the ingester's Kafka consumer under the same group id." },
+    { "id": "pause-changefeed", "label": "Pause changefeed", "description": "Calls POST /api/v2/changefeeds/{id}/pause." },
+    { "id": "resume-changefeed", "label": "Resume changefeed", "description": "Calls POST /api/v2/changefeeds/{id}/resume." }
+  ]
+}
