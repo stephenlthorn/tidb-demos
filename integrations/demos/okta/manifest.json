@@ -1,0 +1,80 @@
+{
+  "id": "okta",
+  "number": 5,
+  "title": "Okta identity lifecycle to TiDB database access",
+  "tagline": "Okta group membership drives TiDB grants, live, with a revoke you can watch fail on camera.",
+  "integrations": ["okta"],
+  "pattern": "Enterprise security team in a PoC asking many SSO setup questions and wanting to see identity lifecycle end to end before approving a new database.",
+  "publish": true,
+  "runner": {
+    "command": ["node", "--import", "tsx", "runner/main.ts"],
+    "cwd": "."
+  },
+  "nodes": [
+    { "id": "okta", "label": "Okta", "kind": "identity", "x": 10, "y": 50 },
+    { "id": "sync", "label": "Identity Sync Service", "kind": "service", "x": 35, "y": 50 },
+    { "id": "tidb", "label": "TiDB", "kind": "tidb", "x": 55, "y": 50 },
+    { "id": "app", "label": "Reporting App", "kind": "client", "x": 82, "y": 50 }
+  ],
+  "edges": [
+    { "id": "okta-to-sync", "from": "okta", "to": "sync", "label": "group events", "unit": "msgs/s" },
+    { "id": "sync-to-tidb", "from": "sync", "to": "tidb", "label": "grants applied", "unit": "rows/s" },
+    { "id": "app-to-tidb", "from": "app", "to": "tidb", "label": "queries", "unit": "req/s" }
+  ],
+  "metrics": [
+    {
+      "id": "provision-latency-ms",
+      "label": "Provision latency",
+      "unit": "ms",
+      "display": "both",
+      "better": "lower",
+      "group": "latency",
+      "howMeasured": "msSincePublished(event.published, Date.now()) where event is the Okta System Log group.user_membership.add entry and the end time is when CREATE USER + GRANT complete for that user"
+    },
+    {
+      "id": "revoke-latency-ms",
+      "label": "Revoke latency",
+      "unit": "ms",
+      "display": "both",
+      "better": "lower",
+      "group": "latency",
+      "howMeasured": "msSincePublished(event.published, Date.now()) where event is the Okta user.lifecycle.deactivate or final group.user_membership.remove entry and the end time is when a real mysql2 connection attempt as that user first throws access-denied"
+    },
+    {
+      "id": "grant-drift-count",
+      "label": "Grant drift count",
+      "unit": "count",
+      "display": "both",
+      "better": "lower",
+      "group": "correctness",
+      "howMeasured": "findDrift(desired, actual).length computed each reconciliation tick, desired from a fresh Okta Groups API read, actual from parsing SHOW GRANTS FOR <user> for every lab_-prefixed TiDB user"
+    },
+    {
+      "id": "audit-events-processed",
+      "label": "Audit events processed",
+      "unit": "count",
+      "display": "series",
+      "better": "higher",
+      "group": "throughput",
+      "howMeasured": "cumulative count of Okta System Log entries read and applied by the poller since the runner started, incremented once per processed entry"
+    }
+  ],
+  "phases": [
+    { "id": "baseline", "label": "Baseline", "narration": "Here's our starting state: two TiDB roles already exist, and our demo user has no Okta group membership and no TiDB login yet." },
+    { "id": "provision", "label": "Provision on group add", "narration": "Watch the clock: from the moment I add this person to the analysts group in Okta, to the moment they can query the reporting schema in TiDB." },
+    { "id": "rescope", "label": "Re-scope on group move", "narration": "Now I move them to engineering in Okta. TiDB re-scopes their grants, no manual SQL." },
+    { "id": "revoke", "label": "Revoke on removal", "narration": "I deactivate them in Okta. Their next database connection attempt fails, on camera, not asserted." },
+    { "id": "reconcile", "label": "Reconcile and prove no drift", "narration": "One more pass to prove there's no drift between what Okta says and what TiDB actually grants." }
+  ],
+  "checks": [
+    { "id": "revoked-user-rejected", "label": "Revoked user cannot connect", "description": "A real mysql2 connection attempt as the demo user after revoke throws an access-denied error." },
+    { "id": "grants-match-desired", "label": "Grants match desired state", "description": "findDrift over the current desired map vs SHOW GRANTS returns an empty array." },
+    { "id": "no-orphan-users", "label": "No orphan TiDB users", "description": "Every lab_-prefixed TiDB user maps to a demo user still present in at least one tracked Okta group." }
+  ],
+  "controls": [
+    { "id": "add-to-analysts", "label": "Add demo user to lab_analysts", "description": "Calls the Okta Users API to add the demo user to the lab_analysts group." },
+    { "id": "move-to-engineers", "label": "Move demo user to lab_engineers", "description": "Removes the demo user from lab_analysts and adds them to lab_engineers." },
+    { "id": "remove-from-groups", "label": "Remove demo user from all groups", "description": "Removes the demo user from both lab_analysts and lab_engineers." },
+    { "id": "deactivate-user", "label": "Deactivate demo user in Okta", "description": "Calls Okta's user deactivate lifecycle endpoint." }
+  ]
+}
