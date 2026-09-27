@@ -6,7 +6,7 @@ import { createPaymentEvent, decodePaymentEvent, encodePaymentEvent, type Paymen
 import { buildUpsertSql } from './src/upsertSql';
 import { parseCanalJsonMessage } from './src/canalJsonParser';
 import { computeE2eLatencyMs } from './src/latency';
-import { computeCheckpointLagMs } from './src/checkpointLag';
+import { changefeedLagMs } from './src/checkpointLag';
 import { createDedupeTracker } from './src/dedupe';
 import { ensurePaymentsTable } from './src/tidbSchema';
 import { z } from 'zod';
@@ -112,7 +112,11 @@ onControl((id) => {
   if (id === 'resume-changefeed') {
     emitter.node('ticdc', 'healthy', 'resumed, catching up from checkpoint');
     void ticdc.resume(changefeedId);
-    setPhaseAfter('wrap-up', 20_000);
+    setTimeout(() => {
+      emitter.phase('wrap-up');
+      producerRateMultiplier = 0;
+      emitter.node('producer', 'done', 'stopped so every count can settle');
+    }, 20_000);
   }
 });
 
@@ -160,7 +164,7 @@ const runConsumerLagTick = async (): Promise<void> => {
 
 const runChangefeedMonitorTick = async (): Promise<void> => {
   const status = await ticdc.getChangefeed(changefeedId);
-  const lag = computeCheckpointLagMs({ nowMs: emitter.elapsedMs(), checkpointTime: status.checkpointTime });
+  const lag = changefeedLagMs({ checkpointTso: status.checkpointTso, nowEpochMs: Date.now() });
   emitter.metric('ticdc-checkpoint-lag', lag);
 };
 

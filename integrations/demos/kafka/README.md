@@ -70,12 +70,12 @@ From `integrations/`:
 
    Expect a JSON response with `"is_owner"` and no connection error.
 
-5. Create the changefeed with canal-json output and TiDB extension fields
+5. Create the changefeed (with `tiup playground`, run the `cdc` CLI through tiup and match the version the playground printed; `v8.5.8` below) with canal-json output and TiDB extension fields
    enabled (the extension fields carry `commitTs`, which the dedupe logic
    depends on):
 
    ```bash
-   cdc cli changefeed create \
+   tiup cdc:v8.5.8 cli changefeed create \
      --server=http://127.0.0.1:8300 \
      --sink-uri="kafka://127.0.0.1:9092/tidb-changes?protocol=canal-json&kafka-version=3.0.0&partition-num=3&max-message-bytes=10485760&replication-factor=1&enable-tidb-extension=true" \
      --changefeed-id="kafka-fintech-risk"

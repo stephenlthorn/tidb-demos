@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeCheckpointLagMs, computeCheckpointLagMsFromTso } from '../src/checkpointLag';
+import { computeCheckpointLagMs, computeCheckpointLagMsFromTso, changefeedLagMs } from '../src/checkpointLag';
 
 describe('computeCheckpointLagMs', () => {
   it('returns the gap between now and the checkpoint time', () => {
@@ -24,5 +24,17 @@ describe('computeCheckpointLagMsFromTso', () => {
 
   it('floors negative results at zero for clock-skew safety', () => {
     expect(computeCheckpointLagMsFromTso({ nowMs: 1699999997400, checkpointTso })).toBe(0);
+  });
+});
+
+describe('changefeedLagMs', () => {
+  it('measures lag from the checkpoint TSO against the wall clock, independent of time zones', () => {
+    const checkpointTso = 469374811013120004n;
+    const checkpointMs = Number(checkpointTso >> 18n);
+    expect(changefeedLagMs({ checkpointTso, nowEpochMs: checkpointMs + 1500 })).toBe(1500);
+  });
+
+  it('never reports negative lag when the clock is behind the checkpoint', () => {
+    expect(changefeedLagMs({ checkpointTso: 469374811013120004n, nowEpochMs: 0 })).toBe(0);
   });
 });

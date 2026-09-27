@@ -20,3 +20,8 @@ export const computeCheckpointLagMsFromTso = (input: CheckpointLagFromTsoInput):
   const lagMs = BigInt(input.nowMs) - checkpointMs;
   return lagMs < 0n ? 0 : Number(lagMs);
 };
+
+export const changefeedLagMs = (input: { readonly checkpointTso: bigint; readonly nowEpochMs: number }): number => {
+  const lagMs = BigInt(Math.round(input.nowEpochMs)) - tsoPhysicalMillis(input.checkpointTso);
+  return lagMs < 0n ? 0 : Number(lagMs);
+};
