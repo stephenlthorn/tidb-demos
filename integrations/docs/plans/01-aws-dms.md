@@ -2358,3 +2358,17 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
   - `pnpm lab check-public` -> `0 findings`
   - teardown commands from section 5 run and confirmed
 - Done when: the replay tells the whole story in 3-6 minutes of playback at 1x.
+
+## Build notes (2026-09-27): what changed while building
+
+The code in `demos/aws-dms/` is authoritative where it differs from the task code above.
+
+| Area | Finding | Resolution |
+|---|---|---|
+| Manifest | Metric ids were snake_case, which `SlugSchema` rejects | Renamed to kebab-case (`full-load-rows-sec`, `cdc-latency-source-s`, `heartbeat-freshness-ms`, ...); `test/emitted-ids.test.ts` fails if `main.ts` emits an id the manifest lacks |
+| AWS SDK field names (01-V1, partial) | `TableStatistics` (`TableName`, `FullLoadRows`, `AppliedInserts`, `AppliedUpdates`, `AppliedDeletes`, `ValidationFailedRecords`, `TableState`) and CloudWatch `GetMetricData` shapes | Confirmed against the installed SDK type definitions. The CloudWatch `AWS/DMS` dimension names and a real response still need a live capture (`infra/cloudwatch-query-sample.json`) |
+| Cutover | The drain loop only stopped on the outer signal, so the flip and the downtime metric were unreachable | Dedicated `drainController`, aborted once verification passes |
+| Full-load rate | Computed from the load generator | Computed from the `DescribeTableStatistics` `FullLoadRows` delta, as `howMeasured` says |
+| Checksum | Proven on PostgreSQL 16 and TiDB (tiup playground): `ORDER BY` on the aggregate is invalid in PostgreSQL; `'\N'` is two characters in PostgreSQL and one in TiDB; `jsonb` key order and number formatting differ from TiDB JSON; a boolean NULL hashed like `false` | No `ORDER BY`; backslash-free NULL token; `lab_jsonb_canonical()` in `schema.sql`; explicit `IS NULL`; identifiers quoted per dialect; TiDB sessions `SET time_zone = '+00:00'`. `LAB_INTEGRATION=1 pnpm exec vitest run test/checksum.integration.test.ts` reproduces the proof |
+| Terraform | Only Terraform 1.5.7 installed locally | `required_version = ">= 1.5.7"`; `terraform validate` and `fmt -check` pass. Never applied yet |
+| Known gap | `TEXT[]` columns (for example `risk_tags`) are not part of the checksum | Add an `array` column type before relying on the checksum for array data |
