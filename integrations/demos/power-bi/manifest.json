@@ -1,0 +1,57 @@
+{
+  "id": "power-bi",
+  "number": 11,
+  "title": "Live Dashboards on Operational Data: TiDB HTAP with Power BI",
+  "tagline": "One TiDB cluster feeds the order pipeline and the Power BI report at the same time, with no nightly ETL job in between.",
+  "integrations": ["Power BI", "TiFlash"],
+  "pattern": "Business teams that want live dashboards on operational data without a nightly ETL job into a separate warehouse.",
+  "publish": true,
+  "runner": {
+    "command": ["node", "--import", "tsx", "runner/main.ts"],
+    "cwd": "."
+  },
+  "nodes": [
+    { "id": "order-workload", "label": "Order workload", "kind": "source", "x": 10, "y": 50 },
+    { "id": "tidb", "label": "TiDB (TiKV rows)", "kind": "tidb", "x": 45, "y": 22 },
+    { "id": "tiflash", "label": "TiFlash (columnar replica)", "kind": "tidb", "x": 45, "y": 78 },
+    { "id": "power-bi", "label": "Power BI report", "kind": "client", "x": 88, "y": 50 }
+  ],
+  "edges": [
+    { "id": "writes", "from": "order-workload", "to": "tidb", "label": "order writes", "unit": "rows/s" },
+    { "id": "replication", "from": "tidb", "to": "tiflash", "label": "TiFlash replication", "unit": "rows/s" },
+    { "id": "tikv-dashboard", "from": "tidb", "to": "power-bi", "label": "dashboard queries (TiKV)", "unit": "req/s" },
+    { "id": "tiflash-dashboard", "from": "tiflash", "to": "power-bi", "label": "dashboard queries (TiFlash)", "unit": "req/s" }
+  ],
+  "metrics": [
+    { "id": "dashboard-p50-tikv", "label": "Dashboard query p50 (TiKV)", "unit": "ms", "display": "series", "better": "lower", "group": "dashboard-latency", "howMeasured": "Once per tick, a dedicated connection runs SET SESSION tidb_isolation_read_engines='tikv', then each of the 3 queries in DASHBOARD_QUERIES is timed with timed(); summarize() over that tick's samples gives p50." },
+    { "id": "dashboard-p99-tikv", "label": "Dashboard query p99 (TiKV)", "unit": "ms", "display": "series", "better": "lower", "group": "dashboard-latency", "howMeasured": "Same measurement as dashboard-p50-tikv; this is the p99 field of the same summarize() result for the tick." },
+    { "id": "dashboard-p50-tiflash", "label": "Dashboard query p50 (TiFlash)", "unit": "ms", "display": "series", "better": "lower", "group": "dashboard-latency", "howMeasured": "Once per tick, a dedicated connection runs SET SESSION tidb_isolation_read_engines='tiflash', then each of the 3 queries in DASHBOARD_QUERIES is timed with timed(); summarize() over that tick's samples gives p50." },
+    { "id": "dashboard-p99-tiflash", "label": "Dashboard query p99 (TiFlash)", "unit": "ms", "display": "series", "better": "lower", "group": "dashboard-latency", "howMeasured": "Same measurement as dashboard-p50-tiflash; this is the p99 field of the same summarize() result for the tick." },
+    { "id": "write-p99", "label": "Order write p99", "unit": "ms", "display": "series", "better": "lower", "group": "write-path", "howMeasured": "Every order INSERT is timed with timed() and pushed into a createSampleWindow(); summarize() over that tick's drained samples gives write-p99." },
+    { "id": "write-p99-degradation", "label": "Write p99 degradation under dashboard load", "unit": "%", "display": "tile", "better": "lower", "group": "write-path", "howMeasured": "degradationPct({ baselineP99Ms, currentP99Ms }) from src/metrics.ts; baseline is the write-p99 value captured during the seed-baseline phase." },
+    { "id": "freshness-ms", "label": "Data freshness (write to visible)", "unit": "ms", "display": "both", "better": "lower", "group": "tiflash", "howMeasured": "freshnessMs({ committedAtMs, visibleAtMs }) from src/metrics.ts: committedAtMs is emitter.elapsedMs() right after a heartbeat order's INSERT commits; visibleAtMs is emitter.elapsedMs() at the first tick a TiFlash-forced probe query returns that row." },
+    { "id": "tiflash-replica-progress", "label": "TiFlash replica sync progress", "unit": "%", "display": "tile", "better": "higher", "group": "tiflash", "howMeasured": "SELECT AVAILABLE, PROGRESS FROM information_schema.tiflash_replica WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders', once per tick; PROGRESS (0.0-1.0) times 100." },
+    { "id": "orders-written-total", "label": "Orders written", "unit": "rows", "display": "tile", "better": "neutral", "group": "throughput", "howMeasured": "Cumulative count of committed INSERTs against orders since the runner started, incremented once per successful write." }
+  ],
+  "phases": [
+    { "id": "intro", "label": "Why this demo", "narration": "A business team wants a live dashboard on operational orders, not a copy that is a day old. One TiDB cluster is about to serve both the checkout writes and the report." },
+    { "id": "seed-baseline", "label": "Baseline writes", "narration": "Orders are flowing into TiDB now, no dashboard load yet. This write p99 is the baseline we compare against once the dashboard starts querying." },
+    { "id": "tiflash-replica", "label": "Add the TiFlash replica", "narration": "Adding a TiFlash replica to the orders table live: this is the columnar copy the dashboard will read from, syncing from the same rows being written right now." },
+    { "id": "dashboard-on-tikv", "label": "Dashboard load on TiKV", "narration": "Routing the dashboard's query set at TiKV, the same engine handling the writes. Watch the write p99 line: this is what a warehouse-free dashboard used to cost you." },
+    { "id": "dashboard-on-tiflash", "label": "Dashboard load on TiFlash", "narration": "Same dashboard queries, same concurrency, now routed to TiFlash. Write p99 comes back down: the analytical load is isolated on its own replica." },
+    { "id": "freshness-check", "label": "Freshness check", "narration": "A heartbeat order just committed. Watch how many milliseconds until it is visible in a TiFlash-routed dashboard query - that is the real replication lag, not a marketing number." },
+    { "id": "power-bi-live", "label": "The real Power BI report", "narration": "Cutting to a real Power BI Desktop report connected to this same cluster. Refreshing it pulls in the orders written during this run." },
+    { "id": "wrap-up", "label": "Recap", "narration": "No nightly ETL job, one cluster, a dashboard that is current to the second, and writes that never noticed the analytics running next to them." }
+  ],
+  "checks": [
+    { "id": "tiflash-replica-available", "label": "TiFlash replica available", "description": "Passes once information_schema.tiflash_replica reports AVAILABLE = 1 for the orders table." },
+    { "id": "snapshot-totals-match", "label": "TiKV and TiFlash totals match at a snapshot", "description": "Passes when SUM(amount) AS OF TIMESTAMP <snapshot> for the orders table returns the identical value whether forced to read from TiKV or TiFlash." },
+    { "id": "write-p99-within-threshold", "label": "Write p99 stays within threshold under dashboard load", "description": "Passes when the write-p99-degradation metric is at or below WRITE_P99_DEGRADATION_THRESHOLD_PCT while the dashboard is routed to TiFlash." }
+  ],
+  "controls": [
+    { "id": "start-dashboard-load", "label": "Start dashboard load", "description": "Begins the heavier concurrent replay (DASHBOARD_LOAD_CONCURRENCY workers per tick) of the dashboard query set against whichever engine is currently routed." },
+    { "id": "route-to-tikv", "label": "Route dashboard to TiKV", "description": "Points the heavier dashboard load at TiKV, the same engine serving writes." },
+    { "id": "route-to-tiflash", "label": "Route dashboard to TiFlash", "description": "Points the heavier dashboard load at the TiFlash replica, isolated from the write path." },
+    { "id": "write-burst", "label": "Write burst", "description": "Multiplies the order write rate by WRITE_BURST_FACTOR for WRITE_BURST_DURATION_MS." }
+  ]
+}
