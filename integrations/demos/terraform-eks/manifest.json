@@ -1,0 +1,56 @@
+{
+  "id": "terraform-eks",
+  "number": 10,
+  "title": "Terraform + EKS",
+  "tagline": "Provision TiDB Cloud, AWS EKS, and an app in one terraform apply",
+  "integrations": ["terraform", "aws-eks", "tidb-cloud"],
+  "pattern": "Platform teams that provision everything with Terraform on AWS and EKS, and want to see a database fit their IaC workflow, including how dedicated or bring-your-own-cloud style deployments are scripted.",
+  "publish": true,
+  "runner": { "command": ["node", "--import", "tsx", "runner/main.ts"], "cwd": "." },
+  "nodes": [
+    { "id": "terraform-cli", "label": "terraform apply", "kind": "client", "x": 10, "y": 45 },
+    { "id": "aws-vpc", "label": "AWS VPC", "kind": "cloud", "x": 30, "y": 20 },
+    { "id": "eks-cluster", "label": "EKS Cluster", "kind": "cloud", "x": 50, "y": 20 },
+    { "id": "app-deployment", "label": "App on EKS", "kind": "service", "x": 70, "y": 20 },
+    { "id": "tidb-cluster", "label": "TiDB Cloud Dedicated", "kind": "tidb", "x": 50, "y": 70 },
+    { "id": "private-endpoint", "label": "Private Endpoint", "kind": "identity", "x": 70, "y": 70 }
+  ],
+  "edges": [
+    { "id": "apply-vpc", "from": "terraform-cli", "to": "aws-vpc", "label": "resources applied", "unit": "count" },
+    { "id": "apply-eks", "from": "aws-vpc", "to": "eks-cluster", "label": "resources applied", "unit": "count" },
+    { "id": "apply-tidb", "from": "terraform-cli", "to": "tidb-cluster", "label": "resources applied", "unit": "count" },
+    { "id": "deploy-app", "from": "eks-cluster", "to": "app-deployment", "label": "pods scheduled", "unit": "count" },
+    { "id": "app-query", "from": "app-deployment", "to": "tidb-cluster", "label": "queries", "unit": "rows/s" },
+    { "id": "private-link", "from": "app-deployment", "to": "private-endpoint", "label": "connections", "unit": "count" }
+  ],
+  "metrics": [
+    { "id": "resources-planned", "label": "Resources planned", "unit": "count", "display": "tile", "better": "neutral", "howMeasured": "Count of planned_change messages from terraform plan -json" },
+    { "id": "resources-created", "label": "Resources created", "unit": "count", "display": "tile", "better": "higher", "howMeasured": "Count of distinct apply_complete hook.resource.addr values from terraform apply -json" },
+    { "id": "resource-apply-seconds", "label": "Per-resource apply time", "unit": "s", "display": "series", "better": "lower", "howMeasured": "hook.elapsed_seconds from each resource's apply_complete message" },
+    { "id": "total-apply-seconds", "label": "Total apply time", "unit": "s", "display": "tile", "better": "lower", "howMeasured": "Wall-clock time from spawning terraform apply to process exit 0, via runner-kit timed()" },
+    { "id": "app-qps", "label": "App query rate", "unit": "rows/s", "display": "both", "better": "higher", "howMeasured": "Load generator's completed-request count per 1000ms tick against the app /work endpoint" },
+    { "id": "app-p99-ms", "label": "App p99 latency", "unit": "ms", "display": "both", "better": "lower", "howMeasured": "Load generator's per-request latency sample window, summarize() p99 each tick" },
+    { "id": "errors-during-scale", "label": "Errors during scale change", "unit": "count", "display": "tile", "better": "lower", "howMeasured": "Load generator's failed-request counter delta across the scale-change window" },
+    { "id": "estimated-hourly-cost", "label": "Estimated hourly cost", "unit": "USD", "display": "tile", "better": "lower", "howMeasured": "Sum of node counts times .env PRICE_* variables, recomputed every tick, never hardcoded" }
+  ],
+  "phases": [
+    { "id": "plan", "label": "Plan", "narration": "This is one Terraform config: a VPC, an EKS cluster, a TiDB Cloud Dedicated cluster, and the app that connects them. Let's see the plan." },
+    { "id": "apply-infra", "label": "Apply: VPC + EKS + TiDB", "narration": "Terraform is creating all of this in one run. The VPC and the TiDB Cloud cluster don't depend on each other, so they provision in parallel; EKS takes the longest because AWS has to stand up a real control plane." },
+    { "id": "connect", "label": "Connect app to TiDB", "narration": "The app never touches TiDB Cloud credentials by hand. Terraform wrote the connection secret straight from its own output." },
+    { "id": "load", "label": "Load burst", "narration": "Now let's put traffic through it and watch QPS and latency." },
+    { "id": "scale", "label": "Scale TiDB capacity", "narration": "We're changing TiKV's node count from 3 to 5. Terraform shows this as an update, not a replace, because the provider marks node count as changeable in place." },
+    { "id": "verify", "label": "Verify zero downtime", "narration": "While that scale-out ran, here's the exact request error count the load generator logged. Not an assumption, a count." },
+    { "id": "teardown", "label": "Teardown", "narration": "And here's the exact command and the exact check that nothing is left running or billing." }
+  ],
+  "checks": [
+    { "id": "all-resources-created", "label": "All planned resources created", "description": "change_summary reports remove: 0 and add equal to the planned_change count; every apply_complete resource appears exactly once" },
+    { "id": "app-connected-intended-endpoint", "label": "App connected over the intended endpoint", "description": "App's tidb_connection_target metric label matches the Terraform output connection_endpoint_kind" },
+    { "id": "zero-errors-during-scale", "label": "Zero failed requests during scale change", "description": "Load generator error-count delta across the scale window, reported honestly even if nonzero" },
+    { "id": "destroy-leaves-zero-resources", "label": "Destroy leaves zero resources in state", "description": "terraform show -json after destroy reports no root module resources" }
+  ],
+  "controls": [
+    { "id": "plan-scale", "label": "Plan capacity change", "description": "Runs terraform plan -json -out=scale.tfplan with a higher tikv_node_setting.node_count" },
+    { "id": "apply-scale", "label": "Apply capacity change", "description": "Runs terraform apply -json scale.tfplan" },
+    { "id": "run-load-burst", "label": "Run load burst", "description": "Starts a 60-second higher-rate burst against the app Service on top of steady background load" }
+  ]
+}
