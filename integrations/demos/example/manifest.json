@@ -1,0 +1,34 @@
+{
+  "id": "example",
+  "number": 0,
+  "title": "Lab self-test",
+  "tagline": "Synthetic events that exercise every part of the lab UI",
+  "integrations": ["Synthetic"],
+  "pattern": "Platform self-test; no real systems are involved and every number is simulated",
+  "publish": false,
+  "runner": { "command": ["node", "--import", "tsx", "runner/main.ts"] },
+  "nodes": [
+    { "id": "generator", "label": "Load generator", "kind": "client", "x": 10, "y": 50 },
+    { "id": "queue", "label": "Queue (simulated)", "kind": "queue", "x": 35, "y": 30 },
+    { "id": "tidb", "label": "TiDB (simulated)", "kind": "tidb", "x": 60, "y": 50 },
+    { "id": "consumer", "label": "Consumer", "kind": "sink", "x": 88, "y": 50 }
+  ],
+  "edges": [
+    { "id": "generator-to-queue", "from": "generator", "to": "queue", "label": "events", "unit": "events" },
+    { "id": "queue-to-tidb", "from": "queue", "to": "tidb", "label": "rows", "unit": "rows" },
+    { "id": "tidb-to-consumer", "from": "tidb", "to": "consumer", "label": "changes", "unit": "rows" }
+  ],
+  "metrics": [
+    { "id": "write-rate", "label": "Write rate (simulated)", "unit": "rows/s", "display": "both", "better": "higher", "group": "Throughput", "howMeasured": "Simulated: base rate ramped over 10 s, times 10 during a burst" },
+    { "id": "write-p99", "label": "Write p99 (simulated)", "unit": "ms", "display": "both", "better": "lower", "target": 20, "group": "Latency", "howMeasured": "Simulated: nearest-rank p99 over one tick of generated latency samples" },
+    { "id": "rows-stored", "label": "Rows stored (simulated)", "unit": "rows", "display": "tile", "better": "neutral", "howMeasured": "Simulated: cumulative sum of write-rate ticks" }
+  ],
+  "phases": [
+    { "id": "warmup", "label": "Warm up", "narration": "The generator ramps up while every component reports healthy." },
+    { "id": "steady", "label": "Steady state", "narration": "Rows flow end to end at a steady rate with flat latency." },
+    { "id": "burst", "label": "Burst", "narration": "A burst multiplies the write rate by ten; watch latency stay under target." },
+    { "id": "verify", "label": "Verify", "narration": "The run stops and the counts check proves nothing was lost." }
+  ],
+  "checks": [{ "id": "counts-match", "label": "Counts match", "description": "Rows generated equal rows stored (simulated)" }],
+  "controls": [{ "id": "burst", "label": "Burst x10", "description": "Multiply the simulated write rate by ten for ten seconds" }]
+}
