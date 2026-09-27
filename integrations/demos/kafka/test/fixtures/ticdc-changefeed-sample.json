@@ -1,0 +1,72 @@
+{
+    "upstream_id": 7690222128738961442,
+    "namespace": "default",
+    "id": "kafka-fintech-risk",
+    "sink_uri": "kafka://localhost:9092/tidb-changes?protocol=canal-json&kafka-version=3.0.0&partition-num=3&max-message-bytes=10485760&replication-factor=1&enable-tidb-extension=true",
+    "create_time": "2026-09-27T10:38:46.912023-04:00",
+    "start_ts": 469374055665369095,
+    "config": {
+        "memory_quota": 1073741824,
+        "case_sensitive": false,
+        "force_replicate": false,
+        "ignore_ineligible_table": false,
+        "check_gc_safe_point": true,
+        "enable_table_monitor": false,
+        "filter": {
+            "rules": [
+                "*.*"
+            ]
+        },
+        "mounter": {
+            "worker_num": 16
+        },
+        "sink": {
+            "protocol": "canal-json",
+            "encoder_concurrency": 32,
+            "terminator": "\r\n",
+            "enable_kafka_sink_v2": false,
+            "only_output_updated_columns": false,
+            "delete_only_output_handle_key_columns": false,
+            "content_compatible": false,
+            "advance_timeout": 150,
+            "send_bootstrap_interval_in_sec": 120,
+            "send_bootstrap_in_msg_count": 10000,
+            "send_bootstrap_to_all_partition": true,
+            "send-all-bootstrap-at-start": false,
+            "debezium_disable_schema": false,
+            "debezium": {
+                "output_old_value": true
+            },
+            "open": {
+                "output_old_value": true
+            }
+        },
+        "scheduler": {
+            "enable_table_across_nodes": false,
+            "region_threshold": 10000,
+            "write_key_threshold": 0
+        },
+        "integrity": {
+            "integrity_check_level": "none",
+            "corruption_handle_level": "warn"
+        },
+        "changefeed_error_stuck_duration": 1800000000000,
+        "synced_status": {
+            "synced_check_interval": 300,
+            "checkpoint_interval": 15
+        }
+    },
+    "state": "normal",
+    "creator_version": "v8.5.8",
+    "resolved_ts": 469374071616831492,
+    "checkpoint_ts": 469374071616831492,
+    "checkpoint_time": "2026-09-27 10:39:47.552",
+    "task_status": [
+        {
+            "capture_id": "9f9f8bfd-0f6b-4322-b30b-2fe719f07415",
+            "table_ids": [
+                114
+            ]
+        }
+    ]
+}
