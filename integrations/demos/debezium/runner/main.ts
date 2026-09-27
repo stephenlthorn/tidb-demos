@@ -4,11 +4,14 @@ import { createConnectApi } from './src/connectApi';
 import { createTicdcApi } from './src/ticdcApi';
 import { createPostgresClient } from './src/postgresClient';
 import { createSharedConsumer } from './src/kafkaConsumer';
+import { createKafkaAdmin } from './src/kafkaAdmin';
 import { parseDebeziumEnvelope } from './src/debeziumEnvelope';
 import { computeHeartbeatLagMs } from './src/heartbeat';
 import { summarizeConnectorStatus } from './src/connectStatus';
 import { createParseRateTracker } from './src/parseRate';
 import { computeSchemaPropagationMs } from './src/schemaPropagation';
+import { computeCounterDelta } from './src/flowDeltas';
+import { countConsumedByTopic } from './src/consumedByTopic';
 
 const PG_CHANGES_TOPIC = 'pg.public.accounts';
 const TIDB_CHANGES_TOPIC = 'tidb-changes-dbz';
@@ -27,6 +30,7 @@ const sharedConsumer = createSharedConsumer({
   groupId: 'debezium-demo-consumer',
   topics: [PG_CHANGES_TOPIC, TIDB_CHANGES_TOPIC],
 });
+const kafkaAdmin = createKafkaAdmin({ brokers: kafkaBrokers });
 const parseRate = createParseRateTracker();
 
 const controller = new AbortController();
@@ -35,6 +39,8 @@ let addColumnPressedAtMs: number | undefined;
 let riskTierObservedAtMs: number | undefined;
 let previousPostgresAccountCount: number | undefined;
 let previousTidbAccountCount: number | undefined;
+let previousPgTopicOffsetSum: number | undefined;
+let previousTidbTopicOffsetSum: number | undefined;
 let idleReplicationTicks = 0;
 let messagesConsumedTotal = 0;
 
@@ -110,11 +116,13 @@ const runThroughputAndReplicationCheckTick = async (): Promise<void> => {
   const postgresCount = await postgres.countAccounts();
   const tidbCount = await countTidbAccounts();
 
-  const sourceDelta =
-    previousPostgresAccountCount === undefined ? 0 : Math.max(0, postgresCount - previousPostgresAccountCount);
-  const sinkDelta = previousTidbAccountCount === undefined ? 0 : Math.max(0, tidbCount - previousTidbAccountCount);
+  const sourceDelta = computeCounterDelta({ previous: previousPostgresAccountCount, current: postgresCount });
+  const sinkDelta = computeCounterDelta({ previous: previousTidbAccountCount, current: tidbCount });
   emitter.metric('records-per-sec-source', sourceDelta);
   emitter.metric('records-per-sec-sink', sinkDelta);
+
+  emitter.flow('consume-pg-sink', sinkDelta);
+  emitter.flow('write-tidb', sinkDelta);
 
   idleReplicationTicks = sourceDelta === 0 && sinkDelta === 0 ? idleReplicationTicks + 1 : 0;
   if (idleReplicationTicks >= 2 && postgresCount > 0) {
@@ -127,6 +135,33 @@ const runThroughputAndReplicationCheckTick = async (): Promise<void> => {
 
   previousPostgresAccountCount = postgresCount;
   previousTidbAccountCount = tidbCount;
+};
+
+const fetchTopicOffsetSumSafe = async (topic: string): Promise<number | undefined> => {
+  try {
+    return await kafkaAdmin.fetchHighWatermarkSum(topic);
+  } catch (error: unknown) {
+    emitter.log('warn', `fetching offsets for ${topic} failed: ${String(error)}`);
+    return undefined;
+  }
+};
+
+const runTopicOffsetTick = async (): Promise<void> => {
+  const pgOffsetSum = await fetchTopicOffsetSumSafe(PG_CHANGES_TOPIC);
+  if (pgOffsetSum !== undefined) {
+    const pgOffsetDelta = computeCounterDelta({ previous: previousPgTopicOffsetSum, current: pgOffsetSum });
+    emitter.flow('capture-pg', pgOffsetDelta);
+    emitter.flow('publish-pg', pgOffsetDelta);
+    previousPgTopicOffsetSum = pgOffsetSum;
+  }
+
+  const tidbOffsetSum = await fetchTopicOffsetSumSafe(TIDB_CHANGES_TOPIC);
+  if (tidbOffsetSum !== undefined) {
+    const tidbOffsetDelta = computeCounterDelta({ previous: previousTidbTopicOffsetSum, current: tidbOffsetSum });
+    emitter.flow('capture-tidb', tidbOffsetDelta);
+    emitter.flow('publish-tidb', tidbOffsetDelta);
+    previousTidbTopicOffsetSum = tidbOffsetSum;
+  }
 };
 
 const runSchemaCheckTick = async (): Promise<void> => {
@@ -151,11 +186,14 @@ const runSchemaCheckTick = async (): Promise<void> => {
 
 const runConsumerTick = async (): Promise<void> => {
   const messages = sharedConsumer.drain();
-  messages.forEach((raw) => {
-    const parsed = parseDebeziumEnvelope(raw);
+  const parsedResults = messages.map((raw) => parseDebeziumEnvelope(raw));
+  parsedResults.forEach((parsed) => {
     if (parsed.ok) parseRate.recordSuccess();
     else parseRate.recordFailure();
   });
+  const consumedByTopic = countConsumedByTopic(parsedResults);
+  emitter.flow('consume-pg-topic', consumedByTopic.pgChanges);
+  emitter.flow('consume-tidb-topic', consumedByTopic.tidbChanges);
   messagesConsumedTotal += messages.length;
   emitter.metric('consumer-parse-success-rate', parseRate.successRatePercent());
   if (messagesConsumedTotal > 0) {
@@ -172,8 +210,13 @@ sharedConsumer
   .then(() => emitter.node('consumer', 'healthy'))
   .catch((error: unknown) => emitter.log('error', `shared consumer failed to start: ${String(error)}`));
 
+kafkaAdmin
+  .connect()
+  .catch((error: unknown) => emitter.log('error', `kafka admin failed to connect: ${String(error)}`));
+
 void every({ intervalMs: 1000, task: runHeartbeatTick, signal: controller.signal });
 void every({ intervalMs: 1000, task: runConnectStatusTick, signal: controller.signal });
 void every({ intervalMs: 1000, task: runThroughputAndReplicationCheckTick, signal: controller.signal });
+void every({ intervalMs: 1000, task: runTopicOffsetTick, signal: controller.signal });
 void every({ intervalMs: 1000, task: runSchemaCheckTick, signal: controller.signal });
 void every({ intervalMs: 1000, task: runConsumerTick, signal: controller.signal });

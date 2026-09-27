@@ -46,8 +46,14 @@ describe('runner emits only ids declared in manifest.json', () => {
 
   it('the runner actually emits at least one id of every checked kind', () => {
     expect(extractEmittedIds('metric').length).toBeGreaterThan(0);
+    expect(extractEmittedIds('flow').length).toBeGreaterThan(0);
     expect(extractEmittedIds('node').length).toBeGreaterThan(0);
     expect(extractEmittedIds('phase').length).toBeGreaterThan(0);
     expect(extractEmittedIds('check').length).toBeGreaterThan(0);
+  });
+
+  it('every manifest edge id has a matching emitter.flow call in the runner', () => {
+    const emitted = new Set(extractEmittedIds('flow'));
+    manifest.edges.forEach((edge) => expect(emitted.has(edge.id)).toBe(true));
   });
 });
