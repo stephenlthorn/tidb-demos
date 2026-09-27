@@ -1,0 +1,26 @@
+{
+  "name": "@lab/demo-aws-dms",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "start": "node --import tsx runner/main.ts"
+  },
+  "dependencies": {
+    "@lab/contract": "workspace:*",
+    "@lab/runner-kit": "workspace:*",
+    "pg": "^8.13.0",
+    "@aws-sdk/client-database-migration-service": "^3.700.0",
+    "@aws-sdk/client-cloudwatch": "^3.700.0",
+    "mysql2": "^3.14.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "vitest": "^3.2.0",
+    "typescript": "^5.9.0",
+    "@types/pg": "^8.11.0"
+  },
+  "version": "0.0.0"
+}
