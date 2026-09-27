@@ -20,8 +20,9 @@ export const useReplay = (trace: Trace): Replay => {
     if (!player.playing) return undefined;
     const frame = { id: 0, last: performance.now() };
     const loop = (now: number): void => {
-      setPlayer((current) => advance(current, now - frame.last));
+      const elapsedMs = Math.max(0, now - frame.last);
       frame.last = now;
+      setPlayer((current) => advance(current, elapsedMs));
       frame.id = requestAnimationFrame(loop);
     };
     frame.id = requestAnimationFrame(loop);

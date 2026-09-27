@@ -12,6 +12,7 @@ const startServer = async () => {
     sendControl: (id) => { sent.push(id); },
     allowedOrigins: ['http://localhost:5173'],
     now: () => 123,
+    runId: 'run1',
   });
   await new Promise<void>((resolve) => server.listen(0, resolve));
   const address = server.address();
@@ -55,6 +56,28 @@ describe('relay server', () => {
     const text = await readUntil(response, (soFar) => (soFar.match(/^data: /gm) ?? []).length >= 2);
     expect(text).toContain('"phase":"warmup"');
     expect(text).toContain('"value":7');
+    await relay.close();
+  });
+
+  it('resumes after Last-Event-ID instead of replaying the whole run', async () => {
+    const relay = await startServer();
+    relay.hub.publish({ type: 'phase', t: 0, phase: 'warmup' });
+    relay.hub.publish({ type: 'metric', t: 1000, id: 'ingest-rate', value: 1 });
+    relay.hub.publish({ type: 'metric', t: 2000, id: 'ingest-rate', value: 2 });
+    const response = await fetch(`${relay.base}/events`, { headers: { 'last-event-id': 'run1.1' } });
+    const text = await readUntil(response, (soFar) => soFar.includes('"value":2'));
+    expect(text).toContain('id: run1.2');
+    expect(text).not.toContain('"phase":"warmup"');
+    expect(text).not.toContain('"value":1');
+    await relay.close();
+  });
+
+  it('replays the whole run to a browser still holding an id from a previous run', async () => {
+    const relay = await startServer();
+    relay.hub.publish({ type: 'phase', t: 0, phase: 'warmup' });
+    const response = await fetch(`${relay.base}/events`, { headers: { 'last-event-id': 'run0.300' } });
+    const text = await readUntil(response, (soFar) => soFar.includes('warmup'));
+    expect(text).toContain('id: run1.0');
     await relay.close();
   });
 

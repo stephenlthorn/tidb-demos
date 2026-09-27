@@ -399,7 +399,7 @@ HTTP API while `lab run` is active:
 |---|---|
 | `GET /health` | `{"ok":true,"demo":"<id>"}` |
 | `GET /manifest` | The parsed manifest |
-| `GET /events` | SSE stream. Sends every event recorded so far, then new ones live, so a browser that joins late catches up. |
+| `GET /events` | SSE stream. Each message carries `id: <runId>.<index>` (see `formatSseId` in `packages/contract/src/sse.ts`). A new connection gets every event recorded so far, then new ones live, so a browser that joins late catches up. A reconnecting browser sends `Last-Event-ID`; the relay resumes after it when the run id matches and replays the whole run when it does not (the relay was restarted). |
 | `POST /control/:id` | 404 if `id` is not in `manifest.controls`. Otherwise writes `{"control":"<id>"}\n` to the runner's stdin and records a `control` event. |
 
 Runner stdout lines that fail validation become `log` events at level `warn` (the run continues). Runner stderr lines become `log` events at level `warn`. CORS allows origins listed in `LAB_ALLOWED_ORIGINS` (comma-separated, default `http://localhost:5173`).
@@ -3466,10 +3466,24 @@ describe('selectors', () => {
     expect(latestValue(initialState(aManifest()), 'ingest-rate')).toBeUndefined();
   });
 
-  it('computes an edge rate over the trailing window', () => {
+  it('computes an edge rate from the latest sample and the time since the previous one', () => {
     const state = foldEvents(aManifest(), events, 2000);
-    expect(edgeRate(state, 'source-to-tidb', 2000)).toBe(20);
-    expect(edgeRate({ ...state, t: 10000 }, 'source-to-tidb', 2000)).toBe(0);
+    expect(edgeRate(state, 'source-to-tidb')).toBe(30);
+    expect(edgeRate({ ...state, t: 10000 }, 'source-to-tidb')).toBe(0);
+  });
+
+  it('is not inflated when tick jitter puts three samples inside two seconds', () => {
+    const jittered = foldEvents(aManifest(), [
+      { type: 'flow', t: 9002, edge: 'source-to-tidb', count: 200 },
+      { type: 'flow', t: 10001, edge: 'source-to-tidb', count: 200 },
+      { type: 'flow', t: 11001, edge: 'source-to-tidb', count: 200 },
+    ]);
+    expect(edgeRate(jittered, 'source-to-tidb')).toBe(200);
+  });
+
+  it('treats a single sample as one second of flow', () => {
+    const single = foldEvents(aManifest(), [{ type: 'flow', t: 1000, edge: 'source-to-tidb', count: 10 }]);
+    expect(edgeRate(single, 'source-to-tidb')).toBe(10);
   });
 });
 
@@ -3582,11 +3596,13 @@ import type { DemoState } from './demo-state';
 export const latestValue = (state: DemoState, metricId: string): number | undefined =>
   state.metrics[metricId]?.at(-1)?.value;
 
-export const edgeRate = (state: DemoState, edgeId: string, windowMs = 2000): number => {
-  const total = (state.flows[edgeId] ?? [])
-    .filter((sample) => sample.t > state.t - windowMs)
-    .reduce((sum, sample) => sum + sample.count, 0);
-  return total / (windowMs / 1000);
+export const edgeRate = (state: DemoState, edgeId: string, staleMs = 2500): number => {
+  const samples = state.flows[edgeId] ?? [];
+  const last = samples.at(-1);
+  if (last === undefined || state.t - last.t > staleMs) return 0;
+  const previous = samples.at(-2);
+  const intervalMs = previous === undefined ? 1000 : Math.max(last.t - previous.t, 1);
+  return last.count / (intervalMs / 1000);
 };
 ```
 
@@ -3621,7 +3637,7 @@ export const foldTo = (
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `pnpm --filter @lab/ui test`
-Expected: PASS, 10 tests.
+Expected: PASS, 11 tests.
 
 - [ ] **Step 6: Commit**
 
@@ -3837,7 +3853,7 @@ export const isOnTarget = (metric: ManifestMetric, value: number): boolean | und
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm --filter @lab/ui exec vitest run test/player.test.ts test/route.test.ts test/format.test.ts`
-Expected: PASS, 13 tests.
+Expected: PASS, 12 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -3918,7 +3934,7 @@ describe('FlowDiagram', () => {
     expect(screen.getByText('Source')).toBeTruthy();
     expect(screen.getByText('one store down')).toBeTruthy();
     expect(container.querySelector('[data-node="tidb"]')?.getAttribute('data-status')).toBe('degraded');
-    expect(screen.getByText('rows: 5/s')).toBeTruthy();
+    expect(screen.getByText('rows: 10/s')).toBeTruthy();
     expect(container.querySelectorAll('circle.particle').length).toBeGreaterThan(0);
   });
 });
@@ -4515,8 +4531,9 @@ export const useReplay = (trace: Trace): Replay => {
     if (!player.playing) return undefined;
     const frame = { id: 0, last: performance.now() };
     const loop = (now: number): void => {
-      setPlayer((current) => advance(current, now - frame.last));
+      const elapsedMs = Math.max(0, now - frame.last);
       frame.last = now;
+      setPlayer((current) => advance(current, elapsedMs));
       frame.id = requestAnimationFrame(loop);
     };
     frame.id = requestAnimationFrame(loop);
@@ -4851,10 +4868,68 @@ button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent);
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 ```
 
+- [ ] **Step 5b: Guard the replay clock against deferred React updates**
+
+React may run a state updater after the next animation frame has already moved `frame.last`, which would make every elapsed time zero and freeze playback. This test fails if `use-replay.ts` computes the elapsed time inside the updater.
+
+`packages/ui/test/use-replay.test.tsx`:
+
+```tsx
+import { act, renderHook } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Trace } from '@lab/contract';
+import { aManifest } from '@lab/contract/testing';
+import { useReplay } from '../src/sources/use-replay';
+
+const trace: Trace = {
+  schemaVersion: 1,
+  manifest: aManifest(),
+  recordedAt: '2026-09-25T15:00:00.000Z',
+  environment: { tidb: 'tiup playground', components: {}, notes: '' },
+  durationMs: 60000,
+  events: [{ type: 'phase', t: 0, phase: 'warmup' }],
+};
+
+const stubFrames = (): { readonly fire: (now: number) => void } => {
+  const pending: FrameRequestCallback[] = [];
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    pending.push(callback);
+    return pending.length;
+  });
+  vi.stubGlobal('cancelAnimationFrame', () => undefined);
+  vi.spyOn(performance, 'now').mockReturnValue(0);
+  return {
+    fire: (now) => {
+      const callbacks = pending.splice(0, pending.length);
+      callbacks.forEach((callback) => callback(now));
+    },
+  };
+};
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+describe('useReplay', () => {
+  it('advances by the wall time between frames even when React defers the updates', () => {
+    const frames = stubFrames();
+    const { result } = renderHook(() => useReplay(trace));
+    act(() => result.current.toggle());
+    act(() => {
+      frames.fire(1000);
+      frames.fire(2000);
+      frames.fire(3000);
+    });
+    expect(result.current.player.positionMs).toBe(3000);
+  });
+});
+```
+
 - [ ] **Step 6: Run all UI tests and the typecheck**
 
 Run: `pnpm --filter @lab/ui test && pnpm --filter @lab/ui typecheck`
-Expected: PASS, 38 tests across 7 files; `tsc` exits 0.
+Expected: PASS, 39 tests across 9 files; `tsc` exits 0.
 
 - [ ] **Step 7: Commit**
 
@@ -4870,7 +4945,7 @@ git commit -m "feat(ui): catalog, replay and live pages with styles"
 - [ ] **Step 1: Whole-workspace gates**
 
 Run: `pnpm typecheck && pnpm test`
-Expected: every package exits 0 (contract 20, runner-kit 24, relay 34, example 8, ui 38 tests).
+Expected: every package exits 0 (contract 20, runner-kit 24, relay 34, example 8, ui 39 tests; Python kit 10).
 
 - [ ] **Step 2: Replay mode**
 
@@ -5092,7 +5167,7 @@ Format and rules: see `EXECUTION.md`. Run these strictly in order; every later p
 - Files owned: `integrations/packages/ui/{package.json,tsconfig.json,vite.config.ts,index.html}`, `integrations/packages/ui/test/setup.ts`, `integrations/packages/ui/src/{state,sources/player.ts,route.ts,format.ts}`, matching tests
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/ui test` -> `23 passed`
+  - `pnpm --filter @lab/ui test` -> `23 passed` (11 state + 12 player/route/format)
 
 ### Packet 00-P8: UI components
 - Tasks: 19, 20
@@ -5108,7 +5183,7 @@ Format and rules: see `EXECUTION.md`. Run these strictly in order; every later p
 - Files owned: `integrations/packages/ui/src/{data.ts,sources/use-replay.ts,sources/use-live.ts,pages/**,App.tsx,main.tsx,styles.css}`, `test/pages.test.tsx`
 - Model: sonnet   Effort: M
 - Gate:
-  - `pnpm --filter @lab/ui test && pnpm --filter @lab/ui typecheck` -> `38 passed`, exit 0
+  - `pnpm --filter @lab/ui test && pnpm --filter @lab/ui typecheck` -> `39 passed`, exit 0
 
 ### Packet 00-P10: End-to-end, site, CI (coordinator)
 - Tasks: 22, 23
@@ -5118,3 +5193,19 @@ Format and rules: see `EXECUTION.md`. Run these strictly in order; every later p
   - replay and live checks in Task 22 observed in the browser, screenshots saved
   - `pnpm build:site` -> `0 findings`, `dist/` written
   - `integrations-ci` workflow green on GitHub
+
+
+## Build notes (2026-09-27): fixes found while building this plan
+
+The code in `integrations/` is authoritative where it differs from the task code above. These were found by running the lab end to end in a browser, and each has a regression test:
+
+| Area | Bug | Fix | Test |
+|---|---|---|---|
+| `ui/src/sources/use-replay.ts` | The elapsed time was computed inside the `setPlayer` updater; React can run that updater after `frame.last` has moved, so playback froze or ran backwards | Compute `elapsedMs = Math.max(0, now - frame.last)` before calling `setPlayer` (already reflected in Task 21) | `ui/test/use-replay.test.tsx` |
+| `ui/src/state/selectors.ts` | `edgeRate` summed a 2 s window, so normal tick jitter put three 1 s samples in the window and showed 1.5x the real rate | Rate = latest sample count over the time since the previous sample; zero when the latest sample is older than 2.5 s (already reflected in Task 17) | `ui/test/state.test.ts` |
+| relay `/events` + `ui/src/sources/use-live.ts` | An `EventSource` reconnect (hidden tab, relay restart) replayed the whole run on top of existing state, so flows looked stale and charts mixed runs | SSE ids `<runId>.<index>` from `@lab/contract` (`formatSseId`, `parseSseId`); relay resumes after `Last-Event-ID` for the same run (`resumeIndex` in `relay/src/lines.ts`, listener index in `hub.ts`); the page resets its state when the run id changes (`ui/src/sources/live-state.ts`) | `contract/test/sse.test.ts`, `relay/test/lines.test.ts`, `relay/test/server.test.ts`, `ui/test/live-state.test.ts` |
+| `ui/src/sources/use-live.ts` | Under React StrictMode the first mount could open an event stream after it had been cleaned up | Return early when the fetch resolves after `controller.signal.aborted` | `ui/test/use-live.test.tsx` |
+| Python kit | The default `python3` on the build machine was 3.10 | Create the venv with Python 3.11+ (for example `/opt/homebrew/bin/python3.12 -m venv .venv`) | n/a |
+| Workspace | pnpm 10 blocks esbuild's postinstall until approved | `pnpm approve-builds --all` once; `pnpm-workspace.yaml` records `allowBuilds.esbuild: true` | n/a |
+
+Final counts after these fixes: contract 22, runner-kit 24, relay 37, example 8, ui 43, Python kit 10.

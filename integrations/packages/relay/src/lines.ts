@@ -1,4 +1,4 @@
-import { eventReferenceErrors, parseEventLine, type DemoEvent, type DemoManifest } from '@lab/contract';
+import { eventReferenceErrors, parseEventLine, parseSseId, type DemoEvent, type DemoManifest } from '@lab/contract';
 
 const warning = (t: number, msg: string): DemoEvent => ({ type: 'log', t, level: 'warn', msg });
 
@@ -15,4 +15,10 @@ export const stderrEvent = (line: string, t: number): DemoEvent => warning(t, li
 
 export const controlLine = (id: string): string => `${JSON.stringify({ control: id })}\n`;
 
-export const sseMessage = (event: DemoEvent): string => `data: ${JSON.stringify(event)}\n\n`;
+export const sseMessage = (event: DemoEvent, id: string): string => `id: ${id}\ndata: ${JSON.stringify(event)}\n\n`;
+
+export const resumeIndex = (lastEventId: string | undefined, runId: string): number => {
+  const parsed = parseSseId(lastEventId);
+  if (parsed === undefined || parsed.runId !== runId) return 0;
+  return parsed.index + 1;
+};

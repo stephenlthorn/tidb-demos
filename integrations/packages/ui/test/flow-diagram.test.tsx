@@ -15,7 +15,7 @@ describe('FlowDiagram', () => {
     expect(screen.getByText('Source')).toBeTruthy();
     expect(screen.getByText('one store down')).toBeTruthy();
     expect(container.querySelector('[data-node="tidb"]')?.getAttribute('data-status')).toBe('degraded');
-    expect(screen.getByText('rows: 5/s')).toBeTruthy();
+    expect(screen.getByText('rows: 10/s')).toBeTruthy();
     expect(container.querySelectorAll('circle.particle').length).toBeGreaterThan(0);
   });
 });

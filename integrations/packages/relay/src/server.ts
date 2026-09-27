@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import type { DemoManifest } from '@lab/contract';
+import { formatSseId, type DemoManifest } from '@lab/contract';
 import type { Hub } from './hub';
-import { sseMessage } from './lines';
+import { resumeIndex, sseMessage } from './lines';
 
 export type RelayServerOptions = {
   readonly manifest: DemoManifest;
@@ -9,6 +9,7 @@ export type RelayServerOptions = {
   readonly sendControl: (id: string) => void;
   readonly allowedOrigins: readonly string[];
   readonly now: () => number;
+  readonly runId: string;
 };
 
 export const parseOrigins = (value: string | undefined): readonly string[] =>
@@ -29,10 +30,14 @@ const applyCors = (req: IncomingMessage, res: ServerResponse, allowed: readonly 
   res.setHeader('vary', 'origin');
 };
 
-const streamEvents = (req: IncomingMessage, res: ServerResponse, hub: Hub): void => {
+const streamEvents = (req: IncomingMessage, res: ServerResponse, hub: Hub, runId: string): void => {
   res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
-  hub.events().forEach((event) => res.write(sseMessage(event)));
-  const unsubscribe = hub.subscribe((event) => res.write(sseMessage(event)));
+  const lastEventId = req.headers['last-event-id'];
+  const from = resumeIndex(Array.isArray(lastEventId) ? lastEventId[0] : lastEventId, runId);
+  hub.events().forEach((event, index) => {
+    if (index >= from) res.write(sseMessage(event, formatSseId(runId, index)));
+  });
+  const unsubscribe = hub.subscribe((event, index) => res.write(sseMessage(event, formatSseId(runId, index))));
   req.on('close', unsubscribe);
 };
 
@@ -49,7 +54,7 @@ export const createRelayServer = (options: RelayServerOptions): Server =>
     }
     if (req.method === 'GET' && path === '/health') return sendJson(res, 200, { ok: true, demo: options.manifest.id });
     if (req.method === 'GET' && path === '/manifest') return sendJson(res, 200, options.manifest);
-    if (req.method === 'GET' && path === '/events') return streamEvents(req, res, options.hub);
+    if (req.method === 'GET' && path === '/events') return streamEvents(req, res, options.hub, options.runId);
     const id = req.method === 'POST' ? controlIdFrom(path) : undefined;
     if (id === undefined) return sendJson(res, 404, { error: 'not found' });
     if (!options.manifest.controls.some((control) => control.id === id)) return sendJson(res, 404, { error: `unknown control: ${id}` });

@@ -62,6 +62,7 @@ export const runDemo = async (options: {
     },
     allowedOrigins: parseOrigins(env.LAB_ALLOWED_ORIGINS),
     now,
+    runId: Date.now().toString(36),
   });
   const port = await listen(server, options.port);
   const finished = new Promise<RunResult>((resolve, reject) => {

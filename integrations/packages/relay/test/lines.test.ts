@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { aManifest } from '@lab/contract/testing';
-import { controlLine, sseMessage, stderrEvent, toLabEvent } from '../src/lines';
+import { controlLine, resumeIndex, sseMessage, stderrEvent, toLabEvent } from '../src/lines';
 
 describe('toLabEvent', () => {
   it('passes a valid event through unchanged', () => {
@@ -33,7 +33,14 @@ describe('framing helpers', () => {
     expect(controlLine('burst')).toBe('{"control":"burst"}\n');
   });
 
-  it('frames an SSE message', () => {
-    expect(sseMessage({ type: 'phase', t: 0, phase: 'warmup' })).toBe('data: {"type":"phase","t":0,"phase":"warmup"}\n\n');
+  it('frames an SSE message with a run-scoped event id', () => {
+    expect(sseMessage({ type: 'phase', t: 0, phase: 'warmup' }, 'run1.4')).toBe('id: run1.4\ndata: {"type":"phase","t":0,"phase":"warmup"}\n\n');
+  });
+
+  it('resumes after the last event id only when it belongs to the current run', () => {
+    expect(resumeIndex(undefined, 'run1')).toBe(0);
+    expect(resumeIndex('run1.5', 'run1')).toBe(6);
+    expect(resumeIndex('run0.300', 'run1')).toBe(0);
+    expect(resumeIndex('garbage', 'run1')).toBe(0);
   });
 });

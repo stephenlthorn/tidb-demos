@@ -3,9 +3,11 @@ import type { DemoState } from './demo-state';
 export const latestValue = (state: DemoState, metricId: string): number | undefined =>
   state.metrics[metricId]?.at(-1)?.value;
 
-export const edgeRate = (state: DemoState, edgeId: string, windowMs = 2000): number => {
-  const total = (state.flows[edgeId] ?? [])
-    .filter((sample) => sample.t > state.t - windowMs)
-    .reduce((sum, sample) => sum + sample.count, 0);
-  return total / (windowMs / 1000);
+export const edgeRate = (state: DemoState, edgeId: string, staleMs = 2500): number => {
+  const samples = state.flows[edgeId] ?? [];
+  const last = samples.at(-1);
+  if (last === undefined || state.t - last.t > staleMs) return 0;
+  const previous = samples.at(-2);
+  const intervalMs = previous === undefined ? 1000 : Math.max(last.t - previous.t, 1);
+  return last.count / (intervalMs / 1000);
 };

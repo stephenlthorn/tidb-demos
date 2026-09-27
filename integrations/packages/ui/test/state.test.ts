@@ -53,10 +53,24 @@ describe('selectors', () => {
     expect(latestValue(initialState(aManifest()), 'ingest-rate')).toBeUndefined();
   });
 
-  it('computes an edge rate over the trailing window', () => {
+  it('computes an edge rate from the latest sample and the time since the previous one', () => {
     const state = foldEvents(aManifest(), events, 2000);
-    expect(edgeRate(state, 'source-to-tidb', 2000)).toBe(20);
-    expect(edgeRate({ ...state, t: 10000 }, 'source-to-tidb', 2000)).toBe(0);
+    expect(edgeRate(state, 'source-to-tidb')).toBe(30);
+    expect(edgeRate({ ...state, t: 10000 }, 'source-to-tidb')).toBe(0);
+  });
+
+  it('is not inflated when tick jitter puts three samples inside two seconds', () => {
+    const jittered = foldEvents(aManifest(), [
+      { type: 'flow', t: 9002, edge: 'source-to-tidb', count: 200 },
+      { type: 'flow', t: 10001, edge: 'source-to-tidb', count: 200 },
+      { type: 'flow', t: 11001, edge: 'source-to-tidb', count: 200 },
+    ]);
+    expect(edgeRate(jittered, 'source-to-tidb')).toBe(200);
+  });
+
+  it('treats a single sample as one second of flow', () => {
+    const single = foldEvents(aManifest(), [{ type: 'flow', t: 1000, edge: 'source-to-tidb', count: 10 }]);
+    expect(edgeRate(single, 'source-to-tidb')).toBe(10);
   });
 });
 

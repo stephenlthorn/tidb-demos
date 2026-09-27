@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { parseEventLine, type DemoManifest } from '@lab/contract';
+import type { DemoManifest } from '@lab/contract';
 import { fetchRelayManifest } from '../data';
-import { initialState, reduceEvent, type DemoState } from '../state/demo-state';
+import { initialState, type DemoState } from '../state/demo-state';
+import { applyLiveMessage, type LiveState } from './live-state';
 
 export type LiveStatus = 'connecting' | 'open' | 'error';
 
@@ -14,7 +15,7 @@ export type Live = {
 
 export const useLive = (relayUrl: string): Live => {
   const [manifest, setManifest] = useState<DemoManifest | undefined>(undefined);
-  const [state, setState] = useState<DemoState | undefined>(undefined);
+  const [live, setLive] = useState<LiveState | undefined>(undefined);
   const [status, setStatus] = useState<LiveStatus>('connecting');
 
   useEffect(() => {
@@ -22,15 +23,15 @@ export const useLive = (relayUrl: string): Live => {
     const holder: { source?: EventSource } = {};
     fetchRelayManifest(relayUrl, controller.signal).then(
       (loaded) => {
+        if (controller.signal.aborted) return;
         setManifest(loaded);
-        setState(initialState(loaded));
+        setLive({ runId: undefined, state: initialState(loaded) });
         const source = new EventSource(`${relayUrl}/events`);
         holder.source = source;
         source.onopen = () => setStatus('open');
         source.onerror = () => setStatus('error');
         source.onmessage = (message: MessageEvent<string>) => {
-          const parsed = parseEventLine(message.data);
-          if (parsed.ok) setState((previous) => (previous === undefined ? previous : reduceEvent(previous, parsed.event)));
+          setLive((previous) => (previous === undefined ? previous : applyLiveMessage(loaded, previous, message.lastEventId, message.data)));
         };
       },
       () => setStatus('error'),
@@ -45,5 +46,5 @@ export const useLive = (relayUrl: string): Live => {
     void fetch(`${relayUrl}/control/${id}`, { method: 'POST' });
   };
 
-  return { manifest, state, status, sendControl };
+  return { manifest, state: live?.state, status, sendControl };
 };
