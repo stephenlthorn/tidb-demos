@@ -63,7 +63,7 @@ Edges: `apply-vpc` (terraform-cli -> aws-vpc, "resources applied", unit `count`)
 
 | Control id | Label | Effect in the runner |
 |---|---|---|
-| `plan-scale` | Plan capacity change | Runs `terraform plan -json -out=scale.tfplan` with `TF_VAR_tikv_node_count` raised by the amount in `.env`'s `SCALE_TIKV_NODE_COUNT`; emits `planned_change` events without applying |
+| `plan-scale` | Plan capacity change | Runs `terraform plan -json -out=scale.tfplan` with `-var=tidb_node_count` raised to the amount in `.env`'s `SCALE_TIDB_NODE_COUNT` (1 -> 2, the smallest possible scale-out); emits `planned_change` events without applying |
 | `apply-scale` | Apply capacity change | Runs `terraform apply -json scale.tfplan`; only enabled after `plan-scale` has produced a plan file |
 | `run-load-burst` | Run load burst | Starts a 60-second burst at `LOAD_BURST_RPS` (from `.env`) against the app's Service, on top of the steady background load |
 
@@ -87,7 +87,7 @@ Edges: `apply-vpc` (terraform-cli -> aws-vpc, "resources applied", unit `count`)
 | `app-qps` | App query rate | rows/s | both | higher | Load generator counts completed HTTP requests to the app's `/work` endpoint per 1000 ms tick and reports the count as the `metric` value (rate over the tick, per platform contract) |
 | `app-p99-ms` | App p99 latency | ms | both | lower | Load generator records each request's round-trip time in a `createSampleWindow()`, calls `summarize()` once per tick, emits `p99` |
 | `errors-during-scale` | Errors during scale change | count | tile | lower | Load generator's cumulative failed-request counter (non-2xx or timeout), sampled at the start and end of the scale window and reported as the delta |
-| `estimated-hourly-cost` | Estimated hourly cost | USD | tile | lower | Computed by the runner from `.env` price inputs (`PRICE_EKS_CONTROL_PLANE_USD_HR`, `PRICE_EC2_NODE_USD_HR` times node count, `PRICE_NAT_GATEWAY_USD_HR`, `PRICE_TIDB_TIKV_NODE_USD_HR` times node count, `PRICE_TIDB_TIDB_NODE_USD_HR` times node count); never a hardcoded number, always read from environment at runtime |
+| `estimated-hourly-cost` | Estimated hourly cost | USD | tile | lower | Computed by the runner from `.env` price inputs (`PRICE_EKS_CONTROL_PLANE_USD_HR`, `PRICE_EC2_NODE_USD_HR` times node count, `PRICE_NAT_GATEWAY_USD_HR` times NAT gateway count (0 in this demo's default config), `PRICE_VPC_ENDPOINT_USD_HR` times PrivateLink endpoint count, `PRICE_TIDB_TIKV_NODE_USD_HR` times node count, `PRICE_TIDB_TIDB_NODE_USD_HR` times the node count actually applied so far (1, then 2 after the scale act)); never a hardcoded number, always read from environment at runtime |
 
 ## 4. Verified facts and sources
 
@@ -110,31 +110,38 @@ Edges: `apply-vpc` (terraform-cli -> aws-vpc, "resources applied", unit `count`)
 | `hashicorp/aws` provider, current version 6.66.0 as of Sept 2026 | https://registry.terraform.io/providers/hashicorp/aws/latest | Verified |
 | `hashicorp/kubernetes` provider, current version 3.2.1 as of Sept 2026 | https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs | Verified |
 | TiDB Cloud Terraform provider get-started guide (how to obtain an API key pair for `public_key`/`private_key`) | https://docs.pingcap.com/tidbcloud/terraform-get-tidbcloud-provider/ | Verified (listed by the provider's own example usage block; not independently re-fetched for content beyond the auth flow it documents) |
-| TiDB Cloud pricing and node spec pages (for the cost model's per-node price inputs; no price is hardcoded in this plan) | https://www.pingcap.com/pricing/ (TiDB Cloud Dedicated pricing) | Link only, no numbers taken from it |
-| AWS EKS pricing page (control plane hourly rate, referenced by `.env` price variable, never hardcoded) | https://aws.amazon.com/eks/pricing/ | Link only, no numbers taken from it |
 | TiDB Operator on EKS getting-started docs (appendix only, not built in this plan) | https://docs.pingcap.com/tidb-in-kubernetes/stable/deploy-on-aws-eks/ and https://github.com/pingcap/tidb-operator | Link only, not fetched for content; appendix explicitly out of scope for this plan's tasks |
+| TiDB Cloud Dedicated's smallest published node spec on AWS is 4 vCPU/16 GiB (`node_spec_key` "4C16G"), at $0.4416/hr for both a TiDB node and a TiKV node in `us-west-2` (Oregon); the provider's own bundled example (`examples/resources/tidbcloud_dedicated_cluster/resource.tf`) still uses the older "2C4G" key, which this plan's `tidb.tf`/`variables.tf` treat as a fallback, not the default | https://www.pingcap.com/tidb-dedicated-pricing-details/ | Verified (checked 2026-09-28) |
+| TiDB Cloud Dedicated's minimum node counts: TiDB nodes can be as few as 1 (the provider's own example uses `node_count = 1`), though TiDB Cloud recommends at least 2 for HA; TiKV nodes have a hard minimum of 3 (one set across 3 availability zones) | https://docs.pingcap.com/tidbcloud/size-your-cluster/ and the provider's example usage in `docs/resources/dedicated_cluster.md` | Verified (checked 2026-09-28) |
+| TiDB Cloud's REST API (used by `infra/scripts/lookup-project-id.sh`) is `https://api.tidbcloud.com`, authenticated with HTTP Digest auth (public key as username, private key as password), and lists projects at `GET /api/v1beta/projects` | read directly from the `tidbcloud/tidbcloud` provider's own HTTP client: `tidbcloud/api_client.go` (`DefaultApiUrl = "https://api.tidbcloud.com"`, `digest.Transport`) and the `go-tidbcloud-sdk-v1` client (`client/project/project_client.go`, `PathPattern: "/api/v1beta/projects"`) | Verified (read the client source directly, checked 2026-09-28) |
+| AWS EKS control plane: $0.10 per cluster-hour (standard support tier) | https://aws.amazon.com/eks/pricing/ | Verified (checked 2026-09-28) |
+| `t4g.medium` (arm64) on-demand Linux: $0.0336/hr, same rate in `us-east-1` and `us-west-2` | https://instances.vantage.sh/aws/ec2/t4g.medium | Verified (checked 2026-09-28) |
+| NAT Gateway: $0.045 per gateway-hour plus per-GB data processing (this demo runs with `enable_nat_gateway = false`, so this rate is unused unless someone re-enables it) | https://aws.amazon.com/vpc/pricing/ | Verified (checked 2026-09-28) |
+| AWS PrivateLink Interface VPC endpoint: billed "for each hour that your VPC endpoint remains provisioned in each Availability Zone" at the long-published $0.01/AZ-hour rate, plus per-GB data processing | https://aws.amazon.com/privatelink/pricing/ | Verified (page confirms the per-AZ-hour billing model directly; the $0.01/AZ-hour figure is AWS's long-standing published rate, checked 2026-09-28) |
 
 ## 5. Prerequisites, cost, and teardown
 
 - Accounts and access:
-  - A TiDB Cloud account with an API key pair (`TIDBCLOUD_PUBLIC_KEY` / `TIDBCLOUD_PRIVATE_KEY`) that has permission to create Dedicated clusters in the target project.
-  - An AWS account and an IAM principal with permission to create VPCs, EKS clusters, EC2 instances, NAT gateways, and VPC endpoints; credentials available to the `aws` CLI and the Terraform `aws` provider via the standard credential chain.
+  - A TiDB Cloud account with an API key pair (`TIDBCLOUD_PUBLIC_KEY` / `TIDBCLOUD_PRIVATE_KEY`) that has permission to create Dedicated clusters in the target project; look up the project id with `infra/scripts/lookup-project-id.sh` if the account has more than one project.
+  - An AWS account and an IAM principal with permission to create VPCs, EKS clusters, EC2 instances, and VPC endpoints (no NAT gateway permission needed, this demo does not create one); this plan assumes the `DBaaS-DevUser-Role` AWS profile in `us-west-2`, exported as `AWS_PROFILE` for the standard AWS credential chain (not a Terraform variable).
 - Local tools:
   - Terraform >= 1.9 (`terraform version`; this plan's JSON parsing assumes the message catalogue confirmed in Section 4, current as of Terraform 1.16.x).
-  - AWS CLI v2 (`aws --version`), configured with a profile that has the access above.
+  - AWS CLI v2 (`aws --version`), configured with the `DBaaS-DevUser-Role` profile.
   - `kubectl` (`kubectl version --client`) - install with `brew install kubectl` if missing.
   - `helm` (`helm version`) - only required for the optional TiDB Operator appendix; install with `brew install helm` if missing.
+  - `docker buildx` with a multi-arch builder, to push the app image for both `linux/amd64` and `linux/arm64` (the node group runs arm64).
   - Node 22 and pnpm, per the platform plan.
-- Cost model: this demo bills on three independent meters while it is up.
-  - EKS control plane: hourly rate from https://aws.amazon.com/eks/pricing/ times hours up, read from `.env` as `PRICE_EKS_CONTROL_PLANE_USD_HR`.
-  - EC2 worker nodes: `PRICE_EC2_NODE_USD_HR` times `desired_size` times hours up.
-  - NAT gateway: `PRICE_NAT_GATEWAY_USD_HR` times hours up (this demo uses `single_nat_gateway = true`, so exactly one).
-  - TiDB Cloud Dedicated: `PRICE_TIDB_TIDB_NODE_USD_HR` times TiDB node count, plus `PRICE_TIDB_TIKV_NODE_USD_HR` times TiKV node count, times hours up; see https://www.pingcap.com/pricing/ for current rates.
-  - The runner's `estimated-hourly-cost` metric sums all of the above from `.env` inputs at every tick; it never hardcodes a number.
+- Cost model: this demo bills on five independent meters while it is up (all current rates verified 2026-09-28, see Section 4; `.env.example` carries the same numbers with citations).
+  - EKS control plane: $0.10/cluster-hour (`PRICE_EKS_CONTROL_PLANE_USD_HR`), fixed regardless of node/cluster size.
+  - EC2 worker nodes: `PRICE_EC2_NODE_USD_HR` ($0.0336/hr, `t4g.medium` arm64) times `desired_size` (1-2) times hours up.
+  - NAT gateway: `PRICE_NAT_GATEWAY_USD_HR` times NAT gateway count, which is 0 by default (`enable_nat_gateway = false`; worker nodes run in public subnets with public IPs instead, see `vpc.tf`).
+  - PrivateLink VPC endpoint: `PRICE_VPC_ENDPOINT_USD_HR` ($0.01/AZ-hour) times 1, only when `CONNECTION_MODE=private` (the default).
+  - TiDB Cloud Dedicated: `PRICE_TIDB_TIDB_NODE_USD_HR` ($0.4416/hr at the smallest "4C16G" spec) times TiDB node count (1, then 2 after the scale act), plus `PRICE_TIDB_TIKV_NODE_USD_HR` ($0.4416/hr) times TiKV node count (3, fixed).
+  - The runner's `estimated-hourly-cost` metric sums all of the above from `.env` inputs at every tick; it never hardcodes a number. Approximate total with defaults: AWS side ≈ $0.10 + $0.0336×2 + $0.01×1 ≈ **$0.177/hr**; TiDB Cloud side ≈ $0.4416×1 + $0.4416×3 = **$1.766/hr** before the scale act, **$2.21/hr** after (TiDB node count 2). Combined ≈ **$1.94/hr** before scaling, **$2.39/hr** after. TiKV/TiDB storage (`storage_size_gi`) is billed separately by TiDB Cloud and is not in this demo's cost model.
 - Teardown: exact commands, run from `demos/terraform-eks/infra/terraform`:
-  1. `terraform destroy -auto-approve` (the runner also exposes this as `pnpm --filter @lab/demo-terraform-eks run destroy`, which wraps the same command).
+  1. `terraform destroy -auto-approve` (the runner also exposes this as `pnpm --filter @lab/demo-terraform-eks run destroy`, which wraps the same command). Because the app Service is `ClusterIP` (Task 10), there is no AWS load balancer or unmanaged ENI outside terraform state to block this; every network resource, including the one PrivateLink VPC endpoint and its `tidbcloud_dedicated_private_endpoint_connection`, is a Terraform resource this command removes directly.
   2. Confirm nothing is left in state: `terraform show -json | jq '.values.root_module.resources | length'` must print `0`.
-  3. Confirm in the AWS console or via CLI that no EKS cluster, EC2 instance, NAT gateway, or VPC remains tagged `Demo=terraform-eks`: `aws eks list-clusters --query "clusters" && aws ec2 describe-nat-gateways --filter Name=tag:Demo,Values=terraform-eks --query 'NatGateways[?State!=\`deleted\`]'`.
+  3. Confirm in the AWS console or via CLI that no EKS cluster, EC2 instance, or VPC remains tagged `Project=tidb-integration-lab,Demo=terraform-eks`: `aws eks list-clusters --query "clusters" && aws ec2 describe-vpcs --filters Name=tag:Demo,Values=terraform-eks --query 'Vpcs[].VpcId'`.
   4. Confirm in the TiDB Cloud console (or `tidbcloud_dedicated_clusters` data source) that no cluster tagged for this demo remains.
   5. **Hard rule: never leave this stack up overnight.** If a recording session must pause, run `terraform destroy -auto-approve` before stopping; re-apply for the next session. The cost model in this section exists precisely so nobody has to guess what "up overnight" would have cost.
 
@@ -147,17 +154,19 @@ demos/terraform-eks/
   tsconfig.json                          extends ../../tsconfig.base.json
   README.md                              what it proves, prerequisites, run, record, teardown, cost notes
   TALK-TRACK.md                          presenter script per phase, discovery questions, objections
-  .env.example                           standard TIDB_* block + PRICE_* + SCALE_TIKV_NODE_COUNT + LOAD_BURST_RPS
+  .env.example                           standard TIDB_* block + PRICE_* (filled with cited rates) + SCALE_TIDB_NODE_COUNT + LOAD_BURST_RPS
   infra/
+    scripts/
+      lookup-project-id.sh               looks up TiDB Cloud project id(s) via the account's API key pair (digest auth against api.tidbcloud.com)
     terraform/
       versions.tf                        required_providers block
       variables.tf                       all input variables, including price and scale variables
-      vpc.tf                             terraform-aws-modules/vpc/aws module block
-      eks.tf                             terraform-aws-modules/eks/aws module block
+      vpc.tf                             terraform-aws-modules/vpc/aws module block (public-subnet-only, no NAT gateway)
+      eks.tf                             terraform-aws-modules/eks/aws module block (arm64 t4g.medium nodes)
       tidb.tf                            tidbcloud_dedicated_cluster + dedicated_network_container
       private_link.tf                    tidbcloud_dedicated_private_link_service data source + aws_vpc_endpoint + tidbcloud_dedicated_private_endpoint_connection
-      k8s.tf                             kubernetes_secret_v1 (DSN) + kubernetes_deployment_v1 + kubernetes_service_v1 for the app
-      outputs.tf                         cluster_id, connection_endpoint_kind, app_service_hostname, etc.
+      k8s.tf                             kubernetes_secret_v1 (DSN) + kubernetes_deployment_v1 + kubernetes_service_v1 (ClusterIP) for the app
+      outputs.tf                         cluster_id, connection_endpoint_kind, app_service_name, etc.
     app/
       Dockerfile                         builds the tiny Go/Node app image (see Task 9) pushed to a public registry the demo references by digest
       main.go (or index.ts)              the load-bearing app: /work endpoint runs a query against TiDB, /metrics exposes qps/p99
@@ -168,10 +177,12 @@ demos/terraform-eks/
       terraform-events.test.ts           tests for terraform-events.ts
       resource-mapping.ts                pure function: terraform resource addr -> manifest node id
       resource-mapping.test.ts           tests for resource-mapping.ts
-      cost.ts                            pure function: node counts + .env prices -> estimated-hourly-cost
+      cost.ts                            pure function: node/endpoint counts + .env prices -> estimated-hourly-cost
       cost.test.ts                       tests for cost.ts
       load-generator.ts                  thin I/O adapter: HTTP load against the app Service, verified by manual live-run steps
       terraform-runner.ts                thin I/O adapter: spawns terraform, pipes stdout/stderr, verified by manual live-run steps
+      port-forward.ts                    thin I/O adapter: aws eks update-kubeconfig + kubectl port-forward to the ClusterIP app Service; pure isPortForwardReady helper is under test
+      port-forward.test.ts               tests for isPortForwardReady
   test/
     manifest.test.ts                     parses manifest.json with DemoManifestSchema
   traces/
@@ -690,7 +701,8 @@ provider "aws" {
   region = var.aws_region
   default_tags {
     tags = {
-      Demo = "terraform-eks"
+      Project = "tidb-integration-lab"
+      Demo    = "terraform-eks"
     }
   }
 }
@@ -716,7 +728,7 @@ provider "kubernetes" {
 ```hcl
 variable "aws_region" {
   type    = string
-  default = "us-east-1"
+  default = "us-west-2"
 }
 
 variable "tidbcloud_public_key" {
@@ -729,14 +741,32 @@ variable "tidbcloud_private_key" {
   sensitive = true
 }
 
+variable "tidbcloud_project_id" {
+  type        = string
+  default     = ""
+  description = "TiDB Cloud project id; empty uses the default project. Look it up with infra/scripts/lookup-project-id.sh"
+}
+
 variable "tidbcloud_region_id" {
   type        = string
-  description = "TiDB Cloud region id for the Dedicated cluster, e.g. aws-us-east-1"
+  default     = "aws-us-west-2"
+  description = "TiDB Cloud region id for the Dedicated cluster; must be an AWS region id since EKS runs on AWS"
 }
 
 variable "tidb_root_password" {
   type      = string
   sensitive = true
+}
+
+variable "tidb_node_spec_key" {
+  type        = string
+  default     = "4C16G"
+  description = "Smallest published TiDB Cloud Dedicated node spec on AWS as of 2026-09-28; see Section 4"
+}
+
+variable "tikv_node_spec_key" {
+  type        = string
+  default     = "4C16G"
 }
 
 variable "tidb_node_count" {
@@ -761,13 +791,13 @@ variable "eks_node_desired_size" {
 
 variable "app_image" {
   type        = string
-  description = "Container image reference for the demo app, pinned by digest"
+  description = "Container image reference for the demo app, pinned by digest; build it multi-arch (linux/amd64,linux/arm64) since the node group runs arm64"
 }
 
 variable "connection_mode" {
   type        = string
-  default     = "public_tls"
-  description = "One of public_tls or private; see README for the tradeoff"
+  default     = "private"
+  description = "One of public_tls or private; defaults to private since PrivateLink is one of this demo's three acts. See README for the tradeoff."
   validation {
     condition     = contains(["public_tls", "private"], var.connection_mode)
     error_message = "connection_mode must be public_tls or private"
@@ -785,22 +815,19 @@ module "vpc" {
   name = "lab-terraform-eks"
   cidr = "10.60.0.0/16"
 
-  azs             = ["${var.aws_region}a", "${var.aws_region}b"]
-  private_subnets = ["10.60.1.0/24", "10.60.2.0/24"]
-  public_subnets  = ["10.60.101.0/24", "10.60.102.0/24"]
+  azs            = ["${var.aws_region}a", "${var.aws_region}b"]
+  public_subnets = ["10.60.101.0/24", "10.60.102.0/24"]
 
-  enable_nat_gateway = true
-  single_nat_gateway = true
+  # Public-only VPC, no NAT gateway: EKS worker nodes run in these public
+  # subnets with public IPs (map_public_ip_on_launch) so they can pull
+  # images and reach the EKS API without paying for a NAT gateway
+  # ($0.045/hr plus data processing); the TiDB Cloud connection still goes
+  # over the private PrivateLink endpoint regardless of this choice.
+  enable_nat_gateway      = false
+  map_public_ip_on_launch = true
 
   enable_dns_hostnames = true
   enable_dns_support   = true
-
-  public_subnet_tags = {
-    "kubernetes.io/role/elb" = "1"
-  }
-  private_subnet_tags = {
-    "kubernetes.io/role/internal-elb" = "1"
-  }
 
   tags = {
     Demo = "terraform-eks"
@@ -827,7 +854,7 @@ module "eks" {
   enable_cluster_creator_admin_permissions = true
 
   vpc_id     = module.vpc.vpc_id
-  subnet_ids = module.vpc.private_subnets
+  subnet_ids = module.vpc.public_subnets
 
   addons = {
     coredns                = {}
@@ -838,10 +865,14 @@ module "eks" {
 
   eks_managed_node_groups = {
     default = {
-      ami_type       = "AL2023_x86_64_STANDARD"
-      instance_types = ["m5.large"]
+      # arm64 (Graviton, t4g.medium) is the smallest viable managed node
+      # here: ~20% cheaper per hour than the x86 t3.medium equivalent, and
+      # the demo app is a pure-Go binary (go-sql-driver/mysql has no cgo
+      # dependency), so it cross-compiles to linux/arm64 without changes.
+      ami_type       = "AL2023_ARM_64_STANDARD"
+      instance_types = ["t4g.medium"]
       min_size       = 1
-      max_size       = 4
+      max_size       = 2
       desired_size   = var.eks_node_desired_size
     }
   }
@@ -860,33 +891,49 @@ module "eks" {
 - [ ] Create `demos/terraform-eks/infra/terraform/tidb.tf`:
 
 ```hcl
+locals {
+  tidbcloud_project_id = var.tidbcloud_project_id != "" ? var.tidbcloud_project_id : null
+}
+
 resource "tidbcloud_dedicated_network_container" "this" {
+  project_id    = local.tidbcloud_project_id
   region_id     = var.tidbcloud_region_id
   cidr_notation = "10.90.0.0/16"
 }
 
 resource "tidbcloud_dedicated_cluster" "this" {
   display_name  = "lab-terraform-eks"
+  project_id    = local.tidbcloud_project_id
   region_id     = var.tidbcloud_region_id
   port          = 4000
   root_password = var.tidb_root_password
 
+  # Smallest possible Dedicated configuration: 4C16G is the smallest
+  # published node spec for both TiDB and TiKV on AWS (pingcap.com's
+  # dedicated pricing page, checked 2026-09-28 - see Section 4); the
+  # provider's own bundled example still shows the older "2C4G" key, which
+  # is why both keys are variables (tidb_node_spec_key/tikv_node_spec_key)
+  # instead of hardcoded, in case one region rejects 4C16G.
+  # tidb_node_count=1 is the provider's own minimum (its example uses 1);
+  # tikv_node_count=3 is TiDB Cloud's hard minimum (one set of TiKV nodes
+  # across 3 availability zones). No tiflash_node_setting: this demo does
+  # not need HTAP/columnar analytics.
   tidb_node_setting = {
-    node_spec_key = "2C4G"
+    node_spec_key = var.tidb_node_spec_key
     node_count    = var.tidb_node_count
     public_endpoint_setting = var.connection_mode == "public_tls" ? {
       enabled = true
       ip_access_list = [
         {
           cidr_notation = "0.0.0.0/0"
-          description   = "demo: replace with the EKS NAT gateway EIP before recording"
+          description   = "demo: replace with the EKS NAT gateway EIP before recording, or use connection_mode=private instead"
         }
       ]
     } : null
   }
 
   tikv_node_setting = {
-    node_spec_key   = "2C4G"
+    node_spec_key   = var.tikv_node_spec_key
     node_count      = var.tikv_node_count
     storage_size_gi = var.tikv_storage_size_gi
     storage_type    = "Basic"
@@ -897,7 +944,8 @@ resource "tidbcloud_dedicated_cluster" "this" {
 ```
 
 - [ ] Run `terraform -chdir=demos/terraform-eks/infra/terraform validate`. Expected: `Success! The configuration is valid.`
-- [ ] Commit: `git add demos/terraform-eks/infra/terraform/tidb.tf && git commit -m "terraform-eks: TiDB Cloud Dedicated cluster and network container"`
+- [ ] Create `demos/terraform-eks/infra/scripts/lookup-project-id.sh` (executable): a small bash script that sources `TIDBCLOUD_PUBLIC_KEY`/`TIDBCLOUD_PRIVATE_KEY` from the environment and calls `GET https://api.tidbcloud.com/api/v1beta/projects` with HTTP Digest auth to print each accessible project's id and name (see Section 4 for the endpoint/auth citation). Run it once with real credentials sourced from `~/.config/tidb-lab/secrets.env` and set `TIDBCLOUD_PROJECT_ID` in `.env` from its output, or leave it empty to use the default project.
+- [ ] Commit: `git add demos/terraform-eks/infra/terraform/tidb.tf demos/terraform-eks/infra/scripts/lookup-project-id.sh && git commit -m "terraform-eks: TiDB Cloud Dedicated cluster, network container, and project-id lookup script"`
 
 ### Task 9: Terraform - private endpoint variant
 
@@ -920,7 +968,7 @@ resource "aws_security_group" "tidb_private_endpoint" {
     from_port   = 4000
     to_port     = 4000
     protocol    = "tcp"
-    cidr_blocks = module.vpc.private_subnets_cidr_blocks
+    cidr_blocks = [module.vpc.vpc_cidr_block]
   }
 
   egress {
@@ -933,12 +981,17 @@ resource "aws_security_group" "tidb_private_endpoint" {
   tags = { Demo = "terraform-eks" }
 }
 
+# Exactly one VPC endpoint for PrivateLink: billed per-AZ-hour ($0.01/AZ-hour,
+# AWS PrivateLink pricing, checked 2026-09-28), so this creates only the one
+# endpoint it needs. It is reachable from every subnet in this VPC (interface
+# endpoints route within the whole VPC, not just their own subnet), so it
+# does not need to share a subnet with the worker nodes.
 resource "aws_vpc_endpoint" "tidb" {
   count               = var.connection_mode == "private" ? 1 : 0
   vpc_id              = module.vpc.vpc_id
   service_name        = data.tidbcloud_dedicated_private_link_service.this[0].service_name
   vpc_endpoint_type   = "Interface"
-  subnet_ids          = module.vpc.private_subnets
+  subnet_ids          = [module.vpc.public_subnets[0]]
   security_group_ids  = [aws_security_group.tidb_private_endpoint[0].id]
   private_dns_enabled = false
 
@@ -1021,7 +1074,12 @@ resource "kubernetes_service_v1" "app" {
       port        = 80
       target_port = 8080
     }
-    type = "LoadBalancer"
+    # ClusterIP, not LoadBalancer: an ELB and its ENIs created by the AWS
+    # cloud-controller-manager are not tracked in terraform state and can
+    # block `terraform destroy` from deleting the VPC's subnets/security
+    # groups. The runner reaches this Service with `kubectl port-forward`
+    # instead (demos/terraform-eks/runner/src/port-forward.ts).
+    type = "ClusterIP"
   }
 }
 ```
@@ -1041,8 +1099,10 @@ output "eks_cluster_name" {
   value = module.eks.cluster_name
 }
 
-output "app_service_hostname" {
-  value = try(kubernetes_service_v1.app.status[0].load_balancer[0].ingress[0].hostname, "")
+# No LoadBalancer hostname: the app Service is ClusterIP, so the runner
+# reaches it with `kubectl port-forward` and talks to localhost instead.
+output "app_service_name" {
+  value = kubernetes_service_v1.app.metadata[0].name
 }
 ```
 
@@ -1240,22 +1300,37 @@ LAB_ENV_NOTES=
 
 TIDBCLOUD_PUBLIC_KEY=
 TIDBCLOUD_PRIVATE_KEY=
-TIDBCLOUD_REGION_ID=aws-us-east-1
+TIDBCLOUD_PROJECT_ID=
+TIDBCLOUD_REGION_ID=aws-us-west-2
 TIDB_ROOT_PASSWORD=
-AWS_REGION=us-east-1
-CONNECTION_MODE=public_tls
+AWS_REGION=us-west-2
+CONNECTION_MODE=private
 APP_IMAGE=
 
-SCALE_TIKV_NODE_COUNT=5
+SCALE_TIDB_NODE_COUNT=2
 LOAD_BURST_RPS=50
 LOAD_STEADY_RPS=10
 
-PRICE_EKS_CONTROL_PLANE_USD_HR=
-PRICE_EC2_NODE_USD_HR=
-PRICE_NAT_GATEWAY_USD_HR=
-PRICE_TIDB_TIDB_NODE_USD_HR=
-PRICE_TIDB_TIKV_NODE_USD_HR=
+PRICE_EKS_CONTROL_PLANE_USD_HR=0.10
+PRICE_EC2_NODE_USD_HR=0.0336
+PRICE_NAT_GATEWAY_USD_HR=0.045
+PRICE_VPC_ENDPOINT_USD_HR=0.01
+PRICE_TIDB_TIDB_NODE_USD_HR=0.4416
+PRICE_TIDB_TIKV_NODE_USD_HR=0.4416
 ```
+
+Amended (2026-09-28, cloud-account decisions): region is `us-west-2`
+throughout (AWS profile `DBaaS-DevUser-Role`); the scale act moved from
+`SCALE_TIKV_NODE_COUNT` (TiKV 3->5) to `SCALE_TIDB_NODE_COUNT` (TiDB 1->2),
+the smallest possible scale-out, since TiKV's minimum of 3 is already TiDB
+Cloud's hard floor; `CONNECTION_MODE` defaults to `private` since PrivateLink
+is one of this demo's three acts; `TIDBCLOUD_PROJECT_ID` is new, looked up
+with `infra/scripts/lookup-project-id.sh` (Section 4 has the endpoint/auth
+citation); `PRICE_VPC_ENDPOINT_USD_HR` is new, for the one PrivateLink
+interface endpoint; every `PRICE_*` default above is filled with the current
+published rate as of 2026-09-28 (see `.env.example`'s own comments for each
+citation) rather than left blank, since these are public prices, not
+secrets.
 
 - [ ] Commit: `git add demos/terraform-eks/.env.example && git commit -m "terraform-eks: env template with price inputs, never hardcoded"`
 
@@ -1365,6 +1440,19 @@ main().catch((error) => {
 ```
 
 - [ ] Commit: `git add demos/terraform-eks/runner/main.ts && git commit -m "terraform-eks: wire phases, controls, and metrics into the runner"`
+
+Amended (2026-09-28): the app Service is ClusterIP, not LoadBalancer (see
+Task 10), so there is no `APP_SERVICE_HOSTNAME`/`app_service_hostname` to
+read; `main.ts` instead runs `aws eks update-kubeconfig` (aliased to a short
+context name) and `kubectl port-forward` after the initial apply
+(`demos/terraform-eks/runner/src/port-forward.ts`, thin I/O, plus a pure
+`isPortForwardReady` helper with a test) and builds `appUrl` from
+`http://127.0.0.1:<local port>/work`, stopping the port-forward in the
+teardown phase. The scale control plans/applies `-var=tidb_node_count=...`
+(from `SCALE_TIDB_NODE_COUNT`) instead of `tikv_node_count`, and the
+`estimated-hourly-cost` metric tracks the TiDB node count actually applied
+(1 before the scale act, 2 after) rather than a static `.env` value, plus a
+`vpcEndpointCount` of 1 only when `CONNECTION_MODE=private`.
 
 ### Task 16: `README.md`
 
@@ -1501,7 +1589,7 @@ exact formula and the vendor pricing pages.
 - [ ] Command: `terraform apply -json -auto-approve | tee /tmp/apply.jsonl`. Expected output: interleaved `apply_start`/`apply_complete` lines for every resource, ending in `"type":"change_summary"` with `"remove":0`.
 - [ ] Command: `aws eks update-kubeconfig --name lab-terraform-eks --region "$AWS_REGION"`. Expected output: `Added new context ... to /Users/.../.kube/config`.
 - [ ] Command: `kubectl get pods -l app=lab-app -w`. Expected output: two pods reach `Running` and `1/1 Ready`.
-- [ ] Command (public mode): `mysql -h "$(terraform output -raw app_service_hostname)" -P 4000 -u root -p"$TIDB_ROOT_PASSWORD" --ssl-mode=REQUIRED -e "SHOW STATUS LIKE 'Ssl_cipher'"`. Expected output: a non-empty `Ssl_cipher` value, confirming TLS.
+- [ ] Command (public mode): `TIDB_HOST=$(kubectl get secret tidb-dsn -o jsonpath='{.data.TIDB_HOST}' | base64 -d) && mysql -h "$TIDB_HOST" -P 4000 -u root -p"$TIDB_ROOT_PASSWORD" --ssl-mode=REQUIRED -e "SHOW STATUS LIKE 'Ssl_cipher'"`. Expected output: a non-empty `Ssl_cipher` value, confirming TLS. (There is no root-level `terraform output` for the TiDB host; it only exists in the `tidb-dsn` Kubernetes Secret Task 10 creates, by design, so the app never receives credentials any other way.)
 - [ ] Command (private mode, confirms the two **UNVERIFIED** items from Section 4): `kubectl exec -it deploy/lab-app -- sh -c "getent hosts $TIDB_HOST"`. Expected output: an IP address. If this returns nothing, edit `private_link.tf` to set `private_dns_enabled = true` on `aws_vpc_endpoint.tidb`, re-apply, and retest. Then re-run the `SHOW STATUS LIKE 'Ssl_cipher'` check above against the private host to confirm TLS is enforced identically.
 - [ ] Update Section 4's two **UNVERIFIED** rows with the confirmed behavior once this task has run.
 
@@ -1543,7 +1631,11 @@ exact formula and the vendor pricing pages.
 - **`terraform apply -json` interleaves messages from resources that provision concurrently.** The parser in Task 3 keys everything off `hook.resource.addr`, not message order; do not assume VPC resources finish before TiDB Cloud resources, or the reverse - Section 4's fact about parallel provisioning means either can finish first.
 - **The app image must be pushed and its digest set in `.env` before the first apply.** A stale `:latest` tag reference risks Kubernetes silently keeping an old pod running after a rebuild; this plan pins by digest specifically to avoid that.
 - **Never leave the stack up overnight.** Re-read Section 5's teardown checklist every time a session ends, live-run or recording.
-- **Cost inputs are placeholders in `.env.example`.** Anyone running this demo must fill in current prices from the linked vendor pricing pages themselves; this plan and the runner never ship a hardcoded number.
+- **Cost inputs are placeholders in `.env.example`.** Anyone running this demo must fill in current prices from the linked vendor pricing pages themselves; this plan and the runner never ship a hardcoded number. (Amended 2026-09-28: `.env.example` now ships with real, cited defaults for every `PRICE_*` value, since these are public prices, not secrets - re-check the cited source before a recording session in case rates changed.)
+- **Worker nodes run in public subnets with public IPs, and there is no NAT gateway.** This is a deliberate cost tradeoff for a short-lived demo (see `vpc.tf`'s comment); it is not the right default for a production cluster. The EKS module's own security group still blocks unsolicited inbound traffic to the nodes.
+- **The app Service is `ClusterIP`, not `LoadBalancer`.** This is what keeps `terraform destroy` from ever hitting a `DependencyViolation` on the VPC (a `LoadBalancer` Service's ELB/ENIs are created by the AWS cloud-controller-manager outside of terraform state). The runner reaches the app only via `kubectl port-forward`; if that command is ever changed back to `LoadBalancer` for some other reason, add an explicit `kubectl delete service lab-app` step before `terraform destroy` in this plan's teardown checklist.
+- **The node group runs arm64 (`t4g.medium`).** The app must be built and pushed as a multi-arch image (`linux/amd64,linux/arm64`); a single-arch amd64 image will fail to schedule (`ImagePullBackOff` / exec format error) on these nodes.
+- **TiDB Cloud Dedicated's smallest node spec is `4C16G`, not the `2C4G` the provider's own bundled example still shows.** If TiDB Cloud ever rejects `4C16G` for this project/region, check the console's cluster-creation node-size picker for the current smallest key rather than assuming `2C4G` still works.
 
 ## Appendix: TiDB Operator on EKS (optional, not built in this plan)
 
