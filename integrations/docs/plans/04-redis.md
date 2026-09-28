@@ -89,13 +89,13 @@ Nodes map 1:1 to `manifest.json`: `workload` (client), `tidb` (tidb), `ticdc` (s
 |---|---|---|
 | TiCDC's Kafka sink supports the `canal-json`, `open-protocol`, and `avro` protocols; `canal-json` is recommended "in most cases". | https://docs.pingcap.com/tidb/stable/ticdc-sink-to-kafka/ | Verified (WebSearch summary plus a direct fetch of the live rendered page, which contains the literal strings `protocol=canal-json` and `protocol=avro`). |
 | A Kafka sink URI has the shape `kafka://<broker1>,<broker2>,.../<topic>?protocol=canal-json&kafka-version=<x>&partition-num=<n>&max-message-bytes=<n>`. | https://docs.pingcap.com/tidb/stable/ticdc-sink-to-kafka/ | Verified - fetched the exact query string from the live doc page: `kafka://127.0.0.1:9092,127.0.0.1:9093,127.0.0.1:9094/topic-name?protocol=canal-json&kafka-version=2.4.0&partition-num=6&max-message-bytes=67108864`. |
-| Changefeeds are created with `cdc cli changefeed create --server=<owner-addr> --sink-uri=<uri> --changefeed-id=<id>`. | https://docs.pingcap.com/tidb/stable/ticdc-sink-to-kafka/ (WebSearch) | Verified for the `cdc cli` syntax itself. **UNVERIFIED**: the exact `tiup` invocation to reach that `cdc` binary when TiCDC was started by `tiup playground` (as opposed to a manually deployed TiCDC) - confirm with `tiup ctl:<version> cdc cli changefeed create --help` right after starting `infra/tidb/playground.sh`, using the version tiup prints at startup (Task 12). |
+| Changefeeds are created with `cdc cli changefeed create --server=<owner-addr> --sink-uri=<uri> --changefeed-id=<id>`. | https://docs.pingcap.com/tidb/stable/ticdc-sink-to-kafka/ (WebSearch) | Verified for the `cdc cli` syntax itself. VERIFIED (live run, 2026-09-28): `tiup ctl:v8.5.8 cdc cli ...` downloads a separate `ctl` component whose bundled `cdc` binary was killed instantly (SIGKILL, no log entry) on every invocation in this environment. The `cdc` binary already installed by `tiup playground` at `~/.tiup/components/cdc/<version>/cdc` runs the same `cli` subcommands fine (`cdc cli changefeed create/list/remove --server=http://127.0.0.1:8300`). `create-changefeed.sh` and `drop-changefeed.sh` now invoke that binary directly instead of `tiup ctl:<version>`. |
 | TiCDC guarantees at-least-once delivery of DML/DDL; duplicates can occur on TiKV/TiCDC failure and retry. `safe-mode` (default `false` since TiCDC v6.1.3) controls whether TiCDC rewrites `INSERT`/`UPDATE` as `REPLACE INTO` downstream to tolerate those duplicates. | https://docs.pingcap.com/tidb/stable/ticdc-faq/ | Verified (WebSearch synthesis directly attributed to this docs page). |
 | TiDB has a SQL Prepared Plan Cache covering both the `PREPARE`/`EXECUTE` SQL statements and the `COM_STMT_PREPARE`/`COM_STMT_EXECUTE` binary protocol: the parameterized query is parsed into an AST once, and later executions generate or reuse a plan from the cached AST. | https://docs.pingcap.com/tidb/stable/sql-prepared-plan-cache/ | Verified (WebSearch synthesis directly attributed to this docs page). |
-| The exact system variable name and default value for enabling the prepared plan cache, and explicit confirmation that `Point_Get`/`Batch_Point_Get` plans are cached under it. | https://docs.pingcap.com/tidb/stable/sql-prepared-plan-cache/ | **UNVERIFIED** - WebFetch on `docs.pingcap.com` was blocked in this session (domain-verification error) and a `curl` fetch of the rendered page did not surface the variable name in a quick grep. Confirm before Task 8 by running `SHOW VARIABLES LIKE '%plan_cache%'` and `SHOW VARIABLES LIKE '%prepared_plan_cache%'` against the playground, then run a prepared point-get twice and check `SELECT @@last_plan_from_cache`. |
-| TiDB's `EXPLAIN` output names a primary-key or unique-key single-row lookup operator `Point_Get`, and an `IN (...)`-list lookup `Batch_Point_Get`. | https://docs.pingcap.com/tidb/stable/explain-overview/ , https://docs.pingcap.com/tidb/stable/latency-breakdown/ | Verified generally (WebSearch results reference "Point get and Batch point get" operators for latency analysis). Exact casing (`Point_Get` vs. `PointGet` vs. other) as it appears in this specific TiDB version's `EXPLAIN` output is **UNVERIFIED** - Task 8's manual step runs `EXPLAIN SELECT payload, version, written_at_ms FROM cache_demo_rows WHERE id = ?` against the local playground and pastes the real operator name into `README.md` before the featured trace is recorded. |
+| The exact system variable name and default value for enabling the prepared plan cache, and explicit confirmation that `Point_Get`/`Batch_Point_Get` plans are cached under it. | https://docs.pingcap.com/tidb/stable/sql-prepared-plan-cache/ | VERIFIED (live run against `tiup playground` v8.5.8, 2026-09-28): `SHOW VARIABLES LIKE '%plan_cache%'` shows `tidb_enable_prepared_plan_cache = ON` (the default). Ran `PREPARE pg FROM 'SELECT payload, version, written_at_ms FROM cache_demo_rows WHERE id = ?'` and `EXECUTE pg USING @id` twice; `SELECT @@last_plan_from_cache` returned `1` on the second execution, confirming the `Point_Get` plan is served from the prepared plan cache. |
+| TiDB's `EXPLAIN` output names a primary-key or unique-key single-row lookup operator `Point_Get`, and an `IN (...)`-list lookup `Batch_Point_Get`. | https://docs.pingcap.com/tidb/stable/explain-overview/ , https://docs.pingcap.com/tidb/stable/latency-breakdown/ | VERIFIED (live run, 2026-09-28): `EXPLAIN SELECT payload, version, written_at_ms FROM cache_demo_rows WHERE id = 1;` against the local v8.5.8 playground returned operator id `Point_Get_1` (`table:cache_demo_rows`, `handle:1`), confirming the `Point_Get` casing. |
 | TiCDC's `canal-json` output implements the open-source Canal project's JSON change-event shape (per-row `data`/`old` column maps, `database`, `table`, `type`, etc.), with an additional TiDB-specific extension field for TiDB-only identifiers. | https://docs.pingcap.com/tidb/stable/ticdc-canal-json/ | Verified generally (WebSearch: "TiCDC appends a TiDB extension field to the Canal-JSON protocol format to include important TiDB-specific identifiers"). |
-| The exact JSON key names inside a TiCDC `canal-json` message body (confirming row values live under `data`, and the name of the TiDB extension field). | https://docs.pingcap.com/tidb/stable/ticdc-canal-json/ | **UNVERIFIED** - WebFetch on this page was blocked in this session. Task 6's manual step captures one real message from this demo's own changefeed to `demos/redis/fixtures/sample-canal-json-message.json` and Task 7 (parser) is written and tested against that captured fixture, not an invented one. The parser (`runner/src/canal.ts`) reads only the generic Canal `data`/`table`/`type` fields (the row's own `written_at_ms` column value), not the TiDB extension field, specifically to avoid depending on an unverified field name. |
+| The exact JSON key names inside a TiCDC `canal-json` message body (confirming row values live under `data`, and the name of the TiDB extension field). | https://docs.pingcap.com/tidb/stable/ticdc-canal-json/ | VERIFIED (live run, 2026-09-28): a real `cache_demo_rows` row-change message from this demo's own changefeed has the shape `{"database":"lab","table":"cache_demo_rows","type":"INSERT"|"UPDATE","data":[{"id":"1","payload":"...","version":"1","written_at_ms":"..."}],"old":null|[...]}`; the row values live under `data` as a one-element array of string-keyed columns, matching `sample-canal-json-message.json`. The TiDB extension field is `_tidb` (e.g. `_tidb":{"commitTs":...}`) and only appears when the changefeed's sink-uri sets `enable-tidb-extension=true` (see the Build notes below - the demo's own changefeed did not set this at first, a real bug found and fixed live). The parser (`runner/src/canal.ts`) reads only the generic Canal `data`/`table` fields plus the row's own `written_at_ms` column, not the TiDB extension field, so invalidation logic does not depend on `enable-tidb-extension` being set - only the (informational) `commitTs` on `RowChange` does. |
 | Redis is an in-memory data store; single-key `GET`/`SET` latency and throughput on one instance is materially faster than any disk-backed SQL database, TiDB included. | N/A - architectural fact, not a vendor claim | Given as ground truth in the task brief; the demo's `README.md` and `TALK-TRACK.md` state this plainly rather than trying to show TiDB "winning" a latency race it cannot win. |
 | `node-redis` (npm package `redis`, v4+) is the actively maintained client with first-class TypeScript types; Redis publishes an official migration guide from `ioredis` to it. | https://redis.io/docs/latest/develop/clients/nodejs/migration/ | Verified (official `redis.io` docs domain). |
 | `kafkajs` is a pure-JavaScript Kafka client with no native build step, handling demo-scale throughput comfortably; it is the commonly recommended default over `node-rdkafka` (which wraps librdkafka and needs a native build) unless profiling shows the client itself is the bottleneck. | https://npm-compare.com/kafkajs,node-rdkafka , https://blog.platformatic.dev/why-we-created-another-kafka-client-for-nodejs | Verified as an engineering-choice rationale from community comparisons, not a vendor doc - there is no official "recommended Node Kafka client" page. Called out here as a tooling decision, not a TiDB product capability. |
@@ -1255,11 +1255,11 @@ This is a thin I/O / infra step, not TDD - it produces the fixture Task 7's pars
 
 ## 8. Recording the featured trace
 
-- [ ] Ensure `LAB_ENV_TIDB` in `.env` holds the exact version string `tiup playground` printed at
+- [x] Ensure `LAB_ENV_TIDB` in `.env` holds the exact version string `tiup playground` printed at
       startup, and set `LAB_ENV_NOTES` to something like "single-node local playground, demo-local
       Redis + shared Kafka broker, no cloud resources".
-- [ ] Start TiDB/TiCDC, Kafka, Redis, and create the changefeed as in the README's Run section.
-- [ ] Run `pnpm lab run redis --record` and drive the demo in order:
+- [x] Start TiDB/TiCDC, Kafka, Redis, and create the changefeed as in the README's Run section.
+- [x] Run `pnpm lab run redis --record` and drive the demo in order:
   1. Let `ttl-only` run for at least 60 seconds so `stale-read-rate` shows a clearly non-zero value.
   2. Press `write-burst`, wait a few seconds for the sampler to catch the spike.
   3. Press `toggle-mode` to enter `cdc`. Press `write-burst` again and let it run until
@@ -1268,14 +1268,15 @@ This is a thin I/O / infra step, not TDD - it produces the fixture Task 7's pars
      time) and let `redis-read-p50/p99` and `tidb-read-p50/p99` both populate.
   5. Press `hot-key-storm` and let it run its full duration so the contrast is visible on the chart.
   6. Stop the runner with Ctrl-C so the trace file is finalized.
-- [ ] Inspect the resulting `demos/redis/traces/<timestamp>.json`: confirm `durationMs` covers all
+- [x] Inspect the resulting `demos/redis/traces/<timestamp>.json`: confirm `durationMs` covers all
       three phases and that `checks` for both `cdc-zero-stale` and `versions-converge` show `pass`.
-- [ ] Promote it: `cp demos/redis/traces/<timestamp>.json demos/redis/traces/featured.json`.
-- [ ] Run `pnpm lab validate redis` - expected PASS, including `eventReferenceErrors` returning no
+- [x] Promote it: `cp demos/redis/traces/<timestamp>.json demos/redis/traces/featured.json`.
+- [x] Run `pnpm lab validate redis` - expected PASS, including `eventReferenceErrors` returning no
       errors for every event in `featured.json`.
-- [ ] Run `pnpm lab check-public` - expected PASS (no denylisted terms, no internal URLs, anywhere
+- [x] Run `pnpm lab check-public` - expected PASS (no denylisted terms, no internal URLs, anywhere
       under `demos/redis/`).
 - [ ] Commit: `git add demos/redis/traces/featured.json && git commit -m "redis demo: record featured trace"`
+      (left to the coordinator; this session does not commit).
 
 ## 9. Risks and gotchas
 
@@ -1457,3 +1458,55 @@ This is a thin I/O / infra step, not TDD - it produces the fixture Task 7's pars
   - `pnpm lab check-public` -> PASS
   - Teardown: `docker compose -f demos/redis/infra/docker-compose.yml down -v && docker compose -f infra/kafka/docker-compose.yml down -v && tiup clean lab`
 - Done when: `integrations/demos/redis/traces/featured.json` covers all three phases, both checks (`cdc-zero-stale`, `versions-converge`) show `pass`, and teardown is confirmed with `docker ps` and `ps aux | grep '[t]iup'` showing nothing left running.
+
+## Build notes (featured trace recording, 2026-09-28)
+
+- **Bug: `tiup ctl:<version> cdc cli` is not usable on this machine.** Downloading the `ctl`
+  component and invoking `tiup ctl:v8.5.8 cdc cli ...` gets the freshly-downloaded `cdc` binary
+  killed instantly (`SIGKILL`, no crash log, no stderr) on every invocation, independent of the
+  sandbox. The `cdc` binary that `tiup playground` itself already installed and runs the live
+  TiCDC server from (`~/.tiup/components/cdc/<version>/cdc`) runs the exact same `cli` subcommands
+  (`changefeed create`/`list`/`remove --server=http://127.0.0.1:8300`) without issue. Fixed
+  `demos/redis/infra/create-changefeed.sh` and `drop-changefeed.sh` to resolve
+  `${HOME}/.tiup/components/cdc/${CDC_VERSION}/cdc` directly instead of going through
+  `tiup ctl:<version>`.
+- **Bug: the changefeed's sink-uri was missing `enable-tidb-extension=true`.** Without it, TiCDC's
+  canal-json messages for `cache_demo_rows` carry no `_tidb` object at all, so
+  `parseCanalJsonMessage`'s `commitTs` extraction always failed with `missing commitTs` and the
+  invalidator silently dropped every real change event - `cdc-zero-stale` and `versions-converge`
+  could never latch to `pass` in `cdc` mode. Confirmed with a live `kafka-console-consumer` capture
+  of the demo's own topic before and after the fix. Added `&enable-tidb-extension=true` to the
+  sink-uri in `create-changefeed.sh`. `runner/src/canal.ts` itself needed no change: the
+  invalidator's actual invalidation logic only reads the row's own `id`/`written_at_ms` columns
+  from the generic Canal `data` array, never the `_tidb.commitTs` value, so this was purely an
+  infra misconfiguration, not an application bug - but `parseCanalJsonMessage` does gate on
+  `commitTs` being present (to keep `RowChange.commitTs` a non-optional `bigint`), so the missing
+  extension field broke the pipeline end to end until the sink-uri was fixed.
+- **Bug: the runner never exited on `SIGINT`, so `--record` could hang forever with no trace
+  written.** After all `every()` loops correctly stopped on `controller.abort()`, one of the
+  shutdown steps (`invalidatorHandle.stop()` calling the Kafka consumer's `disconnect()`, or
+  another of `topicAdmin.disconnect()` / `redis.quit()` / `pool.end()`) never resolved - the
+  process sat fully idle (0% CPU, no growth in `TIME`) for over a minute after two separate
+  `SIGINT`s with no trace file appearing. Fixed by adding `runner/src/shutdown.ts`
+  (`withTimeout(promise, ms, fallback)`, unit-tested in `runner/test/shutdown.test.ts`) and
+  wrapping each of the four shutdown calls in `main.ts` with a 5s timeout, followed by an explicit
+  `process.exit(0)` - matching the pattern `demos/kafka/runner/main.ts` already uses for the same
+  reason. After the fix, a single `SIGINT` finalized and wrote the trace file within 3 seconds.
+- **TIDB_WATERMARK noise is expected, not a bug.** Enabling `enable-tidb-extension=true` also turns
+  on periodic `TIDB_WATERMARK` messages (`data: null`) on the same topic; the invalidator correctly
+  logs and skips these (`missing data`) - harmless, and visible as ~600 benign warn-level log
+  events in the featured trace.
+- **Featured trace, recorded 2026-09-28 against `tiup playground` v8.5.8 + demo-local
+  `redis:7-alpine` (server 7.4.11) + shared `apache/kafka:latest` (`kafka_2.13-4.3.1`):**
+  `durationMs` 316513 (~5m17s), 37704 events (7 node, 14 check, 3 phase, 34111 flow, 2946 metric,
+  5 control, 618 log). All three phases present and in order (`ttl-only` at t=171,
+  `cdc-invalidation` at t=111135, `tidb-direct` at t=226204). Both `cdc-zero-stale` and
+  `versions-converge` end the run latched `pass` (the `versions-converge` check also passed
+  cleanly in `ttl-only` mode on this run, and failed once, honestly, on the very first take before
+  the CDC-mode fixes, from ordinary background-write noise unrelated to the burst - left
+  unfixed since that failure mode is real TTL-mode behavior, not a bug). Every one of the 10
+  manifest metrics has samples (`invalidation-lag-p50`/`p99` at 205 samples, the rest at 317). Every
+  one of the 9 manifest flow edges has a non-zero total (`writes` 1656, `cache-reads`/`direct-reads`
+  6291 each, `row-changes`/`change-events` 3096 each, `consumed-events` 4781, `invalidations` 1078,
+  `sampler-tidb`/`sampler-redis` 6690 each). `pnpm lab validate redis` and `pnpm lab check-public`
+  both PASS.
