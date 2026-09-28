@@ -32,6 +32,10 @@ consumer code reads both.
 5. `docker compose -f infra/docker-compose.yml up -d` (Postgres + Kafka Connect for this demo).
 6. Create the source table, heartbeat table, and both Kafka Connect
    connectors (`postgres-source`, `tidb-sink`) against the running stack.
+   The `tidb-sink` connector needs a `RegexRouter` transform to strip the
+   `pg.public.` topic prefix (see Plan 03, Task 8 and Build notes) - without
+   it the sink silently writes into `pg_public_accounts` /
+   `pg_public_heartbeat` instead of `accounts` / `heartbeat`.
 7. Create the TiCDC Debezium changefeed (`debezium-tidb-source`), or let
    the `start-ticdc-debezium` control create it once the run is live.
 8. `cp .env.example .env` and fill in the values, including the exact
