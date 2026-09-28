@@ -57,7 +57,7 @@ resource "aws_security_group" "aurora" {
   }
 
   ingress {
-    description = "PostgreSQL from the admin CIDR (the demo runner's workstation public IP), since this demo has no bastion or VPN and the runner needs direct access for writes, checksums, and cutover"
+    description = "PostgreSQL from the admin CIDR (the demo runners workstation public IP), since this demo has no bastion or VPN and the runner needs direct access for writes, checksums, and cutover"
     from_port   = 5432
     to_port     = 5432
     protocol    = "tcp"
@@ -76,7 +76,7 @@ resource "aws_security_group" "aurora" {
 
 resource "aws_security_group" "dms" {
   name        = "${var.name_prefix}-dms-sg"
-  description = "DMS replication instance: outbound to Aurora (5432) and TiDB Cloud Starter's public endpoint (4000) over the internet gateway, inbound none required."
+  description = "DMS replication instance: outbound to Aurora (5432) and TiDB Cloud Starters public endpoint (4000) over the internet gateway, inbound none required."
   vpc_id      = aws_vpc.this.id
 
   egress {
