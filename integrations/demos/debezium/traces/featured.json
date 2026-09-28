@@ -27,57 +27,57 @@
         "id": "postgres",
         "label": "PostgreSQL",
         "kind": "source",
-        "x": 5,
-        "y": 20
+        "x": 12,
+        "y": 18
       },
       {
         "id": "debezium-pg-source",
         "label": "Debezium PG source",
         "kind": "service",
-        "x": 20,
-        "y": 20
+        "x": 37,
+        "y": 18
       },
       {
         "id": "pg-changes-topic",
         "label": "pg-changes topic",
         "kind": "queue",
-        "x": 35,
-        "y": 20
+        "x": 62,
+        "y": 18
       },
       {
         "id": "jdbc-sink",
         "label": "JDBC sink",
         "kind": "service",
-        "x": 48,
-        "y": 20
+        "x": 87,
+        "y": 18
       },
       {
         "id": "tidb",
         "label": "TiDB",
         "kind": "tidb",
-        "x": 55,
+        "x": 87,
         "y": 50
       },
       {
         "id": "ticdc-debezium",
         "label": "TiCDC (debezium)",
         "kind": "service",
-        "x": 68,
-        "y": 65
+        "x": 62,
+        "y": 82
       },
       {
         "id": "tidb-changes-topic",
         "label": "tidb-changes-dbz topic",
         "kind": "queue",
-        "x": 82,
-        "y": 65
+        "x": 37,
+        "y": 82
       },
       {
         "id": "consumer",
         "label": "Shared consumer",
         "kind": "sink",
-        "x": 95,
-        "y": 42
+        "x": 12,
+        "y": 50
       }
     ],
     "edges": [
