@@ -32,7 +32,9 @@ describe('runner main.ts only emits ids declared in manifest.json', () => {
 
   it('every emitter.flow edge is declared in manifest.edges', () => {
     const known = new Set(manifest.edges.map((edge) => edge.id));
-    extractCalls('flow', 0).forEach((id) => expect(known.has(id)).toBe(true));
+    const found = extractCalls('flow', 0);
+    expect(found.length).toBeGreaterThan(0);
+    found.forEach((id) => expect(known.has(id)).toBe(true));
   });
 
   it('every emitter.node id is declared in manifest.nodes', () => {

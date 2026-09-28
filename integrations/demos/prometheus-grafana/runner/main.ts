@@ -6,6 +6,7 @@ import { qpsQuery, p99LatencyQuery, tikvCpuQuery, connectionsQuery } from './src
 import { detectionLatencySeconds, recoveryLatencySeconds } from './src/latency';
 import { createFaultState, faultInjected, faultsCleared, type FaultId } from './src/faultState';
 import { startWorkload } from './src/workload';
+import { computeCounterDelta } from './src/flowDeltas';
 import {
   runSlowQueryStorm,
   runWriteHotSpot,
@@ -40,6 +41,8 @@ const main = async (): Promise<void> => {
   let detectionSettled = true;
   let resolveSettled = true;
   let clearedAtMs: number | undefined;
+  let previousCompletedQueries: number | undefined;
+  let previousWebhookArrivals: number | undefined;
 
   const emitCheckPending = (fault: FaultId): void => {
     if (fault === 'slow-query-storm') emitter.check('detect-slow-query-storm', 'pending');
@@ -79,7 +82,7 @@ const main = async (): Promise<void> => {
   emitter.node('workload', 'starting');
   emitter.phase('intro');
 
-  await startWorkload({ pool, intervalMs: 200 });
+  const workload = await startWorkload({ pool, intervalMs: 200 });
   emitter.node('workload', 'busy');
   emitter.log('info', 'workload generator started against TiDB');
 
@@ -136,6 +139,15 @@ const main = async (): Promise<void> => {
       if (p99.value !== undefined) emitter.metric('p99-latency', p99.value);
       if (tikvCpu.value !== undefined) emitter.metric('tikv-cpu', tikvCpu.value);
       if (connections.value !== undefined) emitter.metric('active-connections', connections.value);
+
+      const completedQueries = workload.completedQueries();
+      emitter.flow('workload-tidb', computeCounterDelta({ previous: previousCompletedQueries, current: completedQueries }));
+      previousCompletedQueries = completedQueries;
+
+      const webhookArrivals = webhook.arrivals().length;
+      emitter.flow('alertmanager-webhook', computeCounterDelta({ previous: previousWebhookArrivals, current: webhookArrivals }));
+      previousWebhookArrivals = webhookArrivals;
+
       pollFault();
       await pollResolution();
     },
