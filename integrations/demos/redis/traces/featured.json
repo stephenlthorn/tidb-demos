@@ -26,50 +26,50 @@
         "id": "workload",
         "label": "Workload Generator",
         "kind": "client",
-        "x": 8,
+        "x": 9,
         "y": 50
       },
       {
         "id": "tidb",
         "label": "TiDB",
         "kind": "tidb",
-        "x": 50,
-        "y": 20
+        "x": 32,
+        "y": 15
       },
       {
         "id": "ticdc",
         "label": "TiCDC Changefeed",
         "kind": "service",
-        "x": 70,
-        "y": 8
+        "x": 60,
+        "y": 15
       },
       {
         "id": "kafka",
         "label": "Kafka",
         "kind": "queue",
-        "x": 85,
-        "y": 20
+        "x": 91,
+        "y": 15
       },
       {
         "id": "invalidator",
         "label": "Invalidator",
         "kind": "service",
-        "x": 85,
-        "y": 50
+        "x": 91,
+        "y": 52
       },
       {
         "id": "redis",
         "label": "Redis",
         "kind": "cache",
-        "x": 50,
-        "y": 80
+        "x": 60,
+        "y": 85
       },
       {
         "id": "sampler",
         "label": "Staleness Sampler",
         "kind": "observability",
-        "x": 18,
-        "y": 80
+        "x": 22,
+        "y": 85
       }
     ],
     "edges": [

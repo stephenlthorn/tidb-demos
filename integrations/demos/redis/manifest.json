@@ -8,13 +8,13 @@
   "publish": true,
   "runner": { "command": ["node", "--import", "tsx", "runner/main.ts"] },
   "nodes": [
-    { "id": "workload", "label": "Workload Generator", "kind": "client", "x": 8, "y": 50 },
-    { "id": "tidb", "label": "TiDB", "kind": "tidb", "x": 50, "y": 20 },
-    { "id": "ticdc", "label": "TiCDC Changefeed", "kind": "service", "x": 70, "y": 8 },
-    { "id": "kafka", "label": "Kafka", "kind": "queue", "x": 85, "y": 20 },
-    { "id": "invalidator", "label": "Invalidator", "kind": "service", "x": 85, "y": 50 },
-    { "id": "redis", "label": "Redis", "kind": "cache", "x": 50, "y": 80 },
-    { "id": "sampler", "label": "Staleness Sampler", "kind": "observability", "x": 18, "y": 80 }
+    { "id": "workload", "label": "Workload Generator", "kind": "client", "x": 9, "y": 50 },
+    { "id": "tidb", "label": "TiDB", "kind": "tidb", "x": 32, "y": 15 },
+    { "id": "ticdc", "label": "TiCDC Changefeed", "kind": "service", "x": 60, "y": 15 },
+    { "id": "kafka", "label": "Kafka", "kind": "queue", "x": 91, "y": 15 },
+    { "id": "invalidator", "label": "Invalidator", "kind": "service", "x": 91, "y": 52 },
+    { "id": "redis", "label": "Redis", "kind": "cache", "x": 60, "y": 85 },
+    { "id": "sampler", "label": "Staleness Sampler", "kind": "observability", "x": 22, "y": 85 }
   ],
   "edges": [
     { "id": "writes", "from": "workload", "to": "tidb", "label": "writes", "unit": "rows/s" },
