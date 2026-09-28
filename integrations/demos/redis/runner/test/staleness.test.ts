@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeHitRatioPercent, isStaleRead, computeInvalidationLagMs } from '../src/staleness';
+import { computeHitRatioPercent, isStaleRead, computeInvalidationLagMs, versionsMismatch } from '../src/staleness';
 
 describe('computeHitRatioPercent', () => {
   it('returns 100 when there are no misses', () => {
@@ -30,6 +30,16 @@ describe('isStaleRead', () => {
 
   it('is not stale when the cache is somehow ahead', () => {
     expect(isStaleRead({ cachedVersion: 6, tidbVersion: 5 })).toBe(false);
+  });
+});
+
+describe('versionsMismatch', () => {
+  it('is true when the cached version differs from the TiDB version', () => {
+    expect(versionsMismatch({ cachedVersion: 3, tidbVersion: 5 })).toBe(true);
+  });
+
+  it('is false when the versions are equal', () => {
+    expect(versionsMismatch({ cachedVersion: 5, tidbVersion: 5 })).toBe(false);
   });
 });
 

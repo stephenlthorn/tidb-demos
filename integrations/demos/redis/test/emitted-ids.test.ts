@@ -63,10 +63,21 @@ describe('emitted event ids reference the manifest', () => {
     expect(unknown).toEqual([]);
   });
 
-  it('actually emits at least one metric, node and phase id, proving the scan is not vacuous', () => {
+  it('actually emits at least one metric, node, phase, flow and check id, proving the scan is not vacuous', () => {
     expect(findLiteralArgs(runnerSource, 'metric').length).toBeGreaterThan(0);
     expect(findLiteralArgs(runnerSource, 'node').length).toBeGreaterThan(0);
     expect(findLiteralArgs(runnerSource, 'phase').length).toBeGreaterThan(0);
     expect(findLiteralArgs(runnerSource, 'flow').length).toBeGreaterThan(0);
+    expect(findLiteralArgs(runnerSource, 'check').length).toBeGreaterThan(0);
+  });
+
+  it('every manifest edge id has a matching emitter.flow call in the runner', () => {
+    const emitted = new Set(findLiteralArgs(runnerSource, 'flow'));
+    manifest.edges.forEach((edge) => expect(emitted.has(edge.id)).toBe(true));
+  });
+
+  it('every manifest check id has a matching emitter.check call in the runner', () => {
+    const emitted = new Set(findLiteralArgs(runnerSource, 'check'));
+    manifest.checks.forEach((check) => expect(emitted.has(check.id)).toBe(true));
   });
 });

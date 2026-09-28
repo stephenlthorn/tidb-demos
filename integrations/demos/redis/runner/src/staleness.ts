@@ -9,6 +9,10 @@ export type StaleReadInput = { readonly cachedVersion: number; readonly tidbVers
 export const isStaleRead = ({ cachedVersion, tidbVersion }: StaleReadInput): boolean =>
   cachedVersion < tidbVersion;
 
+export type VersionMismatchInput = { readonly cachedVersion: number; readonly tidbVersion: number };
+export const versionsMismatch = ({ cachedVersion, tidbVersion }: VersionMismatchInput): boolean =>
+  cachedVersion !== tidbVersion;
+
 export type InvalidationLagInput = { readonly deletedAtMs: number; readonly writtenAtMs: number };
 export const computeInvalidationLagMs = ({ deletedAtMs, writtenAtMs }: InvalidationLagInput): number =>
   Math.max(0, deletedAtMs - writtenAtMs);

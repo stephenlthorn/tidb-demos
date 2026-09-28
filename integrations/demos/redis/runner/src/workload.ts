@@ -31,10 +31,11 @@ export type WorkloadDeps = {
 const randomRowId = (rowCount: number, hotKeyId: number, storming: boolean): number =>
   storming ? hotKeyId : Math.floor(Math.random() * rowCount) + 1;
 
-export const runWriteTick = async (deps: WorkloadDeps): Promise<void> => {
-  const id = randomRowId(deps.rowCount, deps.hotKeyId, false);
+export const runWriteTick = async (deps: WorkloadDeps, rowId?: number): Promise<number> => {
+  const id = rowId ?? randomRowId(deps.rowCount, deps.hotKeyId, false);
   await writeRowById(deps.pool, id, `payload-${Date.now()}`, Date.now());
   deps.emitter.flow('writes', 1);
+  return id;
 };
 
 export const runCacheReadTick = async (deps: WorkloadDeps): Promise<void> => {

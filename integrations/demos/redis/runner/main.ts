@@ -1,11 +1,19 @@
+import { KafkaJS } from '@confluentinc/kafka-javascript';
 import { createEmitter, createSampleWindow, createTidbPool, every, onControl, summarize } from '@lab/runner-kit';
 import { loadDemoConfig } from './src/config';
 import { initSchema, seedRows } from './src/tidb-repo';
 import { createDemoRedisClient } from './src/redis-cache';
 import { runInvalidator } from './src/invalidator';
-import { sampleStaleness } from './src/sampler';
+import { sampleStaleness, sampleVersionsConverge } from './src/sampler';
 import { runCacheReadTick, runDirectReadTick, runWriteTick } from './src/workload';
 import { applyControl, initialDemoState } from './src/mode';
+import {
+  evaluateCdcZeroStale,
+  evaluateVersionsConverge,
+  initialCheckLatchState,
+  nextCheckState,
+} from './src/checks';
+import { computeOffsetDelta, sumHighWatermarks } from './src/topic-offsets';
 
 const SAMPLE_TICK_MS = 1_000;
 const SAMPLE_SIZE = 20;
@@ -26,9 +34,18 @@ const main = async (): Promise<void> => {
   emitter.node('workload', 'healthy');
   emitter.node('sampler', 'healthy');
   emitter.node('invalidator', 'idle');
+  emitter.check('cdc-zero-stale', 'pending');
+  emitter.check('versions-converge', 'pending');
 
   let state = initialDemoState();
   const getState = () => state;
+  let lastBurstAtMs: number | undefined;
+  let burstRowIds: readonly number[] = [];
+  let lastKnownLagP99Ms: number | undefined;
+  let frozenLagP99Ms: number | undefined;
+  let cdcZeroStaleLatch = initialCheckLatchState();
+  let versionsConvergeLatch = initialCheckLatchState();
+  let previousTopicOffsetTotal: number | undefined;
 
   const cacheReadLatencies = createSampleWindow();
   const tidbReadLatencies = createSampleWindow();
@@ -69,8 +86,16 @@ const main = async (): Promise<void> => {
       emitter.phase('tidb-direct');
     }
     if (id === 'write-burst') {
-      Array.from({ length: config.burstSize }).forEach(() => {
-        void runWriteTick(workloadDeps);
+      lastBurstAtMs = nowMs;
+      frozenLagP99Ms = lastKnownLagP99Ms;
+      const ids = Array.from({ length: config.burstSize }, () => Math.floor(Math.random() * config.rowCount) + 1);
+      burstRowIds = ids;
+      cdcZeroStaleLatch = initialCheckLatchState();
+      versionsConvergeLatch = initialCheckLatchState();
+      emitter.check('cdc-zero-stale', cdcZeroStaleLatch.status);
+      emitter.check('versions-converge', versionsConvergeLatch.status);
+      ids.forEach((rowId) => {
+        void runWriteTick(workloadDeps, rowId);
       });
     }
   });
@@ -86,6 +111,12 @@ const main = async (): Promise<void> => {
     signal: controller.signal,
   });
 
+  const topicAdminKafka = new KafkaJS.Kafka({
+    kafkaJS: { brokers: [...config.kafkaBrokers], logLevel: KafkaJS.logLevel.NOTHING },
+  });
+  const topicAdmin = topicAdminKafka.admin();
+  await topicAdmin.connect();
+
   emitter.phase('ttl-only');
 
   const metricsLoop = every({
@@ -93,8 +124,8 @@ const main = async (): Promise<void> => {
     signal: controller.signal,
     task: async () => {
       const sampleIds = Array.from({ length: SAMPLE_SIZE }, () => Math.floor(Math.random() * config.rowCount) + 1);
-      const staleRate = await sampleStaleness(pool, redis, emitter, sampleIds);
-      emitter.metric('stale-read-rate', staleRate);
+      const staleSample = await sampleStaleness(pool, redis, emitter, sampleIds);
+      emitter.metric('stale-read-rate', staleSample.ratePercent);
       const totalCacheReads = cacheHits.count + cacheMisses.count;
       emitter.metric(
         'cache-hit-ratio',
@@ -116,23 +147,85 @@ const main = async (): Promise<void> => {
       if (lagSummary !== undefined) {
         emitter.metric('invalidation-lag-p50', lagSummary.p50);
         emitter.metric('invalidation-lag-p99', lagSummary.p99);
+        lastKnownLagP99Ms = lagSummary.p99;
+        if (frozenLagP99Ms === undefined && lastBurstAtMs !== undefined) {
+          frozenLagP99Ms = lagSummary.p99;
+        }
       }
       tidbReadCount.count = 0;
       redisOpCount.count = 0;
       cacheHits.count = 0;
       cacheMisses.count = 0;
+
+      const msSinceLastBurst = lastBurstAtMs === undefined ? undefined : emitter.elapsedMs() - lastBurstAtMs;
+
+      if (!cdcZeroStaleLatch.settled) {
+        const cdcZeroStale = evaluateCdcZeroStale({
+          mode: state.invalidationMode,
+          msSinceLastBurst,
+          invalidationLagP99Ms: frozenLagP99Ms,
+          staleCount: staleSample.staleCount,
+          sampleCount: staleSample.sampleCount,
+        });
+        const next = nextCheckState({ current: cdcZeroStaleLatch, outcome: cdcZeroStale.status });
+        cdcZeroStaleLatch = next.state;
+        if (next.emit) emitter.check('cdc-zero-stale', next.state.status, cdcZeroStale.observed);
+      }
+
+      if (!versionsConvergeLatch.settled) {
+        const convergeSample =
+          lastBurstAtMs === undefined
+            ? { mismatchedRowIds: [], sampledRowCount: 0 }
+            : await sampleVersionsConverge(pool, redis, emitter, burstRowIds);
+        const versionsConverge = evaluateVersionsConverge({
+          mode: state.invalidationMode,
+          msSinceLastBurst,
+          invalidationLagP99Ms: frozenLagP99Ms,
+          ttlMs: config.ttlSeconds * 1_000,
+          mismatchedRowIds: convergeSample.mismatchedRowIds,
+          sampledRowCount: convergeSample.sampledRowCount,
+        });
+        const next = nextCheckState({ current: versionsConvergeLatch, outcome: versionsConverge.status });
+        versionsConvergeLatch = next.state;
+        if (next.emit) emitter.check('versions-converge', next.state.status, versionsConverge.observed);
+      }
+    },
+  });
+
+  const topicOffsetLoop = every({
+    intervalMs: SAMPLE_TICK_MS,
+    signal: controller.signal,
+    task: async () => {
+      try {
+        const offsets = await topicAdmin.fetchTopicOffsets(config.kafkaTopic);
+        const currentTotal = sumHighWatermarks(offsets);
+        const delta = computeOffsetDelta({ previousTotal: previousTopicOffsetTotal, currentTotal });
+        previousTopicOffsetTotal = currentTotal;
+        emitter.flow('row-changes', delta);
+        emitter.flow('change-events', delta);
+      } catch (error: unknown) {
+        emitter.log('warn', `failed to fetch topic offsets for ${config.kafkaTopic}: ${String(error)}`);
+      }
     },
   });
 
   await Promise.all([
-    every({ intervalMs: config.writeRateMs, signal: controller.signal, task: () => runWriteTick(workloadDeps) }),
+    every({
+      intervalMs: config.writeRateMs,
+      signal: controller.signal,
+      task: async () => {
+        await runWriteTick(workloadDeps);
+      },
+    }),
     every({ intervalMs: config.readRateMs, signal: controller.signal, task: () => runCacheReadTick(workloadDeps) }),
     every({ intervalMs: config.readRateMs, signal: controller.signal, task: () => runDirectReadTick(workloadDeps) }),
     metricsLoop,
+    topicOffsetLoop,
     invalidatorHandle.drainLoop,
   ]);
 
   await invalidatorHandle.stop();
+  await topicAdmin.disconnect();
   await redis.quit();
   await pool.end();
 };
