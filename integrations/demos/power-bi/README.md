@@ -52,7 +52,7 @@ Refresh in Power BI shows that.
   machine, required by Power BI's MySQL database connector:
   https://learn.microsoft.com/en-us/power-query/connectors/mysql-database
   (the EC2 path installs both of the above automatically - see below)
-- An AWS account (profile `DBaaS-DevUser-Role`, region `us-west-2`) and
+- An AWS account (profile from `AWS_PROFILE`, region `us-west-2`) and
   Terraform >= 1.5, if using the `infra/windows/` EC2 path.
 
 ## Run (local development)

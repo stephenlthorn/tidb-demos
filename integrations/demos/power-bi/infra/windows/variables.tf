@@ -5,9 +5,9 @@ variable "aws_region" {
 }
 
 variable "aws_profile" {
-  description = "AWS CLI/SDK profile to use. The lab's shared profile is DBaaS-DevUser-Role."
+  description = "AWS CLI/SDK profile to use. Null means the AWS_PROFILE environment variable (set in ~/.config/tidb-lab/secrets.env)."
   type        = string
-  default     = "DBaaS-DevUser-Role"
+  default     = null
 }
 
 variable "name_prefix" {

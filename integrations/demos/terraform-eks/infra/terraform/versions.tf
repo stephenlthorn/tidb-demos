@@ -21,7 +21,7 @@ provider "aws" {
   # Every AWS resource this demo creates (directly, or via the vpc/eks
   # modules) is tagged through this single default_tags block so a cost
   # sweep can find and remove anything left running, without having to
-  # repeat tags on every resource. Set AWS_PROFILE=DBaaS-DevUser-Role in the
+  # repeat tags on every resource. Set AWS_PROFILE in the
   # environment before running terraform; the provider reads it from the
   # standard AWS credential chain rather than a hardcoded profile argument.
   default_tags {

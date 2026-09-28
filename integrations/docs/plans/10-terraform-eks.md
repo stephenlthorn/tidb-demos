@@ -123,10 +123,10 @@ Edges: `apply-vpc` (terraform-cli -> aws-vpc, "resources applied", unit `count`)
 
 - Accounts and access:
   - A TiDB Cloud account with an API key pair (`TIDBCLOUD_PUBLIC_KEY` / `TIDBCLOUD_PRIVATE_KEY`) that has permission to create Dedicated clusters in the target project; look up the project id with `infra/scripts/lookup-project-id.sh` if the account has more than one project.
-  - An AWS account and an IAM principal with permission to create VPCs, EKS clusters, EC2 instances, and VPC endpoints (no NAT gateway permission needed, this demo does not create one); this plan assumes the `DBaaS-DevUser-Role` AWS profile in `us-west-2`, exported as `AWS_PROFILE` for the standard AWS credential chain (not a Terraform variable).
+  - An AWS account and an IAM principal with permission to create VPCs, EKS clusters, EC2 instances, and VPC endpoints (no NAT gateway permission needed, this demo does not create one); this plan assumes the AWS profile named in `AWS_PROFILE` in `us-west-2`, exported as `AWS_PROFILE` for the standard AWS credential chain (not a Terraform variable).
 - Local tools:
   - Terraform >= 1.9 (`terraform version`; this plan's JSON parsing assumes the message catalogue confirmed in Section 4, current as of Terraform 1.16.x).
-  - AWS CLI v2 (`aws --version`), configured with the `DBaaS-DevUser-Role` profile.
+  - AWS CLI v2 (`aws --version`), configured with the profile named in `AWS_PROFILE` (set in `~/.config/tidb-lab/secrets.env`).
   - `kubectl` (`kubectl version --client`) - install with `brew install kubectl` if missing.
   - `helm` (`helm version`) - only required for the optional TiDB Operator appendix; install with `brew install helm` if missing.
   - `docker buildx` with a multi-arch builder, to push the app image for both `linux/amd64` and `linux/arm64` (the node group runs arm64).
@@ -1320,7 +1320,7 @@ PRICE_TIDB_TIKV_NODE_USD_HR=0.4416
 ```
 
 Amended (2026-09-28, cloud-account decisions): region is `us-west-2`
-throughout (AWS profile `DBaaS-DevUser-Role`); the scale act moved from
+throughout (AWS profile from `AWS_PROFILE`); the scale act moved from
 `SCALE_TIKV_NODE_COUNT` (TiKV 3->5) to `SCALE_TIDB_NODE_COUNT` (TiDB 1->2),
 the smallest possible scale-out, since TiKV's minimum of 3 is already TiDB
 Cloud's hard floor; `CONNECTION_MODE` defaults to `private` since PrivateLink

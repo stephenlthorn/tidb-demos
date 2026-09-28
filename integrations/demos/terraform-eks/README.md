@@ -14,14 +14,14 @@ measured by a load generator's own error count.
 See Section 5 of `docs/plans/10-terraform-eks.md` for accounts, local tools,
 and the cost model. In short: a TiDB Cloud API key pair, an AWS account with
 permission to create VPCs/EKS/EC2/VPC endpoints (this demo assumes the
-`DBaaS-DevUser-Role` AWS profile in `us-west-2`), Terraform >= 1.9, the AWS
+AWS profile named in `AWS_PROFILE` in `us-west-2`), Terraform >= 1.9, the AWS
 CLI, `kubectl`, Go (to build the demo app image), Node 22, and pnpm.
 
 ## Run
 
 1. `cp .env.example .env`. Load credentials at run time rather than editing
    them into `.env`: `set -a; source ~/.config/tidb-lab/secrets.env; set +a`
-   and `export AWS_PROFILE=DBaaS-DevUser-Role`.
+   and `export AWS_PROFILE=<your profile>`.
 2. Look up the TiDB Cloud project id (only needed if the account has more
    than one project): `./infra/scripts/lookup-project-id.sh`, then set
    `TIDBCLOUD_PROJECT_ID` in `.env`.
