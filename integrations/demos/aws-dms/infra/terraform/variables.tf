@@ -99,3 +99,9 @@ variable "tidb_password" {
   type        = string
   sensitive   = true
 }
+
+variable "create_dms_service_roles" {
+  description = "Create the account-wide dms-vpc-role and dms-cloudwatch-logs-role. Set false when the account already has them, so destroy never removes roles other workloads use."
+  type        = bool
+  default     = true
+}

@@ -238,7 +238,8 @@ resource "aws_dms_replication_task" "this" {
 }
 
 resource "aws_iam_role" "dms_vpc_role" {
-  name = "dms-vpc-role"
+  count = var.create_dms_service_roles ? 1 : 0
+  name  = "dms-vpc-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -252,12 +253,14 @@ resource "aws_iam_role" "dms_vpc_role" {
 }
 
 resource "aws_iam_role_policy_attachment" "dms_vpc_role" {
-  role       = aws_iam_role.dms_vpc_role.name
+  count      = var.create_dms_service_roles ? 1 : 0
+  role       = aws_iam_role.dms_vpc_role[0].name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonDMSVPCManagementRole"
 }
 
 resource "aws_iam_role" "dms_cloudwatch_logs_role" {
-  name = "dms-cloudwatch-logs-role"
+  count = var.create_dms_service_roles ? 1 : 0
+  name  = "dms-cloudwatch-logs-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -271,6 +274,7 @@ resource "aws_iam_role" "dms_cloudwatch_logs_role" {
 }
 
 resource "aws_iam_role_policy_attachment" "dms_cloudwatch_logs_role" {
-  role       = aws_iam_role.dms_cloudwatch_logs_role.name
+  count      = var.create_dms_service_roles ? 1 : 0
+  role       = aws_iam_role.dms_cloudwatch_logs_role[0].name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonDMSCloudWatchLogsRole"
 }
