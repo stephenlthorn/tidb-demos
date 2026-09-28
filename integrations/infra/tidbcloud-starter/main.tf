@@ -7,15 +7,16 @@
 
 resource "tidbcloud_serverless_cluster" "this" {
   display_name = var.name
+  project_id   = var.project_id
 
   region = {
     name = var.region
   }
 
-  # Free quota for TiDB Cloud Starter; 0 means no spend beyond the free
-  # 25 GiB storage / 250M RU per month is allowed.
+  # 0 keeps the cluster on the free quota. An organization that already has
+  # its maximum number of free clusters needs a small non-zero cap instead.
   spending_limit = {
-    monthly = 0
+    monthly = var.monthly_spending_limit_usd_cents
   }
 }
 

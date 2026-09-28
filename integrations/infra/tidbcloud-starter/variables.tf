@@ -13,3 +13,15 @@ variable "region" {
   type        = string
   default     = "regions/aws-us-west-2"
 }
+
+variable "project_id" {
+  description = "TiDB Cloud project to create the cluster in. Null uses the organization default project."
+  type        = string
+  default     = null
+}
+
+variable "monthly_spending_limit_usd_cents" {
+  description = "Monthly spending cap in USD cents. 0 means free quota only."
+  type        = number
+  default     = 0
+}

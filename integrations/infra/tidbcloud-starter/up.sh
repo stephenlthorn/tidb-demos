@@ -2,10 +2,14 @@
 # Create (or reuse) one TiDB Cloud Starter cluster for <name>, e.g.:
 #   ./up.sh lab-06
 #   ./up.sh lab-06 databricks   # also writes demos/databricks/.env
+#   ./up.sh lab-shared databricks lab_06   # shared cluster, per-demo database
+# STARTER_SPENDING_LIMIT_CENTS (default 0) caps monthly spend when the org has no free cluster slots left.
 set -euo pipefail
 
 NAME="${1:?usage: up.sh <name> [demo-id]}"
 DEMO_ID="${2:-}"
+DB_NAME="${3:-lab}"
+case "$DB_NAME" in *[!a-z0-9_]*) echo "database name must be [a-z0-9_]" >&2; exit 1;; esac
 
 SECRETS_FILE="$HOME/.config/tidb-lab/secrets.env"
 if [ ! -f "$SECRETS_FILE" ]; then
@@ -23,6 +27,8 @@ cd "$SCRIPT_DIR"
 STATE_FILE="terraform.${NAME}.tfstate"
 TF_VAR_name="$NAME"
 export TF_VAR_name
+if [ -n "${TIDBCLOUD_PROJECT_ID:-}" ]; then export TF_VAR_project_id="$TIDBCLOUD_PROJECT_ID"; fi
+export TF_VAR_monthly_spending_limit_usd_cents="${STARTER_SPENDING_LIMIT_CENTS:-0}"
 
 terraform init -input=false
 
@@ -59,12 +65,12 @@ echo "user=$DB_USER"
 echo "password=(sensitive, written to .env only)"
 
 # 4. Create the "lab" database (idempotent). TLS is required for Starter.
-echo "Creating database 'lab' if it does not exist..."
+echo "Creating database '$DB_NAME' if it does not exist..."
 if command -v mysql >/dev/null 2>&1; then
   mysql --host="$HOST" --port="$PORT" --user="$DB_USER" --password="$PASSWORD" \
-    --ssl-mode=REQUIRED --execute="CREATE DATABASE IF NOT EXISTS lab;"
+    --ssl-mode=REQUIRED --execute="CREATE DATABASE IF NOT EXISTS $DB_NAME;"
 else
-  TIDB_HOST="$HOST" TIDB_PORT="$PORT" TIDB_USER="$DB_USER" TIDB_PASSWORD="$PASSWORD" \
+  TIDB_HOST="$HOST" TIDB_PORT="$PORT" TIDB_USER="$DB_USER" TIDB_PASSWORD="$PASSWORD" LAB_DB_NAME="$DB_NAME" \
     node -e '
       const mysql = require("mysql2/promise");
       (async () => {
@@ -75,7 +81,7 @@ else
           password: process.env.TIDB_PASSWORD,
           ssl: { minVersion: "TLSv1.2" },
         });
-        await conn.query("CREATE DATABASE IF NOT EXISTS lab");
+        await conn.query("CREATE DATABASE IF NOT EXISTS " + process.env.LAB_DB_NAME);
         await conn.end();
       })().catch((err) => {
         console.error(err);
@@ -105,7 +111,7 @@ if [ -n "$DEMO_ID" ]; then
     echo "TIDB_PORT=$PORT"
     echo "TIDB_USER=$DB_USER"
     echo "TIDB_PASSWORD=$PASSWORD"
-    echo "TIDB_DATABASE=lab"
+    echo "TIDB_DATABASE=$DB_NAME"
     echo "TIDB_TLS=true"
   } > "$ENV_FILE"
   rm -f "$TMP_ENV"

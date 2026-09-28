@@ -25,6 +25,8 @@ if [ ! -f "$STATE_FILE" ]; then
 fi
 
 export TF_VAR_name="$NAME"
+if [ -n "${TIDBCLOUD_PROJECT_ID:-}" ]; then export TF_VAR_project_id="$TIDBCLOUD_PROJECT_ID"; fi
+export TF_VAR_monthly_spending_limit_usd_cents="${STARTER_SPENDING_LIMIT_CENTS:-0}"
 
 terraform init -input=false
 
