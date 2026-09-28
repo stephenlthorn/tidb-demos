@@ -38,7 +38,7 @@ resource "aws_security_group" "windows_rdp" {
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
-    description = "RDP from the operator's current public IP"
+    description = "RDP from the operator current public IP"
     from_port   = 3389
     to_port     = 3389
     protocol    = "tcp"

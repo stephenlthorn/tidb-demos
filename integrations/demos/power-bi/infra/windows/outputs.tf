@@ -13,7 +13,7 @@ output "private_key_path" {
 
 output "get_password_data_command" {
   description = "Run this once the instance has been up for a few minutes (Windows needs time to generate the password); it prints the decrypted Administrator password."
-  value       = "aws ec2 get-password-data --instance-id ${aws_instance.power_bi_desktop.id} --priv-launch-key ${local_file.windows_private_key.filename} --region ${var.aws_region} --profile ${var.aws_profile}"
+  value       = "aws ec2 get-password-data --instance-id ${aws_instance.power_bi_desktop.id} --priv-launch-key ${local_file.windows_private_key.filename} --region ${var.aws_region}${var.aws_profile == null ? "" : " --profile ${var.aws_profile}"}"
 }
 
 output "rdp_target" {
