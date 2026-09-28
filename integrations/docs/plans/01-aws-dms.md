@@ -357,7 +357,7 @@ variable "availability_zones" {
 variable "aurora_engine_version" {
   description = "Aurora PostgreSQL engine version. Must be >= 2.2 (PostgreSQL 10.6-compatible) for CDC support (Section 4)."
   type        = string
-  default     = "15.4"
+  default     = "16.15"
 }
 
 variable "aurora_instance_class" {
@@ -538,7 +538,7 @@ resource "aws_db_subnet_group" "aurora" {
 
 resource "aws_rds_cluster_parameter_group" "aurora_logical_replication" {
   name        = "${var.name_prefix}-aurora-pg-cpg"
-  family      = "aurora-postgresql15"
+  family      = "aurora-postgresql16"
   description = "Enables logical replication so DMS CDC can use pglogical or test_decoding (Section 4)."
 
   parameter {

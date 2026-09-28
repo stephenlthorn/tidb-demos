@@ -36,7 +36,7 @@ variable "availability_zones" {
 variable "aurora_engine_version" {
   description = "Aurora PostgreSQL engine version. Must be >= 2.2 (PostgreSQL 10.6-compatible) for CDC support, and must be a version Aurora Serverless v2 supports (Section 4)."
   type        = string
-  default     = "15.4"
+  default     = "16.15"
 }
 
 variable "aurora_master_username" {

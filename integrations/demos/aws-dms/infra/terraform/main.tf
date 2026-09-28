@@ -97,7 +97,7 @@ resource "aws_db_subnet_group" "aurora" {
 
 resource "aws_rds_cluster_parameter_group" "aurora_logical_replication" {
   name        = "${var.name_prefix}-aurora-pg-cpg"
-  family      = "aurora-postgresql15"
+  family      = "aurora-postgresql16"
   description = "Enables logical replication so DMS CDC can use pglogical or test_decoding, and requires TLS since Aurora is reachable from the public internet (Section 4)."
 
   parameter {
@@ -153,7 +153,8 @@ resource "aws_rds_cluster_instance" "aurora_writer" {
   publicly_accessible = true
   apply_immediately   = true
 
-  tags = { Project = "tidb-integration-lab", Demo = "aws-dms" }
+  tags       = { Project = "tidb-integration-lab", Demo = "aws-dms" }
+  depends_on = [aws_route_table_association.public]
 }
 
 resource "aws_dms_replication_subnet_group" "this" {
@@ -170,7 +171,7 @@ resource "aws_dms_replication_instance" "this" {
   replication_subnet_group_id = aws_dms_replication_subnet_group.this.id
   publicly_accessible         = true
   multi_az                    = false
-  depends_on                  = [aws_iam_role_policy_attachment.dms_vpc_role, aws_iam_role_policy_attachment.dms_cloudwatch_logs_role]
+  depends_on                  = [aws_iam_role_policy_attachment.dms_vpc_role, aws_iam_role_policy_attachment.dms_cloudwatch_logs_role, aws_route_table_association.public]
 
   tags = { Project = "tidb-integration-lab", Demo = "aws-dms" }
 }
