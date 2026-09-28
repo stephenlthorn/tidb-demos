@@ -106,6 +106,7 @@ Edges: `workload -> tidb` (queries), `apm-service -> tidb` (instrumented queries
 | TiDB exposes `information_schema.statements_summary` with columns including `DIGEST`, `DIGEST_TEXT`, `EXEC_COUNT`, `AVG_LATENCY`, `MAX_LATENCY`, `QUERY_SAMPLE_TEXT`, `PLAN_DIGEST`, and that these tables are not available on TiDB Cloud Starter or Essential | https://docs.pingcap.com/tidb/stable/statement-summary-tables/ | Verified |
 | Whether Datadog's dedicated Database Monitoring (DBM) product lists TiDB as a supported integration (as distinct from the generic Agent/OpenMetrics `tidb` check used in this plan) | Not opened in this planning pass; DBM's documented supported databases are Postgres, MySQL, SQL Server, and Oracle in Datadog's general DBM materials, which does not list TiDB | **UNVERIFIED** - confirm by opening `docs.datadoghq.com/database_monitoring/setup_mysql/` (or the DBM overview's "supported databases" list) and checking for any TiDB-specific mention before Task 7.11; this plan proceeds on the assumption DBM is not used and correlation is done via `statements_summary` instead |
 | Choice of detection mechanism: poll the Monitors API vs. a webhook through a public tunnel | No official doc opened for this specific comparison; this is a design decision, not a vendor fact | Design rationale (not a doc fact): polling `GET /api/v1/monitor/{id}` avoids standing up `ngrok`/`cloudflared` (not listed among this environment's installed tools), avoids exposing a local port to the internet, and avoids a webhook-integration setup step in the Datadog UI that would need to happen before every recording. The tradeoff is polling latency granularity equal to the poll interval (this plan polls every 5s), which is stated in the `detection-latency` metric's `howMeasured`. |
+| Whether the Datadog `tidb` integration can expose `tikv_raftstore_write_cmd_total` (the metric Plan 08 switched `write-hot-spot` detection to, after finding `tikv_thread_cpu_seconds_total` does not exist on TiKV v8.5.8) under any Datadog metric name, so `write-hot-spot.json` and `tikvCpuQuery` could be aligned with 08's fix | `DataDog/integrations-extras` GitHub repo, `tidb/datadog_checks/tidb/metrics.py` (`TIDB_METRICS`, `TIKV_METRICS`, `TIFLASH_METRICS` lists) and `tidb/metadata.csv`, cross-checked against https://docs.datadoghq.com/integrations/tidb/ | Verified - the integration's Python check only ever forwards a fixed, hardcoded allowlist of 12 metrics (`tidb_executor_statement_total`, `tidb_server_execute_error_total`, `tidb_server_connections`, `tidb_server_handle_query_duration_seconds` `.count`/`.sum`, `process_cpu_seconds_total`, `process_resident_memory_bytes`, `tikv_engine_size_bytes`, `tikv_store_size_bytes`, `tikv_io_bytes`, and two renamed TiFlash gauges); there is no `extra_metrics`-style passthrough and no PD metrics are scraped at all. `tikv_raftstore_write_cmd_total` cannot be exposed under any name through this integration, so 08's fix has no Datadog equivalent - `write-hot-spot.json` and `tikvCpuQuery` are left on `tidb_cluster.process_cpu_seconds_total{component:tikv}`, which is a metric that does exist in the fixed allowlist and is the only available proxy, inheriting the "not collected under tiup playground on macOS" gap already recorded above and in Section 9. `store-outage.json`'s `tikv_store_size_bytes`-based no-data check and `connection-surge.json`'s `tidb_server_connections` check both also appear in this same fixed allowlist, so neither needed a metric-name change for 08's fixes. |
 
 ## 5. Prerequisites, cost, and teardown
 
@@ -614,7 +615,7 @@ Write `demos/datadog/runner/main.ts`:
 ```ts
 import { createEmitter, every, onControl, createTidbPool } from '@lab/runner-kit';
 import { startWorkload } from '@lab/demo-prometheus-grafana/workload';
-import { runSlowQueryStorm, runWriteHotSpot, runConnectionSurge, stopTikvStore, startTikvStore, clearAllFaults } from '@lab/demo-prometheus-grafana/faults';
+import { runSlowQueryStorm, runWriteHotSpot, runConnectionSurge, stopTikvStore, startTikvStore, clearAllFaults, type TikvPlaygroundHandle } from '@lab/demo-prometheus-grafana/faults';
 import { createMetricsClient } from './src/metricsClient';
 import { createMonitorClient } from './src/monitorClient';
 import { qpsQuery, meanLatencyQuery, tikvCpuQuery, connectionsQuery } from './src/datadogQuery';
@@ -639,6 +640,7 @@ const main = async (): Promise<void> => {
   let faultInjectedAtMs: number | undefined;
   let activeMonitorId: number | undefined;
   let activeFaultHandles: readonly { readonly stop: () => void }[] = [];
+  let stoppedTikv: TikvPlaygroundHandle | undefined;
 
   emitter.phase('intro');
   await startWorkload({ pool, intervalMs: 200 });
@@ -693,7 +695,7 @@ const main = async (): Promise<void> => {
         ...activeFaultHandles,
         runConnectionSurge(async () => {
           const connection = await pool.getConnection();
-          return { end: async () => connection.release() };
+          return { end: async () => connection.destroy() };
         }),
       ];
       faultInjectedAtMs = now;
@@ -704,15 +706,22 @@ const main = async (): Promise<void> => {
       faultInjectedAtMs = now;
       activeMonitorId = monitorIds['store-outage'];
       emitter.phase('store-outage');
-      void stopTikvStore().then(() => emitter.node('tikv', 'down'));
+      void stopTikvStore().then((handle) => {
+        stoppedTikv = handle;
+        emitter.node('tikv', 'down');
+      });
     }
     if (id === 'clear-faults') {
       void clearAllFaults(activeFaultHandles).then(async () => {
         activeFaultHandles = [];
         faultInjectedAtMs = undefined;
         activeMonitorId = undefined;
-        await startTikvStore();
-        emitter.node('tikv', 'healthy');
+        if (stoppedTikv !== undefined) {
+          const handle = stoppedTikv;
+          stoppedTikv = undefined;
+          await startTikvStore(handle);
+          emitter.node('tikv', 'healthy');
+        }
         emitter.phase('recovery');
       });
     }
@@ -1109,3 +1118,16 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
   - `pnpm lab check-public` -> `0 findings`
   - teardown commands from section 5 run and confirmed
 - Done when: the replay tells the whole story in 3-6 minutes of playback at 1x.
+
+## 11. Build notes (aligning with Plan 08's live-recording fixes)
+
+Plan 08's live recording session (Section 11 of `08-prometheus-grafana.md`) found seven real bugs by running the shared workload generator and fault injector against a live playground; those functions (`runSlowQueryStorm`, `runWriteHotSpot`, `stopTikvStore`, `startTikvStore`, `clearAllFaults`) are imported by this demo's `runner/main.ts` unchanged through `@lab/demo-prometheus-grafana/faults`, so the AUTO_RANDOM explicit-insert fix, the `INSERT IGNORE`/unconditional-id-advance fix, the four-worker `SLEEP(0.6)` slow-query-storm fix, and the `kill -9`/command-relaunch store-outage fix all applied here automatically with no code change needed in this demo.
+
+Two bugs were specific to this demo's own `runner/main.ts` (not the shared module) and needed the same fix pattern applied locally, since this file duplicates the control-wiring logic rather than importing it:
+
+1. **`inject-connection-surge`'s cleanup used `connection.release()`**, the same pooled-release-instead-of-close bug Plan 08 found and fixed in its own `main.ts`. Fixed identically here: `connection.destroy()`.
+2. **`inject-store-outage`/`clear-faults` called `stopTikvStore()`/`startTikvStore()` with no handle**, matching Plan 08's pre-fix behavior: `clear-faults` restarted TiKV via `tiup playground scale-out --kv 1` unconditionally on every cycle (adding a spare store even when no store-outage fault was active) rather than relaunching the exact process that was killed. Fixed by capturing the `TikvPlaygroundHandle` returned by `stopTikvStore()` in a module-level `stoppedTikv` variable and only calling `startTikvStore(handle)` (and only emitting `tikv: healthy`) in `clear-faults` when a store-outage fault actually left a stopped handle, clearing `stoppedTikv` after use.
+
+Checked but left unchanged, because the fault lives in a metric that is genuinely unavailable, not a naming mismatch: Plan 08 switched `write-hot-spot` detection from `tikv_thread_cpu_seconds_total` (confirmed absent on TiKV v8.5.8) to `tikv_raftstore_write_cmd_total{type="put"}`. The Datadog `tidb` integration (`DataDog/integrations-extras`, `tidb/datadog_checks/tidb/metrics.py`) only ever forwards a fixed, hardcoded list of 12 metrics and has no PD metrics and no passthrough for arbitrary Prometheus metric names, so `tikv_raftstore_write_cmd_total` cannot be exposed under any Datadog metric name (see the new Section 4 row for the full citation). `write-hot-spot.json` and `tikvCpuQuery` are therefore left on `tidb_cluster.process_cpu_seconds_total{component:tikv}`, the only available proxy, which already carries the documented "not collected under tiup playground on macOS" gap from Section 4/9 - this is an existing, previously-documented limitation of the Datadog integration itself, not a regression introduced by this alignment pass.
+
+Verified after the fix: `pnpm --filter @lab/demo-datadog test` (21 tests, including `test/emitted-ids.test.ts`'s scan of `runner/main.ts` against `manifest.json`), `pnpm --filter @lab/demo-datadog typecheck`, and `pnpm lab validate datadog` (`datadog: manifest ok, no featured trace yet`) all pass with no new `any`, type assertions, or code comments introduced. No live Datadog account, Agent, or Monitor was exercised in this pass (out of scope: code-only, no live services).
