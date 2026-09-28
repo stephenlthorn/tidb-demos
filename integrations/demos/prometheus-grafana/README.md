@@ -18,12 +18,39 @@ connection surge.
 
 ## Run
 
-1. `bash ../../infra/tidb/playground.sh --tag lab-08 --db 1 --pd 1 --kv 1 --tiflash 1 --ticdc 1`
+1. Start (or reuse) the shared playground tagged `lab`:
+   `bash ../../infra/tidb/playground.sh` (this platform script tags the
+   playground `lab` and starts TiDB, PD, TiKV, TiCDC, TiFlash, plus the
+   playground's own Prometheus on `9090` and Grafana on `3000`). If a `lab`
+   playground is already running, reuse it; do not start a second one.
 2. `docker compose -f infra/docker-compose.yml up -d`
-3. `cp .env.example .env` and fill in `LAB_ENV_TIDB` with the version tiup printed
+3. `cp .env.example .env` and fill in `LAB_ENV_TIDB` with the version tiup
+   printed (`select tidb_version()` against `127.0.0.1:4000` also shows it),
+   plus the `LAB_ENV_COMPONENT_*` versions actually running.
 4. From the `integrations/` workspace root: `pnpm lab run prometheus-grafana --port 7070`
 5. Open the UI (see the platform's `packages/ui` dev server) and press the fault
-   buttons, or `curl -X POST localhost:7070/control/<control-id>`
+   buttons, or `curl -m 10 -X POST localhost:7070/control/<control-id>`
+
+## Ports
+
+| Component | Port | Notes |
+|---|---|---|
+| Shared playground TiDB | `4000` | `tiup playground` tag `lab`, shared across demos |
+| Shared playground PD | `2379` | client URL; metrics at `/metrics` |
+| Shared playground TiKV status | `20180` | metrics at `/metrics` |
+| Shared playground's own Prometheus | `9090` | started by `infra/tidb/playground.sh`; this demo's Prometheus federates from it |
+| Shared playground's own Grafana | `3000` | started by the playground. **Another project's container (`grafana-grafana-1`, not part of this demo) also binds `*:3000`.** Both can be listening at once (IPv4 vs IPv6 wildcard bind); if `http://localhost:3000` shows the wrong dashboard, check with `lsof -nP -iTCP:3000 -sTCP:LISTEN` and browse `http://127.0.0.1:3000` explicitly for the playground's own Grafana. Never stop `grafana-grafana-1`. |
+| This demo's Prometheus | `9091` (host) -> `9090` (container) | `LAB_PROMETHEUS_URL`; federates `{job=~"tidb\|tikv\|pd"}` from the playground's `9090` |
+| This demo's Alertmanager | `9093` | `LAB_ALERTMANAGER_URL` |
+| Webhook receiver (in the runner process) | `9095` | `WEBHOOK_PORT`; receives Alertmanager notifications |
+| Relay control/event server | `7070` | passed via `pnpm lab run prometheus-grafana --port 7070`; not fixed in `.env` |
+
+None of this demo's own ports (`9091`, `9093`, `9095`, `7070`) collide with the
+other non-lab containers documented in the platform plan (`pov_postgres16`
+15432, `pov_mysql84` 23306, `dm-master`/`dm-worker` 8261/8262, `grafana-grafana-1`
+on `3000`). If a future run finds one of `9091`/`9093`/`9095`/`7070` taken,
+remap the host side in `infra/docker-compose.yml` (Prometheus/Alertmanager) or
+`.env` (`WEBHOOK_PORT`, or `--port` for the relay) and update this table.
 
 ## Record
 
@@ -36,12 +63,14 @@ then `pnpm lab check-public`.
 
 ```
 docker compose -f infra/docker-compose.yml down -v
-tiup clean lab-08
 ```
 
-Confirm nothing is left running: `docker compose -f infra/docker-compose.yml ps`
-shows no containers, and `tiup playground display` in the terminal that ran the
-playground exits or shows no processes once it is stopped with Ctrl-C.
+This stops only this demo's own Prometheus and Alertmanager containers. Leave
+the shared `lab` playground and shared Kafka running for the next demo; do not
+run `tiup clean lab` after a shared recording session. Confirm nothing extra is
+left running: `docker compose -f infra/docker-compose.yml ps` shows no
+containers, and `tiup playground display` still shows `pd`/`tikv`/`tidb` (and
+any other tagged roles) as healthy, not `exited`.
 
 ## Cost notes
 

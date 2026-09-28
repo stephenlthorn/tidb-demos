@@ -1,6 +1,6 @@
 services:
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.15.0
     container_name: lab-prom-grafana-prometheus
     ports:
       - "9091:9090"
@@ -10,7 +10,7 @@ services:
     command:
       - --config.file=/etc/prometheus/prometheus.yml
   alertmanager:
-    image: prom/alertmanager:latest
+    image: prom/alertmanager:v0.34.1
     container_name: lab-prom-grafana-alertmanager
     ports:
       - "9093:9093"

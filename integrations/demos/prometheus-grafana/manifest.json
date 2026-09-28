@@ -29,9 +29,9 @@
     { "id": "alertmanager-webhook", "from": "alertmanager", "to": "webhook-receiver", "label": "notify", "unit": "count" }
   ],
   "metrics": [
-    { "id": "qps", "label": "Queries per second", "unit": "req/s", "display": "both", "better": "higher", "howMeasured": "Prometheus instant query sum(rate(tidb_executor_statement_total[30s])) against the demo-local Prometheus, polled once per tick" },
-    { "id": "p99-latency", "label": "Query p99 latency", "unit": "ms", "display": "both", "better": "lower", "howMeasured": "Prometheus instant query histogram_quantile(0.99, sum(rate(tidb_server_handle_query_duration_seconds_bucket[30s])) by (le)) * 1000, polled once per tick" },
-    { "id": "tikv-cpu", "label": "TiKV CPU usage", "unit": "%", "display": "both", "better": "lower", "howMeasured": "Prometheus instant query sum(rate(tikv_thread_cpu_seconds_total[30s])) by (instance) * 100, polled once per tick, max across instances" },
+    { "id": "qps", "label": "Queries per second", "unit": "req/s", "display": "both", "better": "higher", "howMeasured": "Prometheus instant query sum(rate(tidb_executor_statement_total[60s])) against the demo-local Prometheus, polled once per tick" },
+    { "id": "p99-latency", "label": "Query p99 latency", "unit": "ms", "display": "both", "better": "lower", "howMeasured": "Prometheus instant query histogram_quantile(0.99, sum(rate(tidb_server_handle_query_duration_seconds_bucket[60s])) by (le)) * 1000, polled once per tick" },
+    { "id": "tikv-write-rate", "label": "TiKV write rate", "unit": "rows/s", "display": "both", "better": "lower", "howMeasured": "Prometheus instant query sum(rate(tikv_raftstore_write_cmd_total{type=\"put\"}[60s])) by (instance), polled once per tick, max across instances" },
     { "id": "active-connections", "label": "Active connections", "unit": "count", "display": "both", "better": "neutral", "howMeasured": "Prometheus instant query sum(tidb_server_connections), polled once per tick" },
     { "id": "detection-latency", "label": "Time to detect (last fault)", "unit": "s", "display": "tile", "better": "lower", "howMeasured": "webhook receipt timestamp minus fault injection timestamp, recorded in-process by the runner" },
     { "id": "recovery-latency", "label": "Time to recover (last fault)", "unit": "s", "display": "tile", "better": "lower", "howMeasured": "Alertmanager resolved timestamp from GET /api/v2/alerts minus the clear-faults control timestamp, recorded by the runner" }

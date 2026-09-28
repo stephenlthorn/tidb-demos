@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { qpsQuery, p99LatencyQuery, tikvCpuQuery, connectionsQuery } from '../src/promql';
+import { qpsQuery, p99LatencyQuery, tikvWriteRateQuery, connectionsQuery } from '../src/promql';
 
 describe('promql builders', () => {
   it('builds the qps query', () => {
@@ -12,9 +12,9 @@ describe('promql builders', () => {
     );
   });
 
-  it('builds the TiKV CPU query as a percentage', () => {
-    expect(tikvCpuQuery({ windowSeconds: 30 })).toBe(
-      'sum(rate(tikv_thread_cpu_seconds_total[30s])) by (instance) * 100',
+  it('builds the TiKV write-rate query in ops/s per store', () => {
+    expect(tikvWriteRateQuery({ windowSeconds: 30 })).toBe(
+      'sum(rate(tikv_raftstore_write_cmd_total{type="put"}[30s])) by (instance)',
     );
   });
 

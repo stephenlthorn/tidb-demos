@@ -6,16 +6,17 @@ const execFileAsync = promisify(execFile);
 
 export type FaultHandle = { readonly stop: () => void };
 
+const SLOW_QUERY_STORM_WORKERS = 4;
+
 export const runSlowQueryStorm = (pool: Pool): FaultHandle => {
   let stopped = false;
-  const tick = async (): Promise<void> => {
-    if (stopped) return;
-    await pool.query('SELECT COUNT(*) FROM lab_orders WHERE notes LIKE ?', ['%steady%']);
-    setTimeout(() => {
-      void tick();
-    }, 50);
+  const worker = async (): Promise<void> => {
+    while (!stopped) {
+      await pool.query('SELECT COUNT(*) FROM lab_orders WHERE notes LIKE ? AND (SELECT SLEEP(0.6)) = 0', ['%steady%']);
+    }
   };
-  void tick();
+  const workers = Array.from({ length: SLOW_QUERY_STORM_WORKERS }, () => worker());
+  void Promise.all(workers);
   return {
     stop: () => {
       stopped = true;
@@ -25,21 +26,35 @@ export const runSlowQueryStorm = (pool: Pool): FaultHandle => {
 
 export const runWriteHotSpot = (pool: Pool): FaultHandle => {
   let stopped = false;
-  let sequentialId = 1;
-  const tick = async (): Promise<void> => {
-    if (stopped) return;
-    await pool.query('INSERT INTO lab_orders (id, customer_id, amount_cents, notes) VALUES (?, ?, ?, ?)', [
-      sequentialId,
-      1,
-      100,
-      'hot-spot',
-    ]);
-    sequentialId += 1;
-    setTimeout(() => {
+  let sequentialId = Date.now() * 1000;
+  const start = async (): Promise<void> => {
+    const connection = await pool.getConnection();
+    try {
+      await connection.query('SET SESSION allow_auto_random_explicit_insert = 1');
+      const tick = async (): Promise<void> => {
+        if (stopped) {
+          connection.release();
+          return;
+        }
+        try {
+          await connection.query('INSERT IGNORE INTO lab_orders (id, customer_id, amount_cents, notes) VALUES (?, ?, ?, ?)', [
+            sequentialId,
+            1,
+            100,
+            'hot-spot',
+          ]);
+        } catch {}
+        sequentialId += 1;
+        setTimeout(() => {
+          void tick();
+        }, 10);
+      };
       void tick();
-    }, 10);
+    } catch {
+      connection.release();
+    }
   };
-  void tick();
+  void start();
   return {
     stop: () => {
       stopped = true;
@@ -66,21 +81,43 @@ export const runConnectionSurge = (createConnection: () => Promise<SurgeConnecti
   };
 };
 
-export type TikvPlaygroundHandle = { readonly pid: string };
+export type TikvPlaygroundHandle = { readonly pid: string; readonly command: string };
 
-export const stopTikvStore = async (options: { readonly displayCommand?: string } = {}): Promise<TikvPlaygroundHandle> => {
-  const displayCommand = options.displayCommand ?? 'tiup playground display';
-  const { stdout } = await execFileAsync('bash', ['-c', displayCommand]);
-  const tikvLine = stdout.split('\n').find((line) => line.includes('tikv') && !line.includes('exited'));
-  if (tikvLine === undefined) throw new Error('no running tikv instance found in tiup playground display output');
-  const pid = tikvLine.trim().split(/\s+/)[0];
-  if (pid === undefined) throw new Error('could not parse a pid from the tiup playground display line');
-  await execFileAsync('bash', ['-c', `tiup playground scale-in --pid ${pid}`]);
-  return { pid };
+const PD_BASE_URL = 'http://127.0.0.1:2379';
+
+const setMaxStoreDownTime = async (duration: string): Promise<void> => {
+  await fetch(`${PD_BASE_URL}/pd/api/v1/config`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ 'schedule.max-store-down-time': duration }),
+  });
 };
 
-export const startTikvStore = async (): Promise<void> => {
-  await execFileAsync('bash', ['-c', 'tiup playground scale-out --kv 1']);
+const TIKV_STATUS_PORT = 20180;
+
+export const stopTikvStore = async (options: { readonly statusPort?: number } = {}): Promise<TikvPlaygroundHandle> => {
+  const statusPort = options.statusPort ?? TIKV_STATUS_PORT;
+  await setMaxStoreDownTime('5s');
+  const { stdout: pidOutput } = await execFileAsync('lsof', ['-ti', `:${statusPort}`, '-sTCP:LISTEN']);
+  const pid = pidOutput
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+  if (pid === undefined) throw new Error(`no process found listening on tikv status port ${statusPort}`);
+  const { stdout: verifyOutput } = await execFileAsync('ps', ['-p', pid, '-wwo', 'command=']);
+  if (!verifyOutput.includes('tikv-server')) throw new Error(`pid ${pid} bound to status port ${statusPort} is not a tikv-server process`);
+  const command = verifyOutput.trim();
+  await execFileAsync('kill', ['-9', pid]);
+  return { pid, command };
+};
+
+export const startTikvStore = async (handle?: TikvPlaygroundHandle): Promise<void> => {
+  if (handle === undefined) {
+    await execFileAsync('bash', ['-c', 'tiup playground scale-out --kv 1']);
+    return;
+  }
+  await execFileAsync('bash', ['-c', `nohup ${handle.command} > /dev/null 2>&1 & disown`]);
+  await setMaxStoreDownTime('30m0s');
 };
 
 export const clearAllFaults = async (handles: readonly FaultHandle[]): Promise<void> => {

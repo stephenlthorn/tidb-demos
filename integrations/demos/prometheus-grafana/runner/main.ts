@@ -2,7 +2,7 @@ import { createEmitter, every, onControl, createTidbPool } from '@lab/runner-kit
 import { createPrometheusClient } from './src/prometheusClient';
 import { createAlertmanagerClient } from './src/alertmanagerClient';
 import { createWebhookReceiver } from './src/webhookReceiver';
-import { qpsQuery, p99LatencyQuery, tikvCpuQuery, connectionsQuery } from './src/promql';
+import { qpsQuery, p99LatencyQuery, tikvWriteRateQuery, connectionsQuery } from './src/promql';
 import { detectionLatencySeconds, recoveryLatencySeconds } from './src/latency';
 import { createFaultState, faultInjected, faultsCleared, type FaultId } from './src/faultState';
 import { startWorkload } from './src/workload';
@@ -15,6 +15,7 @@ import {
   startTikvStore,
   clearAllFaults,
   type FaultHandle,
+  type TikvPlaygroundHandle,
 } from './src/faultInjector';
 
 const FAULT_TIMEOUT_MS = 90_000;
@@ -43,6 +44,7 @@ const main = async (): Promise<void> => {
   let clearedAtMs: number | undefined;
   let previousCompletedQueries: number | undefined;
   let previousWebhookArrivals: number | undefined;
+  let stoppedTikv: TikvPlaygroundHandle | undefined;
 
   const emitCheckPending = (fault: FaultId): void => {
     if (fault === 'slow-query-storm') emitter.check('detect-slow-query-storm', 'pending');
@@ -129,15 +131,15 @@ const main = async (): Promise<void> => {
     intervalMs: 1000,
     signal: controller.signal,
     task: async () => {
-      const [qps, p99, tikvCpu, connections] = await Promise.all([
-        prometheus.instantQuery(qpsQuery({ windowSeconds: 30 })),
-        prometheus.instantQuery(p99LatencyQuery({ windowSeconds: 30 })),
-        prometheus.instantQuery(tikvCpuQuery({ windowSeconds: 30 })),
+      const [qps, p99, tikvWriteRate, connections] = await Promise.all([
+        prometheus.instantQuery(qpsQuery({ windowSeconds: 60 })),
+        prometheus.instantQuery(p99LatencyQuery({ windowSeconds: 60 })),
+        prometheus.instantQuery(tikvWriteRateQuery({ windowSeconds: 60 })),
         prometheus.instantQuery(connectionsQuery()),
       ]);
       if (qps.value !== undefined) emitter.metric('qps', qps.value);
       if (p99.value !== undefined) emitter.metric('p99-latency', p99.value);
-      if (tikvCpu.value !== undefined) emitter.metric('tikv-cpu', tikvCpu.value);
+      if (tikvWriteRate.value !== undefined) emitter.metric('tikv-write-rate', tikvWriteRate.value);
       if (connections.value !== undefined) emitter.metric('active-connections', connections.value);
 
       const completedQueries = workload.completedQueries();
@@ -169,7 +171,7 @@ const main = async (): Promise<void> => {
         'connection-surge',
         runConnectionSurge(async () => {
           const connection = await pool.getConnection();
-          return { end: async () => connection.release() };
+          return { end: async () => connection.destroy() };
         }),
       );
     }
@@ -178,9 +180,10 @@ const main = async (): Promise<void> => {
       detectionSettled = false;
       emitCheckPending('store-outage');
       emitFaultPhase('store-outage');
-      void stopTikvStore().then(() => {
+      void stopTikvStore().then((handle) => {
+        stoppedTikv = handle;
         emitter.node('tikv', 'down');
-        emitter.log('warn', 'tiup playground scaled the tikv store out for the store-outage fault', 'tikv');
+        emitter.log('warn', 'killed the tikv process outright to simulate an unplanned store outage', 'tikv');
       });
     }
     if (id === 'clear-faults') {
@@ -190,8 +193,12 @@ const main = async (): Promise<void> => {
         activeFaultHandles = [];
         faultState = faultsCleared(faultState);
         clearedAtMs = Date.now();
-        await startTikvStore();
-        emitter.node('tikv', 'healthy');
+        if (stoppedTikv !== undefined) {
+          const handle = stoppedTikv;
+          stoppedTikv = undefined;
+          await startTikvStore(handle);
+          emitter.node('tikv', 'healthy');
+        }
         emitter.phase('recovery');
       });
     }
