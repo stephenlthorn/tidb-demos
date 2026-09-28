@@ -19,6 +19,7 @@ import { loadMonitorIds } from './src/monitorIds';
 import { detectionLatencySeconds } from './src/latency';
 import { findMatchingDigestRow } from './src/digestCorrelation';
 import { SLOW_QUERY_SQL } from './src/slowQuery';
+import { computeCounterDelta } from './src/flowDeltas';
 
 type FaultId = 'slow-query-storm' | 'write-hot-spot' | 'store-outage' | 'connection-surge';
 
@@ -52,6 +53,7 @@ const main = async (): Promise<void> => {
   let detectionSettled = true;
   let activeFaultHandles: readonly FaultHandle[] = [];
   let instrumentedQueryCount = 0;
+  let previousCompletedQueries: number | undefined;
 
   const emitCheckPending = (fault: FaultId): void => {
     if (fault === 'slow-query-storm') emitter.check('detect-slow-query-storm', 'pending');
@@ -90,7 +92,7 @@ const main = async (): Promise<void> => {
   emitter.node('workload', 'starting');
   emitter.phase('intro');
 
-  await startWorkload({ pool, intervalMs: 200 });
+  const workload = await startWorkload({ pool, intervalMs: 200 });
   emitter.node('workload', 'busy');
   emitter.log('info', 'workload generator started against TiDB');
 
@@ -140,6 +142,10 @@ const main = async (): Promise<void> => {
       if (latency !== undefined) emitter.metric('p99-latency', latency);
       if (tikvCpu !== undefined) emitter.metric('tikv-cpu', tikvCpu);
       if (connections !== undefined) emitter.metric('active-connections', connections);
+
+      const completedQueries = workload.completedQueries();
+      emitter.flow('workload-tidb', computeCounterDelta({ previous: previousCompletedQueries, current: completedQueries }));
+      previousCompletedQueries = completedQueries;
     },
   });
 
