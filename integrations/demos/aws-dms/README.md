@@ -37,38 +37,64 @@ seconds, not zero.
 
 - An AWS account with permission to create RDS/Aurora, DMS, VPC, and IAM
   resources.
-- A TiDB Cloud account with permission to create a Dedicated cluster
-  (Dedicated is required here for VPC peering/PrivateLink).
+- A TiDB Cloud account with a **Starter** cluster in `us-west-2`, created by
+  the sibling `infra/tidbcloud-starter` module, reached over Starter's public
+  endpoint with TLS (`verify-full`). This demo does not use TiDB Cloud
+  Dedicated, PrivateLink, or VPC peering: Starter does not support those, and
+  the plan's decision (Section 4/5) is to prefer Starter wherever a demo can
+  use it, since it needs no cluster-creation lead time and no VPC networking
+  on the TiDB Cloud side.
 - Local tools: macOS, Docker Desktop (not required to run this demo locally
   since all data stores are cloud-hosted, but used for the relay/UI dev
   loop), Node 22, pnpm, terraform, aws cli.
+- This demo's runner (writes, checksums, cutover against Aurora) runs on
+  your workstation, and this VPC has no bastion or VPN. Aurora is therefore
+  `publicly_accessible` and reachable only from the DMS security group and
+  from `var.admin_cidr`, your workstation's public IP as a `/32`, required
+  at apply time. TLS is enforced on Aurora (`rds.force_ssl = 1`), and the
+  runner connects with `PG_SSL=true`.
 
 ## Cost model
 
 This demo bills for, while it runs:
 
-1. The Aurora PostgreSQL instance, at its documented hourly rate - see
-   [Amazon Aurora pricing](https://aws.amazon.com/rds/aurora/pricing/).
-2. The AWS DMS replication instance, at its documented hourly rate plus
-   storage - see [AWS DMS pricing](https://aws.amazon.com/dms/pricing/).
-3. The TiDB Cloud Dedicated cluster, at its documented node-hour rate - see
-   [TiDB Cloud pricing](https://www.pingcap.com/tidb-cloud-pricing/).
-4. TiDB Cloud PrivateLink/VPC peering hourly charges, if used - same TiDB
-   Cloud pricing page above.
+1. The Aurora PostgreSQL Serverless v2 writer, at its ACU-hour rate (floor
+   0.5 ACU) - see [Amazon Aurora pricing](https://aws.amazon.com/rds/aurora/pricing/).
+2. The AWS DMS `dms.t3.small` replication instance, at its documented hourly
+   rate, plus its allocated storage - see
+   [AWS DMS pricing](https://aws.amazon.com/dms/pricing/).
+3. The TiDB Cloud Starter cluster, at its documented request-based rate -
+   see [TiDB Cloud pricing](https://www.pingcap.com/tidb-cloud-pricing/).
 
-No dollar figures are hardcoded anywhere in this demo, because rates change
-independently of it. Read the current rate from the linked pricing pages
-before quoting a cost to anyone.
+There is no NAT gateway in this demo (Section 4/5): the DMS replication
+instance is `publicly_accessible` in a public subnet instead, which is
+cheaper for a short-lived run. No dollar figures are hardcoded anywhere in
+this demo, because rates change independently of it. Read the current rate
+from the linked pricing pages before quoting a cost to anyone.
 
 ## Run
 
-1. `cd infra/terraform && terraform init && TF_VAR_aurora_master_password=... TF_VAR_tidb_host=... terraform apply`
-2. Create the TiDB Cloud Dedicated cluster, add the DMS security group to
-   its traffic filter, and load `infra/sql/schema-tidb.sql`.
-3. Create the DMS TiDB target endpoint and the full-load-and-cdc
-   replication task (see the terraform apply's manual follow-up steps).
-4. `cp .env.example .env` and fill in `TIDB_*`, `PG_*`,
-   `DMS_REPLICATION_INSTANCE_ARN`, `DMS_TASK_ARN`, `AWS_REGION`.
+1. Apply the sibling `infra/tidbcloud-starter` module first (or confirm it
+   has already run) so `demos/aws-dms/.env` has `TIDB_HOST`, `TIDB_PORT`,
+   `TIDB_USER`, `TIDB_PASSWORD` filled in.
+2. Generate a gitignored `terraform.tfvars` from `.env`, or export
+   `TF_VAR_*` directly, then apply:
+
+   ```
+   cd infra/terraform
+   terraform init
+   TF_VAR_aurora_master_password=... \
+   TF_VAR_tidb_host=... TF_VAR_tidb_user=... TF_VAR_tidb_password=... \
+   TF_VAR_admin_cidr=$(curl -s https://checkip.amazonaws.com)/32 \
+   terraform apply
+   ```
+
+3. Load `infra/sql/schema-tidb.sql` against the TiDB Cloud Starter cluster
+   (DMS creates tables and primary keys only; see Section 4 of the plan).
+4. `cp .env.example .env` (if not already populated by step 1) and fill in
+   the remaining `PG_*` (use the `aurora_writer_endpoint` output for
+   `PG_HOST`, and set `PG_SSL=true`), `DMS_REPLICATION_INSTANCE_ARN`,
+   `DMS_TASK_ARN`, `AWS_REGION` values from the `terraform apply` output.
 5. `pnpm lab run aws-dms --record` and open the UI pointed at the relay
    port.
 
@@ -94,12 +120,12 @@ Run in this exact order:
 
 1. `pnpm lab run aws-dms` runner should already have exited or been Ctrl-C'd.
 2. `cd demos/aws-dms/infra/terraform && terraform destroy -auto-approve` -
-   destroys the DMS replication instance, endpoints, task, Aurora PostgreSQL
-   cluster, and the VPC/subnets/security groups/IAM role created for this
-   demo.
-3. Delete the TiDB Cloud Dedicated cluster from the TiDB Cloud console
-   (Terraform-managed only if the TiDB Cloud Terraform provider is wired
-   in; otherwise this is a manual console step).
+   destroys the DMS replication instance, endpoints, certificate, task,
+   Aurora PostgreSQL Serverless v2 cluster, and the VPC/subnets/security
+   groups/IAM role created for this demo.
+3. Destroy the TiDB Cloud Starter cluster from the sibling
+   `infra/tidbcloud-starter` module (`terraform destroy` there, or the TiDB
+   Cloud console if it was created manually).
 
 ### Nothing-is-billing checklist
 

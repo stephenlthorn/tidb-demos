@@ -24,6 +24,7 @@ export const createPgClient = (env: NodeJS.ProcessEnv = process.env): PgClient =
     user: env.PG_USER,
     password: env.PG_PASSWORD,
     database: env.PG_DATABASE,
+    ssl: env.PG_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
   });
 
   const insertHeartbeat = async (): Promise<{ readonly heartbeatId: number; readonly insertedAtMs: number }> => {
