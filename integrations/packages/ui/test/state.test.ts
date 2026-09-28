@@ -68,6 +68,28 @@ describe('selectors', () => {
     expect(edgeRate(jittered, 'source-to-tidb')).toBe(200);
   });
 
+  it('sums the last second of samples when a runner emits one flow event per operation', () => {
+    const perOperation = foldEvents(
+      aManifest(),
+      Array.from({ length: 30 }, (_, index): DemoEvent => ({
+        type: 'flow',
+        t: 5000 + index * 50,
+        edge: 'source-to-tidb',
+        count: 1,
+      })),
+    );
+    expect(edgeRate(perOperation, 'source-to-tidb')).toBe(20);
+  });
+
+  it('is not inflated by two operations landing a millisecond apart', () => {
+    const burst = foldEvents(aManifest(), [
+      { type: 'flow', t: 4000, edge: 'source-to-tidb', count: 1 },
+      { type: 'flow', t: 4999, edge: 'source-to-tidb', count: 1 },
+      { type: 'flow', t: 5000, edge: 'source-to-tidb', count: 1 },
+    ]);
+    expect(edgeRate(burst, 'source-to-tidb')).toBe(2);
+  });
+
   it('treats a single sample as one second of flow', () => {
     const single = foldEvents(aManifest(), [{ type: 'flow', t: 1000, edge: 'source-to-tidb', count: 10 }]);
     expect(edgeRate(single, 'source-to-tidb')).toBe(10);
