@@ -42,13 +42,18 @@ Refresh in Power BI shows that.
   `infra/tidb/playground.sh` for day-to-day development. See the TiDB
   Cloud tier-selection guide for current tier names and TiFlash support:
   https://docs.pingcap.com/tidbcloud/select-cluster-tier/
-- A Windows environment for Power BI Desktop only: an Azure VM, a Windows
-  365 Cloud PC, or a local Parallels/UTM Windows VM. Power BI Desktop is
-  Windows-only. Power BI Desktop itself is a free download from Microsoft:
+- A Windows environment for Power BI Desktop only. This demo's own Terraform
+  (`infra/windows/`) provisions a single AWS EC2 Windows Server instance for
+  this; a local Parallels/UTM Windows VM or a Windows 365 Cloud PC also work.
+  Power BI Desktop is Windows-only. Power BI Desktop itself is a free
+  download from Microsoft:
   https://www.microsoft.com/en-us/download/details.aspx?id=58494
 - The Oracle MySQL Connector/NET package installed on the Power BI Desktop
   machine, required by Power BI's MySQL database connector:
   https://learn.microsoft.com/en-us/power-query/connectors/mysql-database
+  (the EC2 path installs both of the above automatically - see below)
+- An AWS account (profile `DBaaS-DevUser-Role`, region `us-west-2`) and
+  Terraform >= 1.5, if using the `infra/windows/` EC2 path.
 
 ## Run (local development)
 
@@ -72,41 +77,98 @@ mode, or drive it headless with `curl` against `http://localhost:7070`.
 
 ## Record
 
-1. Provision a fresh TiDB Cloud cluster (Starter or Essential tier;
-   re-confirm TiFlash support first) and point `demos/power-bi/.env` at it
-   with `TIDB_TLS=true`.
-2. Seed it once: `pnpm --filter @lab/demo-power-bi exec tsx runner/setup.ts`.
-3. Start the Windows VM, install Power BI Desktop and the MySQL connector
-   prerequisite, and open a report pointed at the same cluster with its
-   three visuals pinned to the exact SQL in `runner/src/dashboardQueries.ts`
-   via the connector's "Native SQL statement" advanced option. Do not
-   click Refresh yet.
-4. From `integrations/`, run `pnpm lab run power-bi --record` and let it
-   play through to the `power-bi-live` phase (about 195 seconds)
-   untouched.
-5. When the `power-bi-live` phase starts, switch to the Windows VM, click
-   Refresh, and start a screen recording of the report updating. Let the
-   runner continue into `wrap-up` and exit.
-6. Copy the resulting trace to `demos/power-bi/traces/featured.json`, run
-   `pnpm lab validate power-bi` and `pnpm lab check-public`, then tear down
-   both the Windows VM and the TiDB Cloud cluster the same day.
+This recording uses a TiDB Cloud Starter cluster (created with
+`infra/tidbcloud-starter`, elsewhere in this lab) and a real Power BI
+Desktop instance running on an AWS EC2 Windows box, driven over RDP so the
+report refresh can be screen-recorded directly.
+
+### 1. Bring up the TiDB Cloud Starter cluster
+
+Follow `infra/tidbcloud-starter`'s own README to create the cluster and get
+its connection details (host, port 4000, prefixed username, database). TiDB
+Cloud Starter supports TiFlash/columnar storage (verified in plan section
+4); the replica count this demo requests (1) is silently upgraded to 2 by
+Starter, which is expected and does not need any code change. Point
+`demos/power-bi/.env` at the cluster with `TIDB_TLS=true`, then seed it
+once:
+
+```bash
+cp demos/power-bi/.env.example demos/power-bi/.env   # fill in TIDB_HOST etc.
+pnpm --filter @lab/demo-power-bi exec tsx runner/setup.ts
+```
+
+### 2. Bring up the Windows EC2 instance
+
+```bash
+cd demos/power-bi/infra/windows
+terraform init
+MY_IP=$(curl -s https://checkip.amazonaws.com)
+terraform apply -var "admin_cidr=${MY_IP}/32"
+```
+
+This creates one Windows Server 2022 EC2 instance (`t3.large`, gp3 root
+volume) with RDP (3389) open only to `admin_cidr`, and its `user_data`
+silently installs Power BI Desktop and the MySQL Connector/NET package on
+first boot (see task 3 in plan section 4 for the exact download URLs and
+switches; both rotate per release, so re-check them if `apply` is run much
+later than this was written). Allow a few minutes after `apply` finishes
+for that install to complete before connecting.
+
+Get the Administrator password:
+
+```bash
+terraform output get_password_data_command   # prints the exact command; run it verbatim
+```
+
+(Windows needs a few minutes after launch to generate the password; retry
+the command if it errors immediately after `apply`.)
+
+### 3. Connect and configure the report
+
+Open an RDP client (e.g. Microsoft Remote Desktop) to `terraform output
+rdp_target`, log in as `Administrator` with the decrypted password, and
+open `C:\lab\README.txt` for the connection placeholders and the exact
+three SQL statements to paste. In Power BI Desktop: Get Data > More... >
+Database > MySQL database, enter the TiDB Cloud Starter host:port and
+database, then under Advanced options use "Native SQL statement" to pin
+each of the report's three visuals to the exact SQL in
+`runner/src/dashboardQueries.ts` (also copied into `C:\lab\README.txt`).
+Paste the cluster password directly into Power BI's own credential dialog;
+it is never written to disk on the instance. Do not click Refresh yet.
+
+### 4. Run the replay and record the live refresh
+
+From `integrations/`, run `pnpm lab run power-bi --record` and let it play
+through to the `power-bi-live` phase (about 195 seconds) untouched. When
+that phase starts, switch to the RDP session, click Refresh in Power BI
+Desktop, and start screen-recording the report updating. Let the runner
+continue into `wrap-up` and exit.
+
+Copy the resulting trace to `demos/power-bi/traces/featured.json`, run
+`pnpm lab validate power-bi` and `pnpm lab check-public`.
 
 ## Teardown
 
 ```bash
-ticloud serverless delete --cluster-id <cluster-id>
-az vm deallocate --resource-group lab-power-bi-rg --name lab-power-bi-vm
-az group delete --name lab-power-bi-rg --yes --no-wait
-tiup clean lab   # if the local playground was used
+cd demos/power-bi/infra/windows
+terraform destroy -var "admin_cidr=${MY_IP}/32"   # same admin_cidr value used to apply
+
+# TiDB Cloud Starter cluster: see infra/tidbcloud-starter's own README/teardown
+
+tiup clean lab   # only if the local playground was used for development
 ```
+
+Tear both the EC2 instance and the TiDB Cloud cluster down the same day as
+any recording.
 
 ## Cost notes
 
-The TiDB Cloud cluster and the Windows VM both bill by time; no prices
-are hardcoded here since they change. See the current rates at:
+Both the TiDB Cloud Starter cluster and the EC2 Windows instance bill by
+time; no prices are hardcoded here since they change. See the current
+rates at:
 
 - TiDB Cloud pricing: https://www.pingcap.com/pricing/
-- Azure Windows VM pricing: https://azure.microsoft.com/en-us/pricing/details/virtual-machines/windows/
-- Windows 365 pricing (alternative to an Azure VM): https://www.microsoft.com/en-us/windows-365/business/compare-plans-pricing
+- EC2 Windows on-demand pricing (`t3.large`, us-west-2):
+  https://aws.amazon.com/ec2/pricing/on-demand/
 
 Tear both down the same day as any recording.
