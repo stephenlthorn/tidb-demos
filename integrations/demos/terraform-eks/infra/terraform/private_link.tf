@@ -14,7 +14,7 @@ resource "aws_security_group" "tidb_private_endpoint" {
     from_port   = 4000
     to_port     = 4000
     protocol    = "tcp"
-    cidr_blocks = module.vpc.private_subnets_cidr_blocks
+    cidr_blocks = [module.vpc.vpc_cidr_block]
   }
 
   egress {
@@ -27,12 +27,19 @@ resource "aws_security_group" "tidb_private_endpoint" {
   tags = { Demo = "terraform-eks" }
 }
 
+# Exactly one VPC endpoint for PrivateLink: an Interface endpoint is billed
+# per-AZ-hour ($0.01/AZ-hour, AWS PrivateLink pricing, checked 2026-09-28)
+# plus data processing, so this demo creates only the one endpoint it needs
+# rather than one per subnet/AZ pair. It is reachable from every subnet in
+# this VPC (interface endpoints route within the VPC, not just within their
+# own subnet), so it does not need to live in the same subnets as the
+# worker nodes.
 resource "aws_vpc_endpoint" "tidb" {
   count               = var.connection_mode == "private" ? 1 : 0
   vpc_id              = module.vpc.vpc_id
   service_name        = data.tidbcloud_dedicated_private_link_service.this[0].service_name
   vpc_endpoint_type   = "Interface"
-  subnet_ids          = module.vpc.private_subnets
+  subnet_ids          = [module.vpc.public_subnets[0]]
   security_group_ids  = [aws_security_group.tidb_private_endpoint[0].id]
   private_dns_enabled = false
 

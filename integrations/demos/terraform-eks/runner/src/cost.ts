@@ -4,6 +4,8 @@ export type CostInputs = {
   readonly ec2NodeCount: number;
   readonly natGatewayUsdHr: number;
   readonly natGatewayCount: number;
+  readonly vpcEndpointUsdHr: number;
+  readonly vpcEndpointCount: number;
   readonly tidbNodeUsdHr: number;
   readonly tidbNodeCount: number;
   readonly tikvNodeUsdHr: number;
@@ -14,5 +16,6 @@ export const estimateHourlyCostUsd = (inputs: CostInputs): number =>
   inputs.eksControlPlaneUsdHr +
   inputs.ec2NodeUsdHr * inputs.ec2NodeCount +
   inputs.natGatewayUsdHr * inputs.natGatewayCount +
+  inputs.vpcEndpointUsdHr * inputs.vpcEndpointCount +
   inputs.tidbNodeUsdHr * inputs.tidbNodeCount +
   inputs.tikvNodeUsdHr * inputs.tikvNodeCount;

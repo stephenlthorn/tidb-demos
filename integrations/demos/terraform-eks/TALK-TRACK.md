@@ -14,10 +14,10 @@
   hand. Terraform wrote the connection secret straight from its own output."
 - **Load burst**: "Now let's put traffic through it and watch QPS and
   latency."
-- **Scale TiDB capacity**: "We're changing TiKV's node count from 3 to 5.
-  Terraform shows this as an update, not a replace, because the provider
-  marks node count as changeable in place, not something that forces a new
-  cluster."
+- **Scale TiDB capacity**: "We're changing TiDB's node count from 1 to 2,
+  the smallest possible scale-out this cluster allows. Terraform shows this
+  as an update, not a replace, because the provider marks node count as
+  changeable in place, not something that forces a new cluster."
 - **Verify zero downtime**: "While that scale-out ran, here's the exact
   request error count the load generator logged. Not an assumption, a count."
 - **Teardown**: "And here's the exact command and the exact check that

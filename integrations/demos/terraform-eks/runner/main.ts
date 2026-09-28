@@ -5,9 +5,13 @@ import { runLoadTick } from './src/load-generator';
 import { parseTerraformLine } from './src/terraform-events';
 import { nodeIdForResourceType } from './src/resource-mapping';
 import { estimateHourlyCostUsd } from './src/cost';
+import { startPortForward, updateKubeconfig } from './src/port-forward';
+
+const KUBECONFIG_CONTEXT_ALIAS = 'lab-terraform-eks';
 
 const TERRAFORM_DIR = 'infra/terraform';
 const LOAD_TICK_MS = 1000;
+const APP_LOCAL_PORT = 8080;
 
 const emitter = createEmitter();
 
@@ -25,6 +29,7 @@ const isPlannedChangeLine = (line: string): boolean => {
 const TF_VAR_ENV_MAP: ReadonlyArray<readonly [string, string]> = [
   ['TIDBCLOUD_PUBLIC_KEY', 'TF_VAR_tidbcloud_public_key'],
   ['TIDBCLOUD_PRIVATE_KEY', 'TF_VAR_tidbcloud_private_key'],
+  ['TIDBCLOUD_PROJECT_ID', 'TF_VAR_tidbcloud_project_id'],
   ['TIDBCLOUD_REGION_ID', 'TF_VAR_tidbcloud_region_id'],
   ['TIDB_ROOT_PASSWORD', 'TF_VAR_tidb_root_password'],
   ['AWS_REGION', 'TF_VAR_aws_region'],
@@ -112,14 +117,27 @@ const main = async (): Promise<void> => {
   emitter.node('terraform-cli', 'done', 'initial apply complete');
 
   const outputs = await readTerraformOutputs(TERRAFORM_DIR);
-  const appServiceHostname = typeof outputs.app_service_hostname === 'string' ? outputs.app_service_hostname : '';
+  const eksClusterName = typeof outputs.eks_cluster_name === 'string' ? outputs.eks_cluster_name : '';
+  const appServiceName = typeof outputs.app_service_name === 'string' ? outputs.app_service_name : 'lab-app';
   const connectionEndpointKind =
     typeof outputs.connection_endpoint_kind === 'string' ? outputs.connection_endpoint_kind : process.env.CONNECTION_MODE;
-  const appUrl = `http://${appServiceHostname}/work`;
+
+  await updateKubeconfig({
+    clusterName: eksClusterName,
+    region: process.env.AWS_REGION ?? 'us-west-2',
+    alias: KUBECONFIG_CONTEXT_ALIAS,
+  });
+  const portForward = await startPortForward({
+    context: KUBECONFIG_CONTEXT_ALIAS,
+    service: appServiceName,
+    localPort: APP_LOCAL_PORT,
+    remotePort: 80,
+  });
+  const appUrl = `http://127.0.0.1:${APP_LOCAL_PORT}/work`;
 
   emitter.phase('connect');
-  emitter.node('private-endpoint', 'healthy');
-  emitter.flow('private-link', 1);
+  emitter.node('private-endpoint', connectionEndpointKind === 'private' ? 'healthy' : 'idle');
+  if (connectionEndpointKind === 'private') emitter.flow('private-link', 1);
   emitter.check('app-connected-intended-endpoint', 'pending');
   emitter.check('app-connected-intended-endpoint', 'pass', connectionEndpointKind ?? 'unknown');
 
@@ -127,6 +145,7 @@ const main = async (): Promise<void> => {
   let burstUntilMs = 0;
   let planReady = false;
   let cumulativeFailed = 0;
+  let currentTidbNodeCount = Number(process.env.TIDB_NODE_COUNT ?? 1);
 
   onControl((id) => {
     if (id === 'run-load-burst') {
@@ -134,9 +153,9 @@ const main = async (): Promise<void> => {
       emitter.log('info', 'load burst started', 'app-deployment');
     }
     if (id === 'plan-scale') {
-      const scaleCount = Number(process.env.SCALE_TIKV_NODE_COUNT ?? 5);
+      const scaleCount = Number(process.env.SCALE_TIDB_NODE_COUNT ?? 2);
       void spawnTerraform({
-        args: ['plan', '-json', '-out=scale.tfplan', `-var=tikv_node_count=${scaleCount}`],
+        args: ['plan', '-json', '-out=scale.tfplan', `-var=tidb_node_count=${scaleCount}`],
         cwd: TERRAFORM_DIR,
         onLine: handleTerraformLine,
       }).then(() => {
@@ -149,6 +168,8 @@ const main = async (): Promise<void> => {
         args: ['apply', '-json', 'scale.tfplan'],
         cwd: TERRAFORM_DIR,
         onLine: handleTerraformLine,
+      }).then(() => {
+        currentTidbNodeCount = Number(process.env.SCALE_TIDB_NODE_COUNT ?? 2);
       });
     }
   });
@@ -175,9 +196,11 @@ const main = async (): Promise<void> => {
           ec2NodeUsdHr: Number(process.env.PRICE_EC2_NODE_USD_HR ?? 0),
           ec2NodeCount: Number(process.env.EKS_NODE_DESIRED_SIZE ?? 2),
           natGatewayUsdHr: Number(process.env.PRICE_NAT_GATEWAY_USD_HR ?? 0),
-          natGatewayCount: 1,
+          natGatewayCount: 0,
+          vpcEndpointUsdHr: Number(process.env.PRICE_VPC_ENDPOINT_USD_HR ?? 0),
+          vpcEndpointCount: connectionEndpointKind === 'private' ? 1 : 0,
           tidbNodeUsdHr: Number(process.env.PRICE_TIDB_TIDB_NODE_USD_HR ?? 0),
-          tidbNodeCount: Number(process.env.TIDB_NODE_COUNT ?? 1),
+          tidbNodeCount: currentTidbNodeCount,
           tikvNodeUsdHr: Number(process.env.PRICE_TIDB_TIKV_NODE_USD_HR ?? 0),
           tikvNodeCount: Number(process.env.TIKV_NODE_COUNT ?? 3),
         }),
@@ -187,12 +210,14 @@ const main = async (): Promise<void> => {
 
   emitter.phase('scale');
   const errorsBeforeScale = cumulativeFailed;
-  emitter.node('tidb-cluster', 'busy', 'scaling tikv node count');
+  const scaleTidbNodeCount = Number(process.env.SCALE_TIDB_NODE_COUNT ?? 2);
+  emitter.node('tidb-cluster', 'busy', `scaling tidb node count to ${scaleTidbNodeCount}`);
   await spawnTerraform({
-    args: ['apply', '-json', '-auto-approve', `-var=tikv_node_count=${process.env.SCALE_TIKV_NODE_COUNT ?? 5}`],
+    args: ['apply', '-json', '-auto-approve', `-var=tidb_node_count=${scaleTidbNodeCount}`],
     cwd: TERRAFORM_DIR,
     onLine: handleTerraformLine,
   });
+  currentTidbNodeCount = scaleTidbNodeCount;
   emitter.node('tidb-cluster', 'healthy', 'scale complete');
 
   emitter.phase('verify');
@@ -202,6 +227,7 @@ const main = async (): Promise<void> => {
   emitter.check('zero-errors-during-scale', errorsDuringScale === 0 ? 'pass' : 'fail', String(errorsDuringScale));
 
   emitter.phase('teardown');
+  portForward.stop();
   emitter.log('info', 'run terraform -chdir=infra/terraform destroy -auto-approve to tear down');
 };
 

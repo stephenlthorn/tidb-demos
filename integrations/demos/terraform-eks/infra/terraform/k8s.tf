@@ -58,6 +58,13 @@ resource "kubernetes_service_v1" "app" {
       port        = 80
       target_port = 8080
     }
-    type = "LoadBalancer"
+    # ClusterIP, not LoadBalancer: a LoadBalancer Service's ELB and its ENIs
+    # are provisioned by the AWS cloud-controller-manager, not by
+    # Terraform, so they never show up in terraform state and can block
+    # `terraform destroy` from deleting the VPC's subnets/security groups
+    # (the classic "DependencyViolation" failure). The runner reaches this
+    # Service with `kubectl port-forward` instead (see
+    # runner/src/port-forward.ts), which needs no AWS-side resource at all.
+    type = "ClusterIP"
   }
 }
