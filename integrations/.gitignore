@@ -9,4 +9,6 @@ packages/ui/public/data/
 *.tfstate
 *.tfstate.*
 .terraform/
+*.tfvars
+*.tfvars.json
 *.egg-info/
