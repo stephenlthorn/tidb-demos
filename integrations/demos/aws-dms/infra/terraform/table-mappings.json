@@ -14,7 +14,7 @@
       "rule-target": "schema",
       "object-locator": { "schema-name": "public" },
       "rule-action": "rename",
-      "value": "lab"
+      "value": "lab_01"
     }
   ]
 }

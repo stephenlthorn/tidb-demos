@@ -100,6 +100,11 @@ variable "tidb_password" {
   sensitive   = true
 }
 
+variable "tidb_database" {
+  description = "TiDB Cloud Starter database name this demo's DMS target endpoint connects to, and the schema name table-mappings.json renames public into. Written into demos/aws-dms/.env as TIDB_DATABASE by the tidbcloud-starter module (this shared cluster gives each demo its own database, so this is not the same value as aurora_database_name)."
+  type        = string
+}
+
 variable "create_dms_service_roles" {
   description = "Create the account-wide dms-vpc-role and dms-cloudwatch-logs-role. Set false when the account already has them, so destroy never removes roles other workloads use."
   type        = bool

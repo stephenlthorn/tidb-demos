@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readTotalAsOf } from '../src/tidbAdapters';
+import { readMaxOrderSequence, readTotalAsOf } from '../src/tidbAdapters';
 
 type RecordedCall = { readonly method: 'execute' | 'query'; readonly sql: string };
 
@@ -86,5 +86,35 @@ describe('readTotalAsOf with connections acquired from a pool', () => {
     expect(tikvConnection.calls.map((call) => call.method)).toEqual(['execute', 'execute', 'query']);
     expect(tiflashConnection.calls.map((call) => call.method)).toEqual(['execute', 'execute', 'query']);
     expect(pool.poolLevelCalls).toEqual([]);
+  });
+});
+
+describe('readMaxOrderSequence', () => {
+  const createFakePool = (rows: readonly { readonly maxSequence: number }[]) => {
+    const calls: string[] = [];
+    return {
+      calls,
+      query: async (sql: string): Promise<readonly [unknown, unknown]> => {
+        calls.push(sql);
+        return [rows, []];
+      },
+    };
+  };
+
+  it('reads the highest existing sequence for a given order id prefix, so a resumed run does not collide with seeded rows', async () => {
+    const pool = createFakePool([{ maxSequence: 2000 }]);
+
+    const result = await readMaxOrderSequence(pool, 'ord-');
+
+    expect(result).toBe(2000);
+    expect(pool.calls[0]).toContain("LIKE 'ord-%'");
+  });
+
+  it('returns 0 when no rows match the prefix', async () => {
+    const pool = createFakePool([]);
+
+    const result = await readMaxOrderSequence(pool, 'hb-');
+
+    expect(result).toBe(0);
   });
 });

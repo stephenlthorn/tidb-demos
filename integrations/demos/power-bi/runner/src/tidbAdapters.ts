@@ -66,6 +66,19 @@ export const setTiflashReplica = async (pool: Pool, replicaCount: number): Promi
   await pool.query(`ALTER TABLE orders SET TIFLASH REPLICA ${replicaCount}`);
 };
 
+const MaxSequenceRowsSchema = z.array(z.object({ maxSequence: z.coerce.number() }));
+
+export type OrderSequencePool = {
+  query(sql: string): Promise<readonly [unknown, unknown]>;
+};
+
+export const readMaxOrderSequence = async (pool: OrderSequencePool, prefix: string): Promise<number> => {
+  const [rows] = await pool.query(
+    `SELECT COALESCE(MAX(CAST(SUBSTRING(order_id, ${prefix.length + 1}) AS UNSIGNED)), 0) AS maxSequence FROM orders WHERE order_id LIKE '${prefix}%'`,
+  );
+  return MaxSequenceRowsSchema.parse(rows)[0]?.maxSequence ?? 0;
+};
+
 const TotalRowsSchema = z.array(z.object({ total: z.coerce.number() }));
 
 const snapshotLiteral = (snapshot: Date): string => {

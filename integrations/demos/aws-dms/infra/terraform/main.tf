@@ -185,6 +185,7 @@ resource "aws_dms_endpoint" "source_aurora" {
   username      = var.aurora_master_username
   password      = var.aurora_master_password
   database_name = var.aurora_database_name
+  ssl_mode      = "require"
 
   tags = { Project = "tidb-integration-lab", Demo = "aws-dms" }
 }
@@ -205,7 +206,7 @@ resource "aws_dms_endpoint" "target_tidb" {
   port                        = var.tidb_port
   username                    = var.tidb_user
   password                    = var.tidb_password
-  database_name               = var.aurora_database_name
+  database_name               = var.tidb_database
   ssl_mode                    = "verify-full"
   certificate_arn             = aws_dms_certificate.tidb_ca.certificate_arn
   extra_connection_attributes = "Initstmt=SET FOREIGN_KEY_CHECKS=0;"
@@ -232,6 +233,9 @@ resource "aws_dms_replication_task" "this" {
     }
     Logging = {
       EnableLogging = true
+    }
+    FullLoadSettings = {
+      TargetTablePrepMode = "DO_NOTHING"
     }
   })
 

@@ -6,6 +6,7 @@ import { type RoutingEngine } from './src/routing';
 import {
   insertOrder,
   probeHeartbeatVisible,
+  readMaxOrderSequence,
   readTiflashReplicaStatus,
   readTotalAsOf,
   runDashboardQuerySet,
@@ -284,6 +285,9 @@ const shutdown = (): void => {
 };
 process.once('SIGINT', shutdown);
 process.once('SIGTERM', shutdown);
+
+state.orderSequence = await readMaxOrderSequence(pool, 'ord-');
+state.heartbeatSequence = await readMaxOrderSequence(pool, 'hb-');
 
 emitter.phase('intro');
 onPhaseEnter('intro');
