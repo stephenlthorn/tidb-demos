@@ -1,0 +1,20 @@
+{
+  "rules": [
+    {
+      "rule-type": "selection",
+      "rule-id": "1",
+      "rule-name": "select-lab-schema",
+      "object-locator": { "schema-name": "public", "table-name": "%" },
+      "rule-action": "include"
+    },
+    {
+      "rule-type": "transformation",
+      "rule-id": "2",
+      "rule-name": "rename-schema-to-lab",
+      "rule-target": "schema",
+      "object-locator": { "schema-name": "public" },
+      "rule-action": "rename",
+      "value": "lab"
+    }
+  ]
+}
