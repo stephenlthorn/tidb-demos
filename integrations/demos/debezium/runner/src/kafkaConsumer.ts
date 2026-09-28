@@ -13,6 +13,7 @@ export const createSharedConsumer = (options: {
 }): SharedConsumer => {
   const kafka = new KafkaJS.Kafka({
     kafkaJS: { brokers: [...options.brokers], logLevel: KafkaJS.logLevel.NOTHING },
+    'topic.metadata.refresh.interval.ms': 5000,
   });
   const consumer = kafka.consumer({ kafkaJS: { groupId: options.groupId } });
   let buffer: string[] = [];
