@@ -11,6 +11,7 @@ import {
   startTikvStore,
   stopTikvStore,
   type FaultHandle,
+  type TikvPlaygroundHandle,
 } from '@lab/demo-prometheus-grafana/faults';
 import { connectionsQuery, meanLatencyQuery, qpsQuery, tikvCpuQuery } from './src/datadogQuery';
 import { createMetricsClient } from './src/metricsClient';
@@ -52,6 +53,7 @@ const main = async (): Promise<void> => {
   let faultInjectedAtMs: number | undefined;
   let detectionSettled = true;
   let activeFaultHandles: readonly FaultHandle[] = [];
+  let stoppedTikv: TikvPlaygroundHandle | undefined;
   let instrumentedQueryCount = 0;
   let previousCompletedQueries: number | undefined;
 
@@ -187,13 +189,16 @@ const main = async (): Promise<void> => {
         'connection-surge',
         runConnectionSurge(async () => {
           const connection = await pool.getConnection();
-          return { end: async () => connection.release() };
+          return { end: async () => connection.destroy() };
         }),
       );
     }
     if (id === 'inject-store-outage') {
       inject('store-outage', undefined);
-      void stopTikvStore().then(() => emitter.node('tikv', 'down'));
+      void stopTikvStore().then((handle) => {
+        stoppedTikv = handle;
+        emitter.node('tikv', 'down');
+      });
     }
     if (id === 'clear-faults') {
       void clearAllFaults(activeFaultHandles).then(async () => {
@@ -201,8 +206,12 @@ const main = async (): Promise<void> => {
         activeFault = undefined;
         activeMonitorId = undefined;
         faultInjectedAtMs = undefined;
-        await startTikvStore();
-        emitter.node('tikv', 'healthy');
+        if (stoppedTikv !== undefined) {
+          const handle = stoppedTikv;
+          stoppedTikv = undefined;
+          await startTikvStore(handle);
+          emitter.node('tikv', 'healthy');
+        }
         emitter.phase('recovery');
       });
     }
