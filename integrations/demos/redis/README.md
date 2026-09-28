@@ -61,12 +61,20 @@ see the TiDB Cloud pricing page at pingcap.com for current numbers; none are har
 
 ## Verified facts used by this demo
 
-See section 4 of `docs/plans/04-redis.md` for the full list with sources. Two facts are still
-marked UNVERIFIED there pending a live run against `tiup playground` (this wave built and
-typechecked every adapter and the runner without starting any live system, per its work packet):
-the exact `EXPLAIN` operator name for the point-get query, and the exact prepared-plan-cache
-system variable name and value. Run the manual verification steps in section 4 and Task 8 of the
-implementation plan before recording the featured trace, and paste the real observed values here.
+See section 4 of `docs/plans/04-redis.md` for the full list with sources. All facts were confirmed
+against a live `tiup playground` v8.5.8 run before the featured trace was recorded:
+
+- `EXPLAIN SELECT payload, version, written_at_ms FROM cache_demo_rows WHERE id = 1;` names the
+  operator `Point_Get_1` (`table:cache_demo_rows`, `handle:1`).
+- The prepared-plan-cache variable is `tidb_enable_prepared_plan_cache`, default `ON`. A prepared
+  point-get executed twice shows `SELECT @@last_plan_from_cache` return `1` on the second run,
+  confirming the plan is served from the cache.
+- A real `cache_demo_rows` row-change message from this demo's own TiCDC changefeed has row values
+  under `data` as a one-element array of string-keyed columns, matching
+  `fixtures/sample-canal-json-message.json`. The TiDB extension field (`_tidb`, including
+  `commitTs`) only appears when the changefeed's sink-uri sets `enable-tidb-extension=true` - see
+  the "Build notes" at the end of `docs/plans/04-redis.md` for a real bug this caused and how it
+  was fixed.
 
 This wave also captured and parsed a second, real TiCDC v8.5.8 canal-json message from an
 unrelated table (`payments`) to prove the parser (`runner/src/canal.ts`) handles the genuine

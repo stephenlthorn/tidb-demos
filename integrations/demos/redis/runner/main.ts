@@ -14,6 +14,7 @@ import {
   nextCheckState,
 } from './src/checks';
 import { computeOffsetDelta, sumHighWatermarks } from './src/topic-offsets';
+import { withTimeout } from './src/shutdown';
 
 const SAMPLE_TICK_MS = 1_000;
 const SAMPLE_SIZE = 20;
@@ -224,10 +225,12 @@ const main = async (): Promise<void> => {
     invalidatorHandle.drainLoop,
   ]);
 
-  await invalidatorHandle.stop();
-  await topicAdmin.disconnect();
-  await redis.quit();
-  await pool.end();
+  const SHUTDOWN_STEP_TIMEOUT_MS = 5_000;
+  await withTimeout(invalidatorHandle.stop(), SHUTDOWN_STEP_TIMEOUT_MS, undefined);
+  await withTimeout(topicAdmin.disconnect(), SHUTDOWN_STEP_TIMEOUT_MS, undefined);
+  await withTimeout(redis.quit(), SHUTDOWN_STEP_TIMEOUT_MS, undefined);
+  await withTimeout(pool.end(), SHUTDOWN_STEP_TIMEOUT_MS, undefined);
+  process.exit(0);
 };
 
 main().catch((error) => {
