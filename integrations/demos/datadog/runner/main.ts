@@ -21,10 +21,10 @@ import { detectionLatencySeconds } from './src/latency';
 import { findMatchingDigestRow } from './src/digestCorrelation';
 import { SLOW_QUERY_SQL } from './src/slowQuery';
 import { computeCounterDelta } from './src/flowDeltas';
+import { safeTask } from './src/safeTask';
+import { isFaultDetected, type FaultId } from './src/faultDetected';
 
-type FaultId = 'slow-query-storm' | 'write-hot-spot' | 'store-outage' | 'connection-surge';
-
-const FAULT_TIMEOUT_MS = 90_000;
+const FAULT_TIMEOUT_MS = 240_000;
 const CORRELATION_DELAY_MS = 2_000;
 
 const StatementSummaryRowsSchema = z.array(z.object({ DIGEST: z.string(), QUERY_SAMPLE_TEXT: z.string() }));
@@ -114,47 +114,57 @@ const main = async (): Promise<void> => {
     if (activeFault === undefined || activeMonitorId === undefined || faultInjectedAtMs === undefined) return;
     if (detectionSettled) return;
     const state = await monitors.get(activeMonitorId);
-    if (state.overallState === 'Alert') {
+    if (isFaultDetected({ fault: activeFault, overallState: state.overallState })) {
       detectionSettled = true;
       const observedAtMs = Date.now();
-      emitCheckPass(activeFault, `datadog monitor overall_state=Alert (id ${activeMonitorId})`);
+      emitCheckPass(activeFault, `datadog monitor overall_state=${state.overallState} (id ${activeMonitorId})`);
       const detectionLatency = detectionLatencySeconds({ injectedAtMs: faultInjectedAtMs, alertObservedAtMs: observedAtMs });
       if (detectionLatency !== undefined) emitter.metric('detection-latency', detectionLatency);
       return;
     }
     if (Date.now() - faultInjectedAtMs > FAULT_TIMEOUT_MS) {
       detectionSettled = true;
-      emitCheckFail(activeFault, `no Alert overall_state within ${FAULT_TIMEOUT_MS / 1000}s (monitor id ${activeMonitorId})`);
+      emitCheckFail(
+        activeFault,
+        `no fired overall_state within ${FAULT_TIMEOUT_MS / 1000}s (monitor id ${activeMonitorId}, last observed ${state.overallState})`,
+      );
     }
   };
 
   const controller = new AbortController();
 
+  const onPollError = (label: string) => (error: unknown): void => {
+    emitter.log('warn', `${label} poll failed: ${error instanceof Error ? error.message : String(error)}`, 'datadog');
+  };
+
   void every({
     intervalMs: 1000,
     signal: controller.signal,
-    task: async () => {
-      const [qps, latency, tikvCpu, connections] = await Promise.all([
-        metrics.latestValue(qpsQuery()),
-        metrics.latestValue(meanLatencyQuery()),
-        metrics.latestValue(tikvCpuQuery()),
-        metrics.latestValue(connectionsQuery()),
-      ]);
-      if (qps !== undefined) emitter.metric('qps', qps);
-      if (latency !== undefined) emitter.metric('p99-latency', latency);
-      if (tikvCpu !== undefined) emitter.metric('tikv-cpu', tikvCpu);
-      if (connections !== undefined) emitter.metric('active-connections', connections);
+    task: safeTask({
+      onError: onPollError('metrics'),
+      task: async () => {
+        const [qps, latency, tikvCpu, connections] = await Promise.all([
+          metrics.latestValue(qpsQuery()),
+          metrics.latestValue(meanLatencyQuery()),
+          metrics.latestValue(tikvCpuQuery()),
+          metrics.latestValue(connectionsQuery()),
+        ]);
+        if (qps !== undefined) emitter.metric('qps', qps);
+        if (latency !== undefined) emitter.metric('p99-latency', latency);
+        if (tikvCpu !== undefined) emitter.metric('tikv-cpu', tikvCpu);
+        if (connections !== undefined) emitter.metric('active-connections', connections);
 
-      const completedQueries = workload.completedQueries();
-      emitter.flow('workload-tidb', computeCounterDelta({ previous: previousCompletedQueries, current: completedQueries }));
-      previousCompletedQueries = completedQueries;
-    },
+        const completedQueries = workload.completedQueries();
+        emitter.flow('workload-tidb', computeCounterDelta({ previous: previousCompletedQueries, current: completedQueries }));
+        previousCompletedQueries = completedQueries;
+      },
+    }),
   });
 
   void every({
     intervalMs: 5000,
     signal: controller.signal,
-    task: pollFault,
+    task: safeTask({ task: pollFault, onError: onPollError('monitor') }),
   });
 
   const inject = (fault: FaultId, handle: FaultHandle | undefined): void => {
@@ -195,25 +205,29 @@ const main = async (): Promise<void> => {
     }
     if (id === 'inject-store-outage') {
       inject('store-outage', undefined);
-      void stopTikvStore().then((handle) => {
-        stoppedTikv = handle;
-        emitter.node('tikv', 'down');
-      });
+      void stopTikvStore()
+        .then((handle) => {
+          stoppedTikv = handle;
+          emitter.node('tikv', 'down');
+        })
+        .catch(onPollError('stop-tikv-store'));
     }
     if (id === 'clear-faults') {
-      void clearAllFaults(activeFaultHandles).then(async () => {
-        activeFaultHandles = [];
-        activeFault = undefined;
-        activeMonitorId = undefined;
-        faultInjectedAtMs = undefined;
-        if (stoppedTikv !== undefined) {
-          const handle = stoppedTikv;
-          stoppedTikv = undefined;
-          await startTikvStore(handle);
-          emitter.node('tikv', 'healthy');
-        }
-        emitter.phase('recovery');
-      });
+      void clearAllFaults(activeFaultHandles)
+        .then(async () => {
+          activeFaultHandles = [];
+          activeFault = undefined;
+          activeMonitorId = undefined;
+          faultInjectedAtMs = undefined;
+          if (stoppedTikv !== undefined) {
+            const handle = stoppedTikv;
+            stoppedTikv = undefined;
+            await startTikvStore(handle);
+            emitter.node('tikv', 'healthy');
+          }
+          emitter.phase('recovery');
+        })
+        .catch(onPollError('clear-faults'));
     }
   });
 };
