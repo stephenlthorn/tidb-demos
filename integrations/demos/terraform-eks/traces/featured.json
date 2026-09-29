@@ -1,0 +1,1449 @@
+{
+  "schemaVersion": 1,
+  "manifest": {
+    "id": "terraform-eks",
+    "number": 10,
+    "title": "Terraform + EKS",
+    "tagline": "Provision TiDB Cloud, AWS EKS, and an app in one terraform apply",
+    "integrations": [
+      "terraform",
+      "aws-eks",
+      "tidb-cloud"
+    ],
+    "pattern": "Platform teams that provision everything with Terraform on AWS and EKS, and want to see a database fit their IaC workflow, including how dedicated or bring-your-own-cloud style deployments are scripted.",
+    "publish": true,
+    "runner": {
+      "command": [
+        "node",
+        "--import",
+        "tsx",
+        "runner/main.ts"
+      ],
+      "cwd": "."
+    },
+    "nodes": [
+      {
+        "id": "terraform-cli",
+        "label": "terraform apply",
+        "kind": "client",
+        "x": 10,
+        "y": 45
+      },
+      {
+        "id": "aws-vpc",
+        "label": "AWS VPC",
+        "kind": "cloud",
+        "x": 30,
+        "y": 20
+      },
+      {
+        "id": "eks-cluster",
+        "label": "EKS Cluster",
+        "kind": "cloud",
+        "x": 50,
+        "y": 20
+      },
+      {
+        "id": "app-deployment",
+        "label": "App on EKS",
+        "kind": "service",
+        "x": 70,
+        "y": 20
+      },
+      {
+        "id": "tidb-cluster",
+        "label": "TiDB Cloud Dedicated",
+        "kind": "tidb",
+        "x": 50,
+        "y": 70
+      },
+      {
+        "id": "private-endpoint",
+        "label": "Private Endpoint",
+        "kind": "identity",
+        "x": 70,
+        "y": 70
+      }
+    ],
+    "edges": [
+      {
+        "id": "apply-vpc",
+        "from": "terraform-cli",
+        "to": "aws-vpc",
+        "label": "resources applied",
+        "unit": "count"
+      },
+      {
+        "id": "apply-eks",
+        "from": "aws-vpc",
+        "to": "eks-cluster",
+        "label": "resources applied",
+        "unit": "count"
+      },
+      {
+        "id": "apply-tidb",
+        "from": "terraform-cli",
+        "to": "tidb-cluster",
+        "label": "resources applied",
+        "unit": "count"
+      },
+      {
+        "id": "deploy-app",
+        "from": "eks-cluster",
+        "to": "app-deployment",
+        "label": "pods scheduled",
+        "unit": "count"
+      },
+      {
+        "id": "app-query",
+        "from": "app-deployment",
+        "to": "tidb-cluster",
+        "label": "queries",
+        "unit": "rows/s"
+      },
+      {
+        "id": "private-link",
+        "from": "app-deployment",
+        "to": "private-endpoint",
+        "label": "connections",
+        "unit": "count"
+      }
+    ],
+    "metrics": [
+      {
+        "id": "resources-planned",
+        "label": "Resources planned",
+        "unit": "count",
+        "display": "tile",
+        "better": "neutral",
+        "howMeasured": "Count of planned_change messages from terraform plan -json"
+      },
+      {
+        "id": "resources-created",
+        "label": "Resources created",
+        "unit": "count",
+        "display": "tile",
+        "better": "higher",
+        "howMeasured": "Count of distinct apply_complete hook.resource.addr values from terraform apply -json"
+      },
+      {
+        "id": "resource-apply-seconds",
+        "label": "Per-resource apply time",
+        "unit": "s",
+        "display": "series",
+        "better": "lower",
+        "howMeasured": "hook.elapsed_seconds from each resource's apply_complete message"
+      },
+      {
+        "id": "total-apply-seconds",
+        "label": "Total apply time",
+        "unit": "s",
+        "display": "tile",
+        "better": "lower",
+        "howMeasured": "Wall-clock time from spawning terraform apply to process exit 0, via runner-kit timed()"
+      },
+      {
+        "id": "app-qps",
+        "label": "App query rate",
+        "unit": "rows/s",
+        "display": "both",
+        "better": "higher",
+        "howMeasured": "Load generator's completed-request count per 1000ms tick against the app /work endpoint"
+      },
+      {
+        "id": "app-p99-ms",
+        "label": "App p99 latency",
+        "unit": "ms",
+        "display": "both",
+        "better": "lower",
+        "howMeasured": "Load generator's per-request latency sample window, summarize() p99 each tick"
+      },
+      {
+        "id": "errors-during-scale",
+        "label": "Errors during scale change",
+        "unit": "count",
+        "display": "tile",
+        "better": "lower",
+        "howMeasured": "Load generator's failed-request counter delta across the scale-change window"
+      },
+      {
+        "id": "estimated-hourly-cost",
+        "label": "Estimated hourly cost",
+        "unit": "USD",
+        "display": "tile",
+        "better": "lower",
+        "howMeasured": "Sum of node counts times .env PRICE_* variables, recomputed every tick, never hardcoded"
+      }
+    ],
+    "phases": [
+      {
+        "id": "plan",
+        "label": "Plan",
+        "narration": "This is one Terraform config: a VPC, an EKS cluster, a TiDB Cloud Dedicated cluster, and the app that connects them. Let's see the plan."
+      },
+      {
+        "id": "apply-infra",
+        "label": "Apply: VPC + EKS + TiDB",
+        "narration": "Terraform is creating all of this in one run. The VPC and the TiDB Cloud cluster don't depend on each other, so they provision in parallel; EKS takes the longest because AWS has to stand up a real control plane."
+      },
+      {
+        "id": "connect",
+        "label": "Connect app to TiDB",
+        "narration": "The app never touches TiDB Cloud credentials by hand. Terraform wrote the connection secret straight from its own output."
+      },
+      {
+        "id": "load",
+        "label": "Load burst",
+        "narration": "Now let's put traffic through it and watch QPS and latency."
+      },
+      {
+        "id": "scale",
+        "label": "Scale TiDB capacity",
+        "narration": "We're changing TiDB's node count from 1 to 2, the smallest possible scale-out. Terraform shows this as an update, not a replace, because the provider marks node count as changeable in place."
+      },
+      {
+        "id": "verify",
+        "label": "Verify zero downtime",
+        "narration": "While that scale-out ran, here's the exact request error count the load generator logged. Not an assumption, a count."
+      },
+      {
+        "id": "teardown",
+        "label": "Teardown",
+        "narration": "And here's the exact command and the exact check that nothing is left running or billing."
+      }
+    ],
+    "checks": [
+      {
+        "id": "all-resources-created",
+        "label": "All planned resources created",
+        "description": "change_summary reports remove: 0 and add equal to the planned_change count; every apply_complete resource appears exactly once"
+      },
+      {
+        "id": "app-connected-intended-endpoint",
+        "label": "App connected over the intended endpoint",
+        "description": "App's tidb_connection_target metric label matches the Terraform output connection_endpoint_kind"
+      },
+      {
+        "id": "zero-errors-during-scale",
+        "label": "Zero failed requests during scale change",
+        "description": "Load generator error-count delta across the scale window, reported honestly even if nonzero"
+      },
+      {
+        "id": "destroy-leaves-zero-resources",
+        "label": "Destroy leaves zero resources in state",
+        "description": "terraform show -json after destroy reports no root module resources"
+      }
+    ],
+    "controls": [
+      {
+        "id": "plan-scale",
+        "label": "Plan capacity change",
+        "description": "Runs terraform plan -json -out=scale.tfplan with a higher tidb_node_setting.node_count"
+      },
+      {
+        "id": "apply-scale",
+        "label": "Apply capacity change",
+        "description": "Runs terraform apply -json scale.tfplan"
+      },
+      {
+        "id": "run-load-burst",
+        "label": "Run load burst",
+        "description": "Starts a 60-second higher-rate burst against the app Service on top of steady background load"
+      }
+    ]
+  },
+  "recordedAt": "2026-09-29T14:16:42.858Z",
+  "environment": {
+    "tidb": "TiDB Cloud Dedicated v8.5.8",
+    "components": {
+      "terraform": "1.16.4",
+      "aws_provider": "hashicorp/aws 6.66.0",
+      "kubernetes_provider": "hashicorp/kubernetes 3.2.1",
+      "tidbcloud_provider": "tidbcloud/tidbcloud 0.4.11",
+      "eks": "1.33"
+    },
+    "notes": "AWS us-west-2, EKS 1.33, tidbcloud provider 0.4.11, connection_mode public_tls (PrivateLink service stayed CREATING past the session budget), recorded 2026-09-29"
+  },
+  "durationMs": 225686,
+  "events": [
+    {
+      "type": "node",
+      "t": 0,
+      "node": "terraform-cli",
+      "status": "idle"
+    },
+    {
+      "type": "node",
+      "t": 1,
+      "node": "aws-vpc",
+      "status": "idle"
+    },
+    {
+      "type": "node",
+      "t": 1,
+      "node": "eks-cluster",
+      "status": "idle"
+    },
+    {
+      "type": "node",
+      "t": 1,
+      "node": "app-deployment",
+      "status": "idle"
+    },
+    {
+      "type": "node",
+      "t": 1,
+      "node": "tidb-cluster",
+      "status": "idle"
+    },
+    {
+      "type": "node",
+      "t": 1,
+      "node": "private-endpoint",
+      "status": "idle"
+    },
+    {
+      "type": "phase",
+      "t": 1,
+      "phase": "plan"
+    },
+    {
+      "type": "node",
+      "t": 1,
+      "node": "terraform-cli",
+      "status": "busy",
+      "note": "terraform plan -json"
+    },
+    {
+      "type": "check",
+      "t": 1,
+      "id": "all-resources-created",
+      "status": "pending"
+    },
+    {
+      "type": "metric",
+      "t": 4017,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 4017,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 4018,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 4018,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 4110,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 4340,
+      "id": "resource-apply-seconds",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 4340,
+      "id": "resource-apply-seconds",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 4438,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 7787,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 7858,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 8018,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 8018,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 8019,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 8136,
+      "id": "resource-apply-seconds",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 9951,
+      "id": "resources-planned",
+      "value": 0
+    },
+    {
+      "type": "phase",
+      "t": 9951,
+      "phase": "apply-infra"
+    },
+    {
+      "type": "node",
+      "t": 9951,
+      "node": "terraform-cli",
+      "status": "busy",
+      "note": "terraform apply -json -auto-approve"
+    },
+    {
+      "type": "metric",
+      "t": 12753,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 12753,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 12753,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 12753,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 12843,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 12933,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 12999,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 13044,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 16114,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 16180,
+      "id": "resource-apply-seconds",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 16198,
+      "id": "resource-apply-seconds",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 16211,
+      "id": "resource-apply-seconds",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 16212,
+      "id": "resource-apply-seconds",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 16400,
+      "id": "resource-apply-seconds",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 18976,
+      "id": "resources-created",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 18976,
+      "id": "all-resources-created",
+      "status": "fail",
+      "observed": "add=0 remove=0 planned=0 distinctDone=14"
+    },
+    {
+      "type": "metric",
+      "t": 18985,
+      "id": "total-apply-seconds",
+      "value": 9.034
+    },
+    {
+      "type": "node",
+      "t": 18985,
+      "node": "terraform-cli",
+      "status": "done",
+      "note": "initial apply complete"
+    },
+    {
+      "type": "phase",
+      "t": 21749,
+      "phase": "connect"
+    },
+    {
+      "type": "node",
+      "t": 21749,
+      "node": "private-endpoint",
+      "status": "idle"
+    },
+    {
+      "type": "check",
+      "t": 21749,
+      "id": "app-connected-intended-endpoint",
+      "status": "pending"
+    },
+    {
+      "type": "check",
+      "t": 21749,
+      "id": "app-connected-intended-endpoint",
+      "status": "pass",
+      "observed": "public_tls"
+    },
+    {
+      "type": "phase",
+      "t": 21749,
+      "phase": "load"
+    },
+    {
+      "type": "metric",
+      "t": 22179,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 22180,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 22180,
+      "id": "app-p99-ms",
+      "value": 423.921875
+    },
+    {
+      "type": "metric",
+      "t": 22180,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 22926,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 22926,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 22926,
+      "id": "app-p99-ms",
+      "value": 175.5132909999993
+    },
+    {
+      "type": "metric",
+      "t": 22926,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 23930,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 23930,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 23930,
+      "id": "app-p99-ms",
+      "value": 179.29287499999919
+    },
+    {
+      "type": "metric",
+      "t": 23930,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 24901,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 24901,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 24901,
+      "id": "app-p99-ms",
+      "value": 148.92725000000064
+    },
+    {
+      "type": "metric",
+      "t": 24901,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 26005,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 26005,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 26005,
+      "id": "app-p99-ms",
+      "value": 252.59145799999897
+    },
+    {
+      "type": "metric",
+      "t": 26005,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 27057,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 27058,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 27058,
+      "id": "app-p99-ms",
+      "value": 304.5544169999994
+    },
+    {
+      "type": "metric",
+      "t": 27058,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 28026,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 28026,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 28026,
+      "id": "app-p99-ms",
+      "value": 273.23854199999914
+    },
+    {
+      "type": "metric",
+      "t": 28026,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 29066,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 29066,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 29066,
+      "id": "app-p99-ms",
+      "value": 313.00554099999863
+    },
+    {
+      "type": "metric",
+      "t": 29066,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 30030,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 30030,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 30030,
+      "id": "app-p99-ms",
+      "value": 276.8106669999979
+    },
+    {
+      "type": "metric",
+      "t": 30030,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 31078,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 31078,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 31078,
+      "id": "app-p99-ms",
+      "value": 324.63058300000193
+    },
+    {
+      "type": "metric",
+      "t": 31078,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 31926,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 31926,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 31926,
+      "id": "app-p99-ms",
+      "value": 172.53295900000012
+    },
+    {
+      "type": "metric",
+      "t": 31926,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 32866,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 32866,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 32866,
+      "id": "app-p99-ms",
+      "value": 113.92283400000451
+    },
+    {
+      "type": "metric",
+      "t": 32866,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 33929,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 33929,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 33929,
+      "id": "app-p99-ms",
+      "value": 175.68133300000045
+    },
+    {
+      "type": "metric",
+      "t": 33930,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 34890,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 34891,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 34891,
+      "id": "app-p99-ms",
+      "value": 136.81124999999884
+    },
+    {
+      "type": "metric",
+      "t": 34891,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 35910,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 35910,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 35910,
+      "id": "app-p99-ms",
+      "value": 155.33887500000128
+    },
+    {
+      "type": "metric",
+      "t": 35910,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 36959,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 36959,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 36959,
+      "id": "app-p99-ms",
+      "value": 203.69983400000638
+    },
+    {
+      "type": "metric",
+      "t": 36959,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 38009,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 38009,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 38009,
+      "id": "app-p99-ms",
+      "value": 253.1558340000047
+    },
+    {
+      "type": "metric",
+      "t": 38010,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 39029,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 39029,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 39029,
+      "id": "app-p99-ms",
+      "value": 272.6350420000017
+    },
+    {
+      "type": "metric",
+      "t": 39029,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 40074,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 40075,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 40075,
+      "id": "app-p99-ms",
+      "value": 316.7584169999973
+    },
+    {
+      "type": "metric",
+      "t": 40075,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 41040,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 41040,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 41040,
+      "id": "app-p99-ms",
+      "value": 282.26837499999965
+    },
+    {
+      "type": "metric",
+      "t": 41040,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 41927,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 41927,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 41927,
+      "id": "app-p99-ms",
+      "value": 167.99708299999475
+    },
+    {
+      "type": "metric",
+      "t": 41927,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 42948,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 42948,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 42948,
+      "id": "app-p99-ms",
+      "value": 186.8348330000008
+    },
+    {
+      "type": "metric",
+      "t": 42948,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 43880,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 43880,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 43880,
+      "id": "app-p99-ms",
+      "value": 119.19066700000258
+    },
+    {
+      "type": "metric",
+      "t": 43880,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 44877,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 44877,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 44877,
+      "id": "app-p99-ms",
+      "value": 118.1236659999995
+    },
+    {
+      "type": "metric",
+      "t": 44877,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 45936,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 45936,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 45936,
+      "id": "app-p99-ms",
+      "value": 176.09554199999548
+    },
+    {
+      "type": "metric",
+      "t": 45936,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 46980,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 46980,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 46980,
+      "id": "app-p99-ms",
+      "value": 219.61904199999844
+    },
+    {
+      "type": "metric",
+      "t": 46980,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 48029,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 48029,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 48029,
+      "id": "app-p99-ms",
+      "value": 267.3365829999966
+    },
+    {
+      "type": "metric",
+      "t": 48029,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 49085,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 49085,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 49085,
+      "id": "app-p99-ms",
+      "value": 322.5310830000017
+    },
+    {
+      "type": "metric",
+      "t": 49085,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 49958,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 49958,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 49958,
+      "id": "app-p99-ms",
+      "value": 195.74033300000156
+    },
+    {
+      "type": "metric",
+      "t": 49958,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "metric",
+      "t": 51091,
+      "id": "app-qps",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 51091,
+      "edge": "app-query",
+      "count": 10
+    },
+    {
+      "type": "metric",
+      "t": 51091,
+      "id": "app-p99-ms",
+      "value": 327.6033749999988
+    },
+    {
+      "type": "metric",
+      "t": 51091,
+      "id": "estimated-hourly-cost",
+      "value": 1.9336
+    },
+    {
+      "type": "phase",
+      "t": 51751,
+      "phase": "scale"
+    },
+    {
+      "type": "node",
+      "t": 51751,
+      "node": "tidb-cluster",
+      "status": "busy",
+      "note": "scaling tidb node count to 2"
+    },
+    {
+      "type": "metric",
+      "t": 55343,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 55343,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 55343,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 55343,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 55433,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 55526,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 55721,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 55765,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 58885,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 58971,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 58972,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 59061,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 59061,
+      "id": "resource-apply-seconds",
+      "value": 0
+    },
+    {
+      "type": "metric",
+      "t": 59165,
+      "id": "resource-apply-seconds",
+      "value": 1
+    },
+    {
+      "type": "node",
+      "t": 61248,
+      "node": "tidb-cluster",
+      "status": "busy",
+      "note": "update tidbcloud_dedicated_cluster.this"
+    },
+    {
+      "type": "node",
+      "t": 225600,
+      "node": "tidb-cluster",
+      "status": "healthy",
+      "note": "tidbcloud_dedicated_cluster.this done in 164s"
+    },
+    {
+      "type": "flow",
+      "t": 225600,
+      "edge": "apply-tidb",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 225600,
+      "id": "resource-apply-seconds",
+      "value": 164
+    },
+    {
+      "type": "node",
+      "t": 225685,
+      "node": "tidb-cluster",
+      "status": "healthy",
+      "note": "scale complete"
+    },
+    {
+      "type": "phase",
+      "t": 225685,
+      "phase": "verify"
+    },
+    {
+      "type": "check",
+      "t": 225685,
+      "id": "zero-errors-during-scale",
+      "status": "pending"
+    },
+    {
+      "type": "metric",
+      "t": 225685,
+      "id": "errors-during-scale",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 225685,
+      "id": "zero-errors-during-scale",
+      "status": "pass",
+      "observed": "0"
+    },
+    {
+      "type": "phase",
+      "t": 225685,
+      "phase": "teardown"
+    },
+    {
+      "type": "log",
+      "t": 225686,
+      "level": "info",
+      "msg": "run terraform -chdir=infra/terraform destroy -auto-approve to tear down"
+    }
+  ]
+}

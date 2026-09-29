@@ -57,7 +57,10 @@ variable "tikv_node_count" {
 
 variable "tikv_storage_size_gi" {
   type    = number
-  default = 10
+  # Confirmed live: TiDB Cloud Dedicated rejects a TiKV storage_size_gi
+  # below 200 ("Storage_size_gib(10) of the node_type(tikv) is less than
+  # the minimum size(200)."), so 200 is this demo's real floor, not 10.
+  default = 200
 }
 
 variable "eks_node_desired_size" {

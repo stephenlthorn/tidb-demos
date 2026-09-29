@@ -9,7 +9,23 @@ locals {
 resource "tidbcloud_dedicated_network_container" "this" {
   project_id    = local.tidbcloud_project_id
   region_id     = var.tidbcloud_region_id
-  cidr_notation = "10.90.0.0/16"
+  # TiDB Cloud auto-provisions exactly one network container per
+  # project/region (confirmed live: creating a second one, at any CIDR,
+  # fails with "CIDR already exists"). This CIDR is the one the account's
+  # Thorn-Sandbox project already has for aws-us-west-2, found via the
+  # tidbcloud_dedicated_network_containers list data source and imported
+  # into state rather than created. See the plan's Build notes.
+  cidr_notation = "172.30.24.0/21"
+
+  # The provider's Read() does not populate region_id/cidr_notation after
+  # import (only network_container_id, state, cloud_provider, vpc_id, and
+  # labels come back), and Update() unconditionally errors for this resource
+  # ("Update is not supported for dedicated network container"), so without
+  # ignore_changes here every subsequent plan would show a fictitious diff
+  # that can never actually apply.
+  lifecycle {
+    ignore_changes = [region_id, cidr_notation]
+  }
 }
 
 resource "tidbcloud_dedicated_cluster" "this" {
@@ -44,7 +60,13 @@ resource "tidbcloud_dedicated_cluster" "this" {
     node_spec_key   = var.tikv_node_spec_key
     node_count      = var.tikv_node_count
     storage_size_gi = var.tikv_storage_size_gi
-    storage_type    = "Basic"
+    # Confirmed live: TiDB Cloud rejects storage_type "Basic" (the provider's
+    # own bundled example's value, used for the smaller 2C4G spec) for the
+    # 4C16G spec on aws with the account's current TiDB version, with
+    # "Storage type Basic is not supported in provider aws for node spec
+    # 4C16G and TiDB version v8.5.8." Standard (gp3 data disk + gp3 raft log
+    # disk) is the next tier up and is accepted.
+    storage_type = "Standard"
   }
 
   depends_on = [tidbcloud_dedicated_network_container.this]
