@@ -34,7 +34,6 @@ A collection of TiDB demo repositories showcasing various use cases and applicat
 | 04 | [Redis](integrations/demos/redis/) | TiCDC-driven cache invalidation vs TTLs, with a measured stale read rate | Local | pending |
 | 05 | [Okta](integrations/demos/okta/) | Okta group membership drives TiDB grants, including a revoke | Local + Okta developer org | pending |
 | 06 | [Databricks](integrations/demos/databricks/) | TiDB serves live features while Databricks trains and scores on the same fresh data | Databricks Free Edition + TiDB Cloud Starter | pending |
-| 07 | [Chalk](integrations/demos/chalk/) | Chalk resolvers read fresh TiDB aggregates for online fraud features, checked against direct SQL | Local + Chalk account | pending |
 | 08 | [Prometheus / Grafana](integrations/demos/prometheus-grafana/) | TiDB metrics detect injected faults, with measured time to detect | Local | pending |
 | 09 | [Datadog](integrations/demos/datadog/) | TiDB metrics, APM traces to a SQL digest, and Monitors that fire and resolve | Local + Datadog account | pending |
 | 10 | [Terraform / EKS](integrations/demos/terraform-eks/) | TiDB Cloud, EKS and an app provisioned in one `terraform apply` | AWS + TiDB Cloud | pending |

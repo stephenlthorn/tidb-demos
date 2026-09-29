@@ -1,6 +1,6 @@
 # TiDB Integration Lab: Roadmap
 
-**Source of the asks:** the NA Solutions Engineering team thread (2026-09-25) on which tools, demos, and PoCs would help sell more. The requests were Chalk, Kafka, Datadog, Prometheus/Grafana, Power BI, AWS DMS, Debezium, Redis, Okta, Terraform/EKS, Databricks. The call copilot that was also asked for is a separate tool, not part of this lab.
+**Source of the asks:** the NA Solutions Engineering team thread (2026-09-25) on which tools, demos, and PoCs would help sell more. The requests were Kafka, Datadog, Prometheus/Grafana, Power BI, AWS DMS, Debezium, Redis, Okta, Terraform/EKS, Databricks. Chalk and a call copilot were also asked for; the copilot is a separate tool and Chalk was dropped, so neither is part of this lab.
 
 **What every demo gets:** an animated flow diagram of the real data path, live metric tiles with sparklines (each one says exactly how it was measured), a phase timeline whose captions double as the talk track, correctness checks, and buttons that inject events (bursts, faults, revokes). Every demo runs **live** against real systems for calls, and records a **replay** that a static website plays back with play, pause, speed, and scrub.
 
@@ -17,7 +17,6 @@
 | 4 | [04-redis.md](04-redis.md) | Redis cache correctness with CDC invalidation, and when TiDB alone is enough | Common objection; local and cheap | Local | 2 days |
 | 5 | [05-okta.md](05-okta.md) | Okta: TiDB Cloud org SSO guide + identity lifecycle for DB access | Security reviews block deals; setup questions keep recurring | Okta dev org + local/TiDB Cloud | 2 days |
 | 6 | [06-databricks.md](06-databricks.md) | Databricks: lakehouse next to an operational store, closed loop | Top booth question at data and AI conferences | Databricks + TiDB Cloud Starter | 2-3 days |
-| 7 | [07-chalk.md](07-chalk.md) | Chalk: TiDB as the fresh source for real-time features | Clarifies the TiDB vs feature-platform boundary for ML teams; gated on Chalk access | Chalk + TiDB | 2-3 days |
 | 8 | [08-prometheus-grafana.md](08-prometheus-grafana.md) | Prometheus/Grafana: metrics, alerts, time-to-detect per fault | Owns the shared workload generator and fault injector | Local | 2 days |
 | 9 | [09-datadog.md](09-datadog.md) | Datadog: integration, APM spans with SQL, monitors | Reuses Plan 08's workload and faults | Datadog trial + local/TiDB Cloud | 2 days |
 | 10 | [10-terraform-eks.md](10-terraform-eks.md) | Terraform + EKS: provision, connect privately, scale in place | Platform teams and bring-your-own-cloud style questions; most expensive to run | AWS + TiDB Cloud | 3 days |
@@ -52,7 +51,6 @@ Plans 01 and 02 can run in parallel after Plan 00 if more than one person builds
 
 Each plan's section 4 lists the facts it could not confirm while writing, each marked **UNVERIFIED** with the exact check to run first. The largest ones:
 
-- **Chalk:** whether Chalk's MySQL source works against TiDB, and how to get a Chalk environment. Plan 07 opens with a smoke test that stops the plan if this fails.
 - **Databricks:** whether Databricks Free Edition can reach a TiDB Cloud endpoint. Plan 06 tests this early; the fallback is a trial workspace.
 - **AWS DMS:** exact CloudWatch dimensions and `DescribeTableStatistics` field names. Plan 01 captures a live response before coding against it.
 - **Terraform/EKS:** whether the private endpoint resolves without private DNS on the VPC endpoint.

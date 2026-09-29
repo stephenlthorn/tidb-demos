@@ -23,7 +23,6 @@ pnpm dev                           # open the printed URL
 | 04 | [Redis](demos/redis/) | Local | pending |
 | 05 | [Okta](demos/okta/) | Local + Okta developer org | pending |
 | 06 | [Databricks](demos/databricks/) | Databricks Free Edition + TiDB Cloud Starter | pending |
-| 07 | [Chalk](demos/chalk/) | Local + Chalk account | pending |
 | 08 | [Prometheus / Grafana](demos/prometheus-grafana/) | Local | pending |
 | 09 | [Datadog](demos/datadog/) | Local + Datadog account | pending |
 | 10 | [Terraform / EKS](demos/terraform-eks/) | AWS + TiDB Cloud | pending |

@@ -58,34 +58,6 @@ importers:
         specifier: ^3.2.0
         version: 3.2.7(@types/node@22.20.4)(jsdom@26.1.0)(tsx@4.23.15)
 
-  demos/chalk:
-    dependencies:
-      '@lab/contract':
-        specifier: workspace:*
-        version: link:../../packages/contract
-      '@lab/runner-kit':
-        specifier: workspace:*
-        version: link:../../packages/runner-kit
-      mysql2:
-        specifier: ^3.14.0
-        version: 3.24.4(@types/node@22.20.4)
-      zod:
-        specifier: ^4.1.0
-        version: 4.6.5
-    devDependencies:
-      '@types/node':
-        specifier: ^22.10.0
-        version: 22.20.4
-      tsx:
-        specifier: ^4.20.0
-        version: 4.23.15
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.0
-        version: 3.2.7(@types/node@22.20.4)(jsdom@26.1.0)(tsx@4.23.15)
-
   demos/databricks:
     dependencies:
       '@lab/contract':
