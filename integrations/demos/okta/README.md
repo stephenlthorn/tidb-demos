@@ -49,3 +49,13 @@ In Okta: delete the demo user, delete `lab_analysts` and `lab_engineers`, revoke
 ## Cost notes
 
 The Okta org is free under the Integrator Free Plan's published limits (see https://developer.okta.com/docs/reference/org-defaults/ for current limits; do not hardcode the numeric limits elsewhere). TiDB cost follows the local playground (free) or the TiDB Cloud pricing page (https://www.pingcap.com/tidb-cloud-pricing/) for a Cloud instance. The demo issues no bulk data load and uses trivial row counts.
+
+## Live proof: the real Okta console
+
+Recorded 2026-09-29 during a live run against an Okta Integrator org and the local TiDB playground. The lab dashboard (left) and the real Okta admin console (right) are captured side by side; account details are blurred.
+
+- Video (4x speed): [media/okta-live-side-by-side.mp4](media/okta-live-side-by-side.mp4)
+- Screenshots at each phase and check verdict: [media/screenshots/](media/screenshots/)
+  - Provision: the demo user added to `lab-analysts` in Okta, and the TiDB grant that follows: [06-phase-provision.jpg](media/screenshots/06-phase-provision.jpg)
+  - Re-scope: moved to `lab-engineers`: [09-phase-rescope.jpg](media/screenshots/09-phase-rescope.jpg)
+  - Revoke: the deactivated user, and the rejected TiDB login: [11-check-revoked-user-rejected-pass.jpg](media/screenshots/11-check-revoked-user-rejected-pass.jpg)
