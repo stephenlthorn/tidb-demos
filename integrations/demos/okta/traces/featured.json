@@ -1,0 +1,3002 @@
+{
+  "schemaVersion": 1,
+  "manifest": {
+    "id": "okta",
+    "number": 5,
+    "title": "Okta identity lifecycle to TiDB database access",
+    "tagline": "Okta group membership drives TiDB grants, live, with a revoke you can watch fail on camera.",
+    "integrations": [
+      "okta"
+    ],
+    "pattern": "Enterprise security team in a PoC asking many SSO setup questions and wanting to see identity lifecycle end to end before approving a new database.",
+    "publish": true,
+    "runner": {
+      "command": [
+        "node",
+        "--import",
+        "tsx",
+        "runner/main.ts"
+      ],
+      "cwd": "."
+    },
+    "nodes": [
+      {
+        "id": "okta",
+        "label": "Okta",
+        "kind": "identity",
+        "x": 10,
+        "y": 50
+      },
+      {
+        "id": "sync",
+        "label": "Identity Sync Service",
+        "kind": "service",
+        "x": 35,
+        "y": 50
+      },
+      {
+        "id": "tidb",
+        "label": "TiDB",
+        "kind": "tidb",
+        "x": 55,
+        "y": 50
+      },
+      {
+        "id": "app",
+        "label": "Reporting App",
+        "kind": "client",
+        "x": 82,
+        "y": 50
+      }
+    ],
+    "edges": [
+      {
+        "id": "okta-to-sync",
+        "from": "okta",
+        "to": "sync",
+        "label": "group events",
+        "unit": "msgs/s"
+      },
+      {
+        "id": "sync-to-tidb",
+        "from": "sync",
+        "to": "tidb",
+        "label": "grants applied",
+        "unit": "rows/s"
+      },
+      {
+        "id": "app-to-tidb",
+        "from": "app",
+        "to": "tidb",
+        "label": "queries",
+        "unit": "req/s"
+      }
+    ],
+    "metrics": [
+      {
+        "id": "provision-latency-ms",
+        "label": "Provision latency",
+        "unit": "ms",
+        "display": "both",
+        "better": "lower",
+        "group": "latency",
+        "howMeasured": "msSincePublished(event.published, Date.now()) where event is the Okta System Log group.user_membership.add entry and the end time is when CREATE USER + GRANT complete for that user"
+      },
+      {
+        "id": "revoke-latency-ms",
+        "label": "Revoke latency",
+        "unit": "ms",
+        "display": "both",
+        "better": "lower",
+        "group": "latency",
+        "howMeasured": "msSincePublished(event.published, Date.now()) where event is the Okta user.lifecycle.deactivate or final group.user_membership.remove entry and the end time is when a real mysql2 connection attempt as that user first throws access-denied"
+      },
+      {
+        "id": "grant-drift-count",
+        "label": "Grant drift count",
+        "unit": "count",
+        "display": "both",
+        "better": "lower",
+        "group": "correctness",
+        "howMeasured": "findDrift(desired, actual).length computed each reconciliation tick, desired from a fresh Okta Groups API read, actual from parsing SHOW GRANTS FOR <user> for every lab_-prefixed TiDB user"
+      },
+      {
+        "id": "audit-events-processed",
+        "label": "Audit events processed",
+        "unit": "count",
+        "display": "series",
+        "better": "higher",
+        "group": "throughput",
+        "howMeasured": "cumulative count of Okta System Log entries read and applied by the poller since the runner started, incremented once per processed entry"
+      }
+    ],
+    "phases": [
+      {
+        "id": "baseline",
+        "label": "Baseline",
+        "narration": "Here's our starting state: two TiDB roles already exist, and our demo user has no Okta group membership and no TiDB login yet."
+      },
+      {
+        "id": "provision",
+        "label": "Provision on group add",
+        "narration": "Watch the clock: from the moment I add this person to the analysts group in Okta, to the moment they can query the reporting schema in TiDB."
+      },
+      {
+        "id": "rescope",
+        "label": "Re-scope on group move",
+        "narration": "Now I move them to engineering in Okta. TiDB re-scopes their grants, no manual SQL."
+      },
+      {
+        "id": "revoke",
+        "label": "Revoke on removal",
+        "narration": "I deactivate them in Okta. Their next database connection attempt fails, on camera, not asserted."
+      },
+      {
+        "id": "reconcile",
+        "label": "Reconcile and prove no drift",
+        "narration": "One more pass to prove there's no drift between what Okta says and what TiDB actually grants."
+      }
+    ],
+    "checks": [
+      {
+        "id": "revoked-user-rejected",
+        "label": "Revoked user cannot connect",
+        "description": "A real mysql2 connection attempt as the demo user after revoke throws an access-denied error."
+      },
+      {
+        "id": "grants-match-desired",
+        "label": "Grants match desired state",
+        "description": "findDrift over the current desired map vs SHOW GRANTS returns an empty array."
+      },
+      {
+        "id": "no-orphan-users",
+        "label": "No orphan TiDB users",
+        "description": "Every lab_-prefixed TiDB user maps to a demo user still present in at least one tracked Okta group."
+      }
+    ],
+    "controls": [
+      {
+        "id": "add-to-analysts",
+        "label": "Add demo user to lab_analysts",
+        "description": "Calls the Okta Users API to add the demo user to the lab_analysts group."
+      },
+      {
+        "id": "move-to-engineers",
+        "label": "Move demo user to lab_engineers",
+        "description": "Removes the demo user from lab_analysts and adds them to lab_engineers."
+      },
+      {
+        "id": "remove-from-groups",
+        "label": "Remove demo user from all groups",
+        "description": "Removes the demo user from both lab_analysts and lab_engineers."
+      },
+      {
+        "id": "deactivate-user",
+        "label": "Deactivate demo user in Okta",
+        "description": "Calls Okta's user deactivate lifecycle endpoint."
+      }
+    ]
+  },
+  "recordedAt": "2026-09-29T12:22:55.563Z",
+  "environment": {
+    "tidb": "tiup playground v8.5.8 (local)",
+    "components": {
+      "okta": "Okta Integrator Free Plan org"
+    },
+    "notes": "recorded against Okta Integrator Free Plan org, local tiup playground"
+  },
+  "durationMs": 405459,
+  "events": [
+    {
+      "type": "phase",
+      "t": 2,
+      "phase": "baseline"
+    },
+    {
+      "type": "node",
+      "t": 2,
+      "node": "okta",
+      "status": "healthy",
+      "note": "polling system log"
+    },
+    {
+      "type": "node",
+      "t": 2,
+      "node": "sync",
+      "status": "idle"
+    },
+    {
+      "type": "node",
+      "t": 2,
+      "node": "tidb",
+      "status": "healthy"
+    },
+    {
+      "type": "node",
+      "t": 3,
+      "node": "app",
+      "status": "idle"
+    },
+    {
+      "type": "log",
+      "t": 3,
+      "level": "info",
+      "msg": "sync loop starting"
+    },
+    {
+      "type": "metric",
+      "t": 1951,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 1951,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 1951,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 3397,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 3397,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 3397,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 6395,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 6395,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 6395,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 9400,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 9400,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 9400,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 12395,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 12395,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 12395,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 15383,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 15383,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 15383,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 18402,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 18402,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 18402,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 21397,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 21397,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 21397,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 24384,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 24384,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 24384,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 27424,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 27424,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 27424,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 30376,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 30376,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 30376,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 33415,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 33415,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 33415,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 36401,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 36401,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 36401,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 39403,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 39403,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 39403,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 42397,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 42397,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 42397,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 45399,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 45399,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 45399,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 48389,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 48389,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 48389,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "control",
+      "t": 48668,
+      "id": "add-to-analysts"
+    },
+    {
+      "type": "metric",
+      "t": 51428,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 51428,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 51428,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 54430,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 54430,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 54430,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 57413,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 57413,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 57413,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 60434,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 60434,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 60434,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 63447,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 63447,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 63447,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 66452,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 66452,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 66452,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 69416,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 69416,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 69416,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 72417,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 72417,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 72417,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 75404,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 75404,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 75404,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 78428,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 78428,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 78428,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 81437,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 81437,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 81437,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 84421,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 84421,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 84421,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 87414,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 87414,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 87414,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 90435,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 90435,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 90435,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 93412,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 93412,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 93412,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 96409,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 96409,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 96409,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 99514,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 99514,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 99514,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 102444,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 102444,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 102444,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 105410,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 105410,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 105410,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 108418,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 108418,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 108418,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "flow",
+      "t": 111249,
+      "edge": "okta-to-sync",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 111249,
+      "id": "audit-events-processed",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 111495,
+      "id": "provision-latency-ms",
+      "value": 62953
+    },
+    {
+      "type": "node",
+      "t": 111495,
+      "node": "sync",
+      "status": "healthy",
+      "note": "applied analyst for lab-demo-user"
+    },
+    {
+      "type": "node",
+      "t": 111495,
+      "node": "tidb",
+      "status": "healthy",
+      "note": "granted analyst"
+    },
+    {
+      "type": "flow",
+      "t": 111495,
+      "edge": "sync-to-tidb",
+      "count": 1
+    },
+    {
+      "type": "phase",
+      "t": 111495,
+      "phase": "provision"
+    },
+    {
+      "type": "metric",
+      "t": 111668,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 111668,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 111668,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 114414,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 114414,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 114414,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 117426,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 117426,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 117426,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 120424,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 120424,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 120424,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 123403,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 123403,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 123403,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 126440,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 126440,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 126440,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 129408,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 129408,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 129408,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 132421,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 132421,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 132421,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 135420,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 135420,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 135420,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 138444,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 138445,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 138445,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 141421,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 141421,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 141421,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 144412,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 144412,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 144412,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 147438,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 147438,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 147438,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 150425,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 150425,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 150425,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 153433,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 153433,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 153433,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 156420,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 156420,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 156420,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 159444,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 159444,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 159444,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 162442,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 162442,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 162442,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 165429,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 165429,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 165429,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "control",
+      "t": 165926,
+      "id": "move-to-engineers"
+    },
+    {
+      "type": "metric",
+      "t": 168430,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 168430,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
+    },
+    {
+      "type": "check",
+      "t": 168430,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 171432,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 171432,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
+    },
+    {
+      "type": "check",
+      "t": 171432,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 174473,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 174473,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
+    },
+    {
+      "type": "check",
+      "t": 174473,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 177448,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 177448,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
+    },
+    {
+      "type": "check",
+      "t": 177448,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 180429,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 180429,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
+    },
+    {
+      "type": "check",
+      "t": 180429,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 183417,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 183418,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
+    },
+    {
+      "type": "check",
+      "t": 183418,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 186445,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 186445,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
+    },
+    {
+      "type": "check",
+      "t": 186445,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 189446,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 189446,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
+    },
+    {
+      "type": "check",
+      "t": 189446,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 192499,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 192499,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
+    },
+    {
+      "type": "check",
+      "t": 192499,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 195426,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 195426,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
+    },
+    {
+      "type": "check",
+      "t": 195426,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 198455,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 198455,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
+    },
+    {
+      "type": "check",
+      "t": 198455,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 201446,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 201446,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
+    },
+    {
+      "type": "check",
+      "t": 201446,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 204418,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 204418,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
+    },
+    {
+      "type": "check",
+      "t": 204418,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 207446,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 207446,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
+    },
+    {
+      "type": "check",
+      "t": 207446,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 210429,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 210429,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
+    },
+    {
+      "type": "check",
+      "t": 210429,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 213448,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 213448,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
+    },
+    {
+      "type": "check",
+      "t": 213448,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 216446,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 216446,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
+    },
+    {
+      "type": "check",
+      "t": 216446,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 219435,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 219435,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
+    },
+    {
+      "type": "check",
+      "t": 219435,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 222437,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 222437,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
+    },
+    {
+      "type": "check",
+      "t": 222437,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 225441,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 225441,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
+    },
+    {
+      "type": "check",
+      "t": 225441,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "flow",
+      "t": 228266,
+      "edge": "okta-to-sync",
+      "count": 2
+    },
+    {
+      "type": "metric",
+      "t": 228266,
+      "id": "audit-events-processed",
+      "value": 2
+    },
+    {
+      "type": "metric",
+      "t": 228444,
+      "id": "audit-events-processed",
+      "value": 3
+    },
+    {
+      "type": "metric",
+      "t": 228688,
+      "id": "provision-latency-ms",
+      "value": 62697
+    },
+    {
+      "type": "node",
+      "t": 228688,
+      "node": "sync",
+      "status": "healthy",
+      "note": "applied engineer for lab-demo-user"
+    },
+    {
+      "type": "node",
+      "t": 228688,
+      "node": "tidb",
+      "status": "healthy",
+      "note": "granted engineer"
+    },
+    {
+      "type": "flow",
+      "t": 228688,
+      "edge": "sync-to-tidb",
+      "count": 1
+    },
+    {
+      "type": "phase",
+      "t": 228688,
+      "phase": "rescope"
+    },
+    {
+      "type": "metric",
+      "t": 228864,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 228864,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 228864,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 231447,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 231447,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 231448,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 234470,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 234470,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 234470,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 237435,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 237435,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 237435,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 240444,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 240444,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 240444,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 243454,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 243454,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 243454,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 246444,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 246444,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 246444,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "control",
+      "t": 249319,
+      "id": "deactivate-user"
+    },
+    {
+      "type": "metric",
+      "t": 249441,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 249441,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 249441,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 252439,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 252439,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 252439,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 255454,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 255454,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 255454,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 258437,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 258437,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 258437,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 261454,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 261454,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 261454,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 264440,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 264440,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 264440,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 267465,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 267465,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 267465,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 270447,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 270447,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 270447,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 273448,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 273448,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 273448,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 276450,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 276450,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 276450,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 279473,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 279473,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 279473,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 282444,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 282444,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 282444,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 285452,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 285452,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 285452,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 288451,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 288451,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 288451,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 291442,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 291443,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 291443,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 294482,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 294482,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 294482,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 297448,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 297448,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 297448,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 300476,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 300476,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 300476,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 303445,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 303445,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 303445,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 306456,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 306456,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 306456,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 309447,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 309447,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 309447,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "flow",
+      "t": 312284,
+      "edge": "okta-to-sync",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 312284,
+      "id": "audit-events-processed",
+      "value": 4
+    },
+    {
+      "type": "metric",
+      "t": 312362,
+      "id": "revoke-latency-ms",
+      "value": 63122
+    },
+    {
+      "type": "node",
+      "t": 312362,
+      "node": "sync",
+      "status": "healthy",
+      "note": "revoked access for lab-demo-user"
+    },
+    {
+      "type": "flow",
+      "t": 312362,
+      "edge": "sync-to-tidb",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 312365,
+      "edge": "app-to-tidb",
+      "count": 1
+    },
+    {
+      "type": "node",
+      "t": 312366,
+      "node": "app",
+      "status": "degraded",
+      "note": "query rejected"
+    },
+    {
+      "type": "check",
+      "t": 312366,
+      "id": "revoked-user-rejected",
+      "status": "pass"
+    },
+    {
+      "type": "log",
+      "t": 312366,
+      "level": "warn",
+      "msg": "demo user access revoked",
+      "node": "tidb"
+    },
+    {
+      "type": "phase",
+      "t": 312366,
+      "phase": "revoke"
+    },
+    {
+      "type": "metric",
+      "t": 312545,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 312545,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 312545,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 315457,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 315457,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 315457,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 318458,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 318458,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 318458,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 321450,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 321450,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 321450,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 324458,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 324458,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 324458,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 327457,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 327457,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 327457,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 330457,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 330457,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 330457,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 333460,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 333460,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 333460,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "control",
+      "t": 334457,
+      "id": "remove-from-groups"
+    },
+    {
+      "type": "metric",
+      "t": 336453,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 336453,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 336453,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "phase",
+      "t": 336453,
+      "phase": "reconcile"
+    },
+    {
+      "type": "metric",
+      "t": 339441,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 339441,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 339442,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 342458,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 342458,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 342458,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 345449,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 345449,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 345449,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 348451,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 348451,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 348451,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 351467,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 351467,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 351467,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 354492,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 354492,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 354492,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 357478,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 357478,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 357478,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 360439,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 360439,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 360439,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 363462,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 363462,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 363462,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 366462,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 366462,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 366462,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 369483,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 369483,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 369483,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 372489,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 372489,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 372489,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 375488,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 375489,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 375489,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 378501,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 378501,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 378501,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 381474,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 381474,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 381474,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 384472,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 384472,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 384472,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 387483,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 387483,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 387483,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 390589,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 390589,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 390589,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 393480,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 393480,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 393480,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "flow",
+      "t": 396297,
+      "edge": "okta-to-sync",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 396297,
+      "id": "audit-events-processed",
+      "value": 5
+    },
+    {
+      "type": "metric",
+      "t": 396637,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 396637,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 396637,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 399457,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 399457,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 399457,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 402467,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 402467,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 402467,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 405459,
+      "id": "grant-drift-count",
+      "value": 0
+    },
+    {
+      "type": "check",
+      "t": 405459,
+      "id": "grants-match-desired",
+      "status": "pass",
+      "observed": "[]"
+    },
+    {
+      "type": "check",
+      "t": 405459,
+      "id": "no-orphan-users",
+      "status": "pass"
+    }
+  ]
+}

@@ -3,6 +3,7 @@ import { createEmitter, createTidbPool, every, onControl, tidbConfigFromEnv } fr
 import { roleForGroups } from './src/groupRoleMap';
 import type { DbRole } from './src/groupRoleMap';
 import { findDrift } from './src/grantDiff';
+import { selectNewEvents } from './src/eventCursor';
 import { msSincePublished } from './src/latency';
 import {
   addUserToGroup,
@@ -34,6 +35,7 @@ let currentPhase: DemoPhase = 'baseline';
 let processedEvents = 0;
 let sinceIso = new Date().toISOString();
 let lastKnownRole: DbRole | null = null;
+const seenEventUuids = new Set<string>();
 
 const abortController = new AbortController();
 
@@ -113,11 +115,13 @@ const applyRevoke = async (event: OktaLogEvent): Promise<void> => {
 };
 
 const poll = async (): Promise<void> => {
-  const events = await fetchGroupEventsSince(okta, sinceIso);
+  const fetched = await fetchGroupEventsSince(okta, sinceIso);
+  const events = selectNewEvents(fetched, seenEventUuids);
   if (events.length > 0) {
     emitter.flow('okta-to-sync', events.length);
   }
   for (const event of events) {
+    seenEventUuids.add(event.uuid);
     processedEvents += 1;
     emitter.metric('audit-events-processed', processedEvents);
     sinceIso = event.published;
