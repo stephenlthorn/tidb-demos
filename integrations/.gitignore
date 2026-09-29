@@ -15,3 +15,4 @@ packages/ui/public/data/
 
 # raw console capture frames (assembled media is committed separately)
 demos/*/media/raw-capture/
+demos/*/media/pages.json
