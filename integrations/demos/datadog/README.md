@@ -52,3 +52,14 @@ host once the Agent container is stopped.
 
 See Section 5 of the implementation plan (`docs/plans/09-datadog.md`) for the
 Datadog pricing formula link and the free-trial link; no price is hardcoded here.
+
+## Live proof: the real Datadog UI
+
+Recorded 2026-09-29 during a live run against a Datadog trial org and the local TiDB playground. The lab dashboard (left) and the real Datadog UI (right) are captured side by side; account details are blurred.
+
+- Video (4x speed): [media/datadog-live-side-by-side.mp4](media/datadog-live-side-by-side.mp4)
+- Screenshots at each phase and check verdict: [media/screenshots/](media/screenshots/)
+  - The slow query as an APM span tagged with its SQL: [04-check-slow-span-correlated-pass.jpg](media/screenshots/04-check-slow-span-correlated-pass.jpg)
+  - The TiKV store outage monitor firing and resolving: [11-check-detect-store-outage-pass.jpg](media/screenshots/11-check-detect-store-outage-pass.jpg)
+  - The connection surge monitor crossing its 150-connection threshold: [13-phase-connection-surge.jpg](media/screenshots/13-phase-connection-surge.jpg)
+  - The two monitors that cannot fire on the macOS playground (their metrics are not forwarded by the Datadog TiDB check), shown honestly as fails: [05-check-detect-slow-query-storm-fail.jpg](media/screenshots/05-check-detect-slow-query-storm-fail.jpg), [08-check-detect-write-hot-spot-fail.jpg](media/screenshots/08-check-detect-write-hot-spot-fail.jpg)

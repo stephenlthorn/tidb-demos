@@ -16,3 +16,6 @@ packages/ui/public/data/
 # raw console capture frames (assembled media is committed separately)
 demos/*/media/raw-capture/
 demos/*/media/pages.json
+
+# account-specific ids, regenerated per recording session
+demos/*/.monitor-ids.json
