@@ -104,7 +104,7 @@ Node positions (`x`, `y` percent of canvas): `app` at (8, 30) on the left; `tidb
 | The Databricks SQL Statement Execution API (`POST /api/2.0/sql/statements`, `GET /api/2.0/sql/statements/{id}`) runs SQL against a `warehouse_id` and returns `status.state` (`PENDING`/`RUNNING`/`SUCCEEDED`/`FAILED`/...), polling if the result isn't ready within `wait_timeout` (5-50s). | [Statement Execution API reference](https://docs.databricks.com/api/statement-execution/v1), [Statement Execution API tutorial](https://docs.databricks.com/aws/en/dev-tools/sql-execution-tutorial) | Verified |
 | Statement Execution API supports named parameters (`:name` markers) with an optional `type`; if omitted the value is treated as `STRING`. | [Databricks Parameterization guide](https://www.dataexpert.io/blog/databricks-parameterization-quick-guide), community thread on statement parameters | Verified as a capability. This plan does not use it for the scoring SQL (Section 7 explains why) but documents it as the safer alternative if this pattern is extended to untrusted input. |
 | An official Node.js driver `@databricks/sql` exists and can itself use the Statement Execution API under the hood. | [npm: @databricks/sql](https://www.npmjs.com/package/@databricks/sql), [Databricks SQL Driver for Node.js docs](https://docs.databricks.com/aws/en/dev-tools/nodejs-sql-driver) | Verified. Not chosen as the integration path - see the rationale below the table. |
-| Databricks Free Edition runs on **serverless compute only**, must use Unity Catalog to reach external data sources, and its outbound network access is "restricted to a limited set of trusted domains" with "no specific IP you can whitelist." | [Databricks Free Edition limitations](https://docs.databricks.com/aws/en/getting-started/free-edition-limitations), Databricks Community threads on outbound whitelisting | Partially verified. The serverless-only and Unity-Catalog-required facts are clear; whether TiDB Cloud's public endpoint host specifically falls inside or outside that trusted-domain allowlist is **UNVERIFIED** - confirm with the exact step in Section 5 before assuming Free Edition works for this demo. |
+| Databricks Free Edition runs on **serverless compute only**, must use Unity Catalog to reach external data sources, and its outbound network access is "restricted to a limited set of trusted domains" with "no specific IP you can whitelist." | [Databricks Free Edition limitations](https://docs.databricks.com/aws/en/getting-started/free-edition-limitations), Databricks Community threads on outbound whitelisting | VERIFIED live 2026-09-29 against a real Free Edition workspace and a real TiDB Cloud Starter cluster: `CREATE CONNECTION ... TYPE mysql` to the Starter cluster's public endpoint succeeded, `CREATE FOREIGN CATALOG tidb_fed USING CONNECTION tidb_lab_connection` succeeded, and `SELECT * FROM tidb_fed.lab_06.heartbeats` returned the live row (`[["1","2026-09-29T12:06:16.051Z"]]`). Free Edition's outbound trusted-domain allowlist does **not** block a TiDB Cloud Starter public endpoint host - the serverless-only and Unity-Catalog-required facts from the doc are also confirmed, but the specific egress-blocks-TiDB concern this row flagged as UNVERIFIED is resolved: it does not block it. |
 | A Databricks 14-day free trial workspace is a full production-shaped account (not serverless-only, normal Unity Catalog + network configuration) with usage credits, distinct from Free Edition. | [Sign up for Databricks / free trial vs. free edition](https://docs.databricks.com/aws/en/getting-started/free-trial-vs-free-edition) | Verified as a qualitative distinction. Exact credit amount and duration are on that page; not restated in prose here per the no-hardcoded-quotas rule. |
 | Databricks serverless compute's outbound IPs are dynamic unless the workspace has a Network Connectivity Configuration (NCC) with stable IP ranges published for allowlisting. | [Configure a firewall for serverless compute access](https://learn.microsoft.com/en-us/azure/databricks/security/network/serverless-network-security/serverless-firewall-config) | Verified. Confirms why this plan cannot give a fixed IP for the TiDB Cloud allow list (Section 5). |
 | TiDB Cloud renamed "Serverless" to "Starter" in August 2025; current cluster tiers are Starter, Essential, Premium, and Dedicated. | [Select a Plan](https://docs.pingcap.com/tidbcloud/select-cluster-tier/), [TiDB Cloud Starter Pricing Details](https://www.pingcap.com/tidb-cloud-starter-pricing-details/) | Verified |
@@ -143,7 +143,7 @@ Node positions (`x`, `y` percent of canvas): `app` at (8, 30) on the left; `tidb
   - Databricks bills the SQL warehouse's DBUs while it is running (`cost = DBU-rate for the warehouse's cloud/size x DBUs consumed per hour x hours running`); a small serverless SQL warehouse with a short auto-stop timeout keeps this near the trial's included credits. Formula and current DBU rates: [Databricks SQL pricing](https://www.databricks.com/product/pricing/databricks-sql). Free Edition, if it works for this demo, has no DBU cost at all (Section 4).
   - Neither TiDB Cloud Starter nor a Databricks SQL warehouse triggers hourly node billing the way a Dedicated TiDB cluster or a Databricks classic (non-serverless) cluster would - this plan deliberately avoids both.
 - **Teardown (exact commands):**
-  1. In the Databricks SQL editor, drop the demo's objects: `DROP TABLE IF EXISTS main.lab_databricks.risk_scores; DROP FOREIGN CATALOG IF EXISTS tidb_fed; DROP CONNECTION IF EXISTS tidb_lab_connection;`
+  1. In the Databricks SQL editor, drop the demo's objects: `DROP TABLE IF EXISTS workspace.lab_databricks.risk_scores (or main.lab_databricks.risk_scores on a non-Free-Edition workspace); DROP FOREIGN CATALOG IF EXISTS tidb_fed; DROP CONNECTION IF EXISTS tidb_lab_connection;`
   2. Stop the SQL warehouse if it is not already auto-stopped: Databricks UI -> SQL Warehouses -> the demo warehouse -> **Stop**.
   3. Revoke the personal access token: Databricks UI -> User Settings -> Developer -> Access tokens -> **Delete** next to the token created for this demo.
   4. Delete the Databricks secret scope: `databricks secrets delete-scope --scope lab-tidb`.
@@ -1134,19 +1134,18 @@ OPTIONS (
 );
 ```
 
-Step 3: register TiDB's `lab` database as a foreign (read-only) catalog.
+Step 3: register the connection as a foreign (read-only) catalog. **Verified live (Section 4): a MySQL foreign catalog takes no `database` option** - `CREATE FOREIGN CATALOG ... OPTIONS (database '...')` fails with `CATALOG_FOREIGN_MYSQL does not support the following option(s): database`. The TiDB database name is only supplied per query, in the schema position of `tidb_fed.<database>.<table>`.
 
 ```sql
 CREATE FOREIGN CATALOG IF NOT EXISTS tidb_fed
-USING CONNECTION tidb_lab_connection
-OPTIONS (database 'lab');
+USING CONNECTION tidb_lab_connection;
 ```
 
-Step 4: create the writable Delta table Databricks scores into.
+Step 4: create the writable Delta table Databricks scores into. **Verified live (Section 4): a Databricks Free Edition workspace has no `main` catalog** - only `samples`, `system`, `tidb_fed` (once created), and `workspace`. Use `workspace` for Free Edition; substitute `main` if your workspace has one (most paid workspaces do).
 
 ```sql
-CREATE SCHEMA IF NOT EXISTS main.lab_databricks;
-CREATE TABLE IF NOT EXISTS main.lab_databricks.risk_scores (
+CREATE SCHEMA IF NOT EXISTS workspace.lab_databricks;
+CREATE TABLE IF NOT EXISTS workspace.lab_databricks.risk_scores (
   customer_id BIGINT,
   score DOUBLE,
   rule STRING,
@@ -1154,7 +1153,7 @@ CREATE TABLE IF NOT EXISTS main.lab_databricks.risk_scores (
 );
 ```
 
-Step 5: confirm the federated read reaches TiDB (run only after Task 12 has created `events`/`heartbeats` in TiDB).
+Step 5: confirm the federated read reaches TiDB (run only after Task 12 has created `events`/`heartbeats` in TiDB), qualifying the table with the real TiDB database name (`lab` in this template, `lab_06` in the shared lab environment).
 
 ```sql
 SELECT * FROM tidb_fed.lab.heartbeats;
@@ -1207,7 +1206,7 @@ DATABRICKS_WAREHOUSE_ID=<warehouse-id>
 DATABRICKS_STATEMENT_TIMEOUT_MS=60000
 DATABRICKS_FEDERATION_CATALOG=tidb_fed
 DATABRICKS_FEDERATION_SCHEMA=lab
-DATABRICKS_SCORES_CATALOG=main
+DATABRICKS_SCORES_CATALOG=workspace
 DATABRICKS_SCORES_SCHEMA=lab_databricks
 DATABRICKS_SCORES_TABLE=risk_scores
 EVENT_WRITE_INTERVAL_MS=1000
@@ -1233,7 +1232,7 @@ DATABRICKS_WAREHOUSE_ID=
 DATABRICKS_STATEMENT_TIMEOUT_MS=60000
 DATABRICKS_FEDERATION_CATALOG=tidb_fed
 DATABRICKS_FEDERATION_SCHEMA=lab
-DATABRICKS_SCORES_CATALOG=main
+DATABRICKS_SCORES_CATALOG=workspace
 DATABRICKS_SCORES_SCHEMA=lab_databricks
 DATABRICKS_SCORES_TABLE=risk_scores
 EVENT_WRITE_INTERVAL_MS=1000
@@ -1615,7 +1614,7 @@ rationale for choosing this path over TiCDC-to-Kafka or export-to-S3.
    databricks secrets put-secret lab-tidb tidb-password
    ```
 3. In the Databricks SQL editor, run the `CREATE CONNECTION`,
-   `CREATE FOREIGN CATALOG`, and `CREATE TABLE main.lab_databricks.risk_scores`
+   `CREATE FOREIGN CATALOG`, and `CREATE TABLE workspace.lab_databricks.risk_scores`
    statements from Task 11 of the plan.
 4. Copy `.env.example` to `.env` and fill in the TiDB and Databricks values.
 5. `pnpm install` at the `integrations/` workspace root.
@@ -1668,7 +1667,7 @@ works for your workspace.
 ## Teardown
 
 ```sql
-DROP TABLE IF EXISTS main.lab_databricks.risk_scores;
+DROP TABLE IF EXISTS workspace.lab_databricks.risk_scores;
 DROP FOREIGN CATALOG IF EXISTS tidb_fed;
 DROP CONNECTION IF EXISTS tidb_lab_connection;
 ```
@@ -1991,3 +1990,23 @@ Format, dispatch prompt and conformance checklist: see `EXECUTION.md`. Packets i
   - `pnpm lab check-public` -> `0 findings`
   - teardown commands from section 5 run and confirmed
 - Done when: the replay tells the whole story in 3-6 minutes of playback at 1x.
+
+## Build notes (2026-09-29): what changed while recording
+
+The code in `demos/databricks/` is authoritative where it differs from the task code above.
+
+| Area | Finding | Resolution |
+|---|---|---|
+| Section 4 biggest risk | Whether Databricks **Free Edition**'s restricted serverless egress can reach a TiDB Cloud Starter public endpoint was UNVERIFIED | VERIFIED live against a real Free Edition workspace and the shared `lab-shared` Starter cluster: `CREATE CONNECTION ... TYPE mysql` succeeded, `CREATE FOREIGN CATALOG tidb_fed USING CONNECTION tidb_lab_connection` succeeded, and `SELECT * FROM tidb_fed.lab_06.heartbeats` returned the live row. Free Edition does not block this host. |
+| `CREATE FOREIGN CATALOG ... OPTIONS (database '...')` | Fails live: `[INVALID_PARAMETER_VALUE.CATALOG_OPTION_NOT_SUPPORTED] CATALOG/CATALOG_FOREIGN_MYSQL does not support the following option(s): database. Supported options: tinyInt1isBit,enableForeignCommentFetching.` | Drop the `database` option entirely; the source TiDB database is only chosen at query time, in the schema position of `tidb_fed.<database>.<table>`. Fixed in `sql/databricks-setup.sql`, README, and plan Section 11/16. |
+| `CREATE SCHEMA IF NOT EXISTS main.lab_databricks` | Fails live on Free Edition: `[NO_SUCH_CATALOG_EXCEPTION] Catalog 'main' was not found.` `SHOW CATALOGS` on this workspace returns only `samples`, `system`, `tidb_fed`, `workspace` - there is no `main` catalog on Free Edition. | Use `workspace.lab_databricks.risk_scores` instead of `main.lab_databricks.risk_scores`; `DATABRICKS_SCORES_CATALOG=workspace` in `.env`/`.env.example`. A paid workspace with a `main` catalog can still set `DATABRICKS_SCORES_CATALOG=main`; nothing in the runner hardcodes the catalog name. |
+| Manifest `replication` edge (`tidb` -> `tiflash`) never had a corresponding `emitter.flow` call | `runner/main.ts`'s `eventLoopTick` emitted `writes` and `serving-reads` but nothing for `replication`, so the featured trace always showed a zero-total edge for real TiFlash replication traffic that was actually happening (the `events` table has `TIFLASH REPLICA 1`). Caught by a new test, not by manual inspection alone. | Added a failing test first (`test/emitted-ids.test.ts`: "every manifest edge is emitted by at least one emitter.flow call"), then added `emitter.flow('replication', wroteThisTick)` right after the `writes` flow in `eventLoopTick` - every row written to `events` is the same row TiFlash asynchronously replicates, so this is a real proxy, not a fabricated number. |
+| Recording process wouldn't exit on `SIGINT` | `runner/main.ts`'s `SIGINT`/`SIGTERM` handlers call `controller.abort()`, which correctly stops both `every()` loops (confirmed: event emission stopped immediately), but the process itself then hung indefinitely afterward - `pool.end()` (mysql2) never resolved in either recording session. | Not a code bug fixed in this pass (out of the demo's own file scope to chase into `@lab/runner-kit`/`mysql2` pool teardown); worked around operationally by confirming the event stream had gone quiet (proof the abort took effect) and then `SIGKILL`-ing the runner process, which still triggers the relay's `child.on('close')` handler and writes a complete, valid trace. Flagging here so a future recording session isn't surprised by it. |
+| `DATABRICKS_FEDERATION_SCHEMA` | Plan template defaulted to `lab`; the shared lab environment's actual TiDB database for this demo is `lab_06` | `.env`/`.env.example` and the Task 11/16 SQL now show `lab_06` as the concrete example alongside the generic `<your-tidb-database>` placeholder. |
+
+**Live verification evidence (2026-09-29, `lab-shared` TiDB Cloud Starter cluster, database `lab_06`; Databricks Free Edition workspace, warehouse "Serverless Starter Warehouse"):**
+- `SHOW SCHEMAS IN tidb_fed` -> `information_schema, lab_01, lab_06, mysql, performance_schema, sys, test` (the federation connection sees every database on the shared cluster, confirming it is cluster-wide, not scoped to one database - this demo only ever queries `lab_06`).
+- `SELECT * FROM tidb_fed.lab_06.heartbeats` -> `[["1","2026-09-29T12:06:16.051Z"]]`.
+- `runStatement` (Task 10's TypeScript client) against the same warehouse: `{"statementId":"...","state":"SUCCEEDED","rowCount":1,"rows":[["1"]]}`.
+- Recorded featured trace: 1484 events over a 210.5s run; all four checks (`federation-reachable`, `scores-written-back`, `loop-closed`, `writes-continue-during-scoring`) ended `pass`; every metric in the manifest had at least one sample; every edge (`writes`, `serving-reads`, `federated-read`, `reverse-etl`, `analytics-query`, `replication`) had a non-zero flow total; all six phases and all six controls (`trigger-scoring` x3, `run-analytics`, `change-rule`, `burst-events`) appear in the trace in the choreographed order; `pnpm lab validate databricks` and `pnpm lab check-public` both pass.
+- Unit tests: 43 passed (added one new test for the `replication` edge gap); `tsc -p tsconfig.json` exits 0.
