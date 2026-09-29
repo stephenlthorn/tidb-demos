@@ -12,3 +12,6 @@ packages/ui/public/data/
 *.tfvars
 *.tfvars.json
 *.egg-info/
+
+# raw console capture frames (assembled media is committed separately)
+demos/*/media/raw-capture/
