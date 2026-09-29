@@ -7,6 +7,10 @@ data "aws_subnets" "default" {
     name   = "vpc-id"
     values = [data.aws_vpc.default.id]
   }
+  filter {
+    name   = "default-for-az"
+    values = ["true"]
+  }
 }
 
 # Latest Windows Server 2022 English Full Base AMI, published by AWS as a public SSM parameter.
