@@ -17,16 +17,16 @@ pnpm dev                           # open the printed URL
 | # | Demo | Runs on | Replay |
 |---|---|---|---|
 | 00 | [Platform and example](demos/example/) | Local | recorded |
-| 01 | [AWS DMS](demos/aws-dms/) | AWS + TiDB Cloud | pending |
+| 01 | [AWS DMS](demos/aws-dms/) | AWS + TiDB Cloud | recorded |
 | 02 | [Kafka](demos/kafka/) | Local | recorded |
-| 03 | [Debezium](demos/debezium/) | Local | pending |
-| 04 | [Redis](demos/redis/) | Local | pending |
-| 05 | [Okta](demos/okta/) | Local + Okta developer org | pending |
-| 06 | [Databricks](demos/databricks/) | Databricks Free Edition + TiDB Cloud Starter | pending |
-| 08 | [Prometheus / Grafana](demos/prometheus-grafana/) | Local | pending |
-| 09 | [Datadog](demos/datadog/) | Local + Datadog account | pending |
-| 10 | [Terraform / EKS](demos/terraform-eks/) | AWS + TiDB Cloud | pending |
-| 11 | [Power BI](demos/power-bi/) | TiDB Cloud Starter + Power BI | pending |
+| 03 | [Debezium](demos/debezium/) | Local | recorded |
+| 04 | [Redis](demos/redis/) | Local | recorded |
+| 05 | [Okta](demos/okta/) | Local + Okta developer org | recorded |
+| 06 | [Databricks](demos/databricks/) | Databricks Free Edition + TiDB Cloud Starter | recorded |
+| 08 | [Prometheus / Grafana](demos/prometheus-grafana/) | Local | recorded |
+| 09 | [Datadog](demos/datadog/) | Local + Datadog account | recorded |
+| 10 | [Terraform / EKS](demos/terraform-eks/) | AWS + TiDB Cloud | recorded |
+| 11 | [Power BI](demos/power-bi/) | TiDB Cloud Starter + Power BI | recorded |
 
 Each demo folder has a README (prerequisites, run, record, teardown, cost notes) and a TALK-TRACK.md. The full plan for each demo, including what was verified against real systems, is in [docs/plans/](docs/plans/README.md).
 
