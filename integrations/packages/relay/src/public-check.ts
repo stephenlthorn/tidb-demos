@@ -49,6 +49,17 @@ export const resolveDenylist = async (env: NodeJS.ProcessEnv): Promise<readonly 
   return text === undefined ? undefined : parseDenylist(text);
 };
 
+export const denylistOrWarning = (
+  resolved: readonly string[] | undefined,
+): { readonly denylist: readonly string[]; readonly warning: string | undefined } =>
+  resolved === undefined
+    ? {
+        denylist: [],
+        warning:
+          'No denylist found, so this scan checks internal URLs only. Maintainers: create ~/.config/tidb-lab/denylist.txt (one customer or prospect name per line) or set LAB_DENYLIST.',
+      }
+    : { denylist: resolved, warning: undefined };
+
 export const listPublishableFiles = async (root: string): Promise<readonly string[]> => {
   const { stdout } = await promisify(execFile)('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], {
     cwd: root,

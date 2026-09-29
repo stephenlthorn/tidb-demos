@@ -39,4 +39,15 @@ A collection of TiDB demo repositories showcasing various use cases and applicat
 | 10 | [Terraform / EKS](integrations/demos/terraform-eks/) | TiDB Cloud, EKS and an app provisioned in one `terraform apply` | AWS + TiDB Cloud | recorded |
 | 11 | [Power BI](integrations/demos/power-bi/) | One TiDB cluster serves the order pipeline and a live Power BI report, with no ETL | TiDB Cloud Starter + Power BI | recorded |
 
-Every demo has been run live and recorded; each replay carries the environment it was recorded in. Plans, one per demo, are in [integrations/docs/plans/](integrations/docs/plans/).
+Every demo has been run live and recorded; each replay carries the environment it was recorded in.
+
+To watch the replays on your machine (Node.js 22+ and pnpm 10+, no database needed):
+
+```bash
+git clone https://github.com/stephenlthorn/tidb-demos.git
+cd tidb-demos/integrations
+pnpm install
+pnpm dev
+```
+
+See [integrations/README.md](integrations/README.md) for running a demo live and recording your own replay. Plans, one per demo, are in [integrations/docs/plans/](integrations/docs/plans/).

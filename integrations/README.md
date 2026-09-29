@@ -4,13 +4,33 @@ Demos of TiDB working with the tools customers already run. Each demo shows the 
 
 ## Quick start
 
+### Watch the recorded replays (no database or cloud account needed)
+
+Requirements: Node.js 22+ and pnpm 10+ (`npm install -g pnpm`).
+
 ```bash
+git clone https://github.com/stephenlthorn/tidb-demos.git
+cd tidb-demos/integrations
 pnpm install
-pnpm test
-bash infra/tidb/playground.sh      # separate terminal
-pnpm lab run example               # separate terminal
-pnpm dev                           # open the printed URL
+pnpm dev
 ```
+
+Open the printed URL (usually http://localhost:5173). Every demo card plays back a replay recorded from a real live run: the animated data-flow diagram, the metric tiles, the phase narration and the pass/fail checks, at 1x-8x speed with a scrubber. Okta and Datadog also have side-by-side video and screenshots of the real vendor console in `demos/okta/media/` and `demos/datadog/media/`.
+
+### Run a demo live yourself
+
+Each demo's README lists exactly what it needs (local TiDB, Docker, or a cloud account) and how to tear it down. The local ones use a TiDB playground and, for some, Kafka:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://tiup-mirrors.pingcap.com/install.sh | sh   # installs tiup (TiDB)
+bash infra/tidb/playground.sh                      # terminal 1: local TiDB with TiFlash and TiCDC
+pnpm lab run example                               # terminal 2: the self-test demo
+pnpm dev                                           # terminal 3: the dashboard
+```
+
+Then open http://localhost:5173/#/demo/example?relay=http://127.0.0.1:7070 to watch the live run (use the demo id and relay port you started).
+
+`pnpm lab run <demo-id> --record` records a new replay into `demos/<demo-id>/traces/`. `pnpm test` runs every package's tests.
 
 ## Demos
 

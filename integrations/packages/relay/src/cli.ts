@@ -5,7 +5,7 @@ import { collectSite } from './collect-site';
 import { runDbInit } from './db-init';
 import { loadDemoEnv, loadFeaturedTrace, loadManifest } from './demo-files';
 import { demoDir, labRoot } from './paths';
-import { listPublishableFiles, resolveDenylist, scanText } from './public-check';
+import { listPublishableFiles, denylistOrWarning, resolveDenylist, scanText } from './public-check';
 import { runDemo } from './run';
 import { validateTrace } from './validate';
 
@@ -43,11 +43,8 @@ const dbInitCommand = async (root: string, id: string): Promise<number> => {
 };
 
 const checkPublicCommand = async (root: string): Promise<number> => {
-  const denylist = await resolveDenylist(process.env);
-  if (denylist === undefined) {
-    console.error('No denylist. Create ~/.config/tidb-lab/denylist.txt (one customer or prospect name per line) or set LAB_DENYLIST.');
-    return 1;
-  }
+  const { denylist, warning } = denylistOrWarning(await resolveDenylist(process.env));
+  if (warning !== undefined) console.warn(warning);
   const files = await listPublishableFiles(root);
   const findings = (await Promise.all(
     files.map(async (file) => scanText({ file, text: await readFile(join(root, file), 'utf8'), denylist })),
