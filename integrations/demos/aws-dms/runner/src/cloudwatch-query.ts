@@ -1,3 +1,12 @@
+export const dmsResourceIdFromArn = (arn: string): string => {
+  const segments = arn.split(':');
+  const resourceId = segments[segments.length - 1];
+  if (resourceId === undefined || resourceId.length === 0 || segments.length < 6) {
+    throw new Error(`not a DMS resource ARN: ${arn}`);
+  }
+  return resourceId;
+};
+
 export type CdcLatencyQueryOptions = {
   readonly replicationInstanceId: string;
   readonly replicationTaskId: string;

@@ -227,9 +227,17 @@ resource "aws_dms_replication_task" "this" {
   table_mappings           = file("${path.module}/table-mappings.json")
 
   replication_task_settings = jsonencode({
+    # EnableValidation is false: live-verified (2026-09-29) that DMS's own
+    # validation feature tries to create its control table
+    # awsdms_validation_failures_v1 inside the target database and fails
+    # against TiDB Cloud Starter, which then marks the affected table
+    # "Table error" and silently stops applying CDC changes to it (accounts
+    # kept replicating, orders stalled at its full-load row count while
+    # Aurora kept growing). This demo already computes its own row-count and
+    # checksum comparisons (run-validation control), so DMS's vendor
+    # validation state is not required.
     ValidationSettings = {
-      EnableValidation = true
-      ThreadCount      = 5
+      EnableValidation = false
     }
     Logging = {
       EnableLogging = true

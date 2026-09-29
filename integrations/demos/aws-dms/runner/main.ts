@@ -10,6 +10,7 @@ import { freshnessMs } from './src/freshness';
 import { cutoverDowntimeSeconds } from './src/cutover-timer';
 import { tableProgressPercent } from './src/table-stats';
 import { buildChecksumQuery, type ChecksumColumn } from './src/checksum';
+import { dmsResourceIdFromArn } from './src/cloudwatch-query';
 
 type CountRow = RowDataPacket & { readonly count: number };
 type ChecksumRow = RowDataPacket & { readonly checksum: number };
@@ -26,7 +27,7 @@ const dmsPoller = createDmsPoller({ region: env.AWS_REGION ?? 'us-east-1', repli
 const cloudwatchPoller = createCloudwatchPoller({
   region: env.AWS_REGION ?? 'us-east-1',
   replicationInstanceId: env.DMS_REPLICATION_INSTANCE_ID ?? '',
-  replicationTaskId: env.DMS_TASK_ID ?? '',
+  replicationTaskId: env.DMS_TASK_ARN === undefined ? '' : dmsResourceIdFromArn(env.DMS_TASK_ARN),
   windowMs: 10 * 60 * 1000,
 });
 const loadGenerator = createLoadGenerator({

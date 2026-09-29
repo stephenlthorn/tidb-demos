@@ -1,5 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { buildCdcLatencyQuery, parseGetMetricDataResponse } from '../runner/src/cloudwatch-query';
+import { buildCdcLatencyQuery, dmsResourceIdFromArn, parseGetMetricDataResponse } from '../runner/src/cloudwatch-query';
+
+describe('dmsResourceIdFromArn', () => {
+  it('extracts the resource id, the last colon-separated segment, from a DMS task ARN', () => {
+    expect(dmsResourceIdFromArn('arn:aws:dms:us-west-2:219248915861:task:6WOZGNMC4FER5N46WKKMXPC4RY')).toBe(
+      '6WOZGNMC4FER5N46WKKMXPC4RY',
+    );
+  });
+
+  it('extracts the resource id from a DMS replication instance ARN', () => {
+    expect(dmsResourceIdFromArn('arn:aws:dms:us-west-2:219248915861:rep:OYKLL2SOIBE57N2OKO3465HWJA')).toBe(
+      'OYKLL2SOIBE57N2OKO3465HWJA',
+    );
+  });
+
+  it('throws for an ARN with no colon-separated resource id', () => {
+    expect(() => dmsResourceIdFromArn('not-an-arn')).toThrow();
+  });
+});
 
 describe('buildCdcLatencyQuery', () => {
   it('builds a GetMetricData request for both CDC latency metrics scoped to one replication task', () => {
