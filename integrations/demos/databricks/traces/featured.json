@@ -1,0 +1,9174 @@
+{
+  "schemaVersion": 1,
+  "manifest": {
+    "id": "databricks",
+    "number": 6,
+    "title": "TiDB + Databricks: Operational Store Meets the Lakehouse",
+    "tagline": "TiDB serves live features while Databricks trains and scores on the same fresh data.",
+    "integrations": [
+      "Databricks",
+      "Databricks SQL Lakehouse Federation",
+      "TiFlash"
+    ],
+    "pattern": "Data platform teams on Databricks asking how an operational database fits next to the lakehouse.",
+    "publish": true,
+    "runner": {
+      "command": [
+        "node",
+        "--import",
+        "tsx",
+        "runner/main.ts"
+      ],
+      "cwd": "."
+    },
+    "nodes": [
+      {
+        "id": "app",
+        "label": "Operational App",
+        "kind": "client",
+        "x": 8,
+        "y": 30
+      },
+      {
+        "id": "tidb",
+        "label": "TiDB Cloud (Starter)",
+        "kind": "tidb",
+        "x": 50,
+        "y": 45
+      },
+      {
+        "id": "tiflash",
+        "label": "TiFlash (columnar)",
+        "kind": "tidb",
+        "x": 50,
+        "y": 80
+      },
+      {
+        "id": "databricks",
+        "label": "Databricks Lakehouse",
+        "kind": "cloud",
+        "x": 88,
+        "y": 30
+      }
+    ],
+    "edges": [
+      {
+        "id": "writes",
+        "from": "app",
+        "to": "tidb",
+        "label": "events written",
+        "unit": "rows/s"
+      },
+      {
+        "id": "federated-read",
+        "from": "tidb",
+        "to": "databricks",
+        "label": "federated read (JDBC)",
+        "unit": "rows/s"
+      },
+      {
+        "id": "reverse-etl",
+        "from": "databricks",
+        "to": "tidb",
+        "label": "scores written back",
+        "unit": "rows/s"
+      },
+      {
+        "id": "serving-reads",
+        "from": "tidb",
+        "to": "app",
+        "label": "serving reads",
+        "unit": "req/s"
+      },
+      {
+        "id": "replication",
+        "from": "tidb",
+        "to": "tiflash",
+        "label": "columnar replication",
+        "unit": "rows/s"
+      },
+      {
+        "id": "analytics-query",
+        "from": "tiflash",
+        "to": "app",
+        "label": "ad hoc analytics results",
+        "unit": "req/s"
+      }
+    ],
+    "metrics": [
+      {
+        "id": "event-write-rate",
+        "label": "Operational Write Rate",
+        "unit": "rows/s",
+        "display": "both",
+        "better": "higher",
+        "group": "operational",
+        "howMeasured": "Rows inserted into TiDB's events table since the last event-loop tick, divided by EVENT_WRITE_INTERVAL_MS / 1000."
+      },
+      {
+        "id": "freshness-lag-ms",
+        "label": "Freshness Lag: TiDB -> Delta",
+        "unit": "ms",
+        "display": "both",
+        "better": "lower",
+        "target": 5000,
+        "group": "sync",
+        "howMeasured": "computeFreshnessLagMs(heartbeatWrittenAtMs, observedAtMs): heartbeatWrittenAtMs parsed from the federated MAX(written_at) read; observedAtMs is Date.now() when that read resolves."
+      },
+      {
+        "id": "rows-synced",
+        "label": "Rows Read by Databricks",
+        "unit": "rows",
+        "display": "tile",
+        "better": "neutral",
+        "group": "sync",
+        "howMeasured": "The row_count field of the Statement Execution API response for the scoring INSERT ... SELECT statement."
+      },
+      {
+        "id": "write-back-rate",
+        "label": "Reverse-ETL Write Rate",
+        "unit": "rows/s",
+        "display": "both",
+        "better": "higher",
+        "group": "sync",
+        "howMeasured": "Scored rows in the upsert batch divided by the wall-clock seconds timed() measured for the single TiDB upsert statement."
+      },
+      {
+        "id": "serving-p50",
+        "label": "Serving Read p50",
+        "unit": "ms",
+        "display": "both",
+        "better": "lower",
+        "group": "serving",
+        "howMeasured": "summarize() of timed() latencies for SELECT ... FROM customer_risk_scores ORDER BY RAND() LIMIT 1, .p50 field, recomputed each event-loop tick."
+      },
+      {
+        "id": "serving-p99",
+        "label": "Serving Read p99",
+        "unit": "ms",
+        "display": "both",
+        "better": "lower",
+        "target": 200,
+        "group": "serving",
+        "howMeasured": "Same summarize() call as serving-p50, .p99 field."
+      },
+      {
+        "id": "full-loop-time",
+        "label": "Event to Servable Feature",
+        "unit": "s",
+        "display": "both",
+        "better": "lower",
+        "target": 30,
+        "group": "loop",
+        "howMeasured": "computeFullLoopSeconds(loopStartMs, writeBackAtMs): loopStartMs is the runner's Date.now() at the last event write before the scoring run started; writeBackAtMs is Date.now() right after the scored rows are read back from Databricks."
+      },
+      {
+        "id": "analytics-query-ms",
+        "label": "Ad Hoc TiFlash Query Latency",
+        "unit": "ms",
+        "display": "tile",
+        "better": "lower",
+        "group": "analytics",
+        "howMeasured": "timed() around the single TiFlash-hinted aggregate SELECT issued directly against TiDB when the run-analytics control fires."
+      }
+    ],
+    "phases": [
+      {
+        "id": "steady-writes",
+        "label": "Steady-State Writes",
+        "narration": "This is just an app writing to TiDB - purchases, refunds, chargebacks, one row at a time, like any OLTP workload."
+      },
+      {
+        "id": "federated-read",
+        "label": "Databricks Reads TiDB Live",
+        "narration": "Databricks is now querying TiDB directly - no export job, no staging bucket, just a live JDBC read through Unity Catalog."
+      },
+      {
+        "id": "score-write-back",
+        "label": "Reverse ETL: Scores Back to TiDB",
+        "narration": "The scores Databricks just computed are landing back in TiDB, in a table the app already knows how to query."
+      },
+      {
+        "id": "low-latency-serving",
+        "label": "Serving Fresh Scores",
+        "narration": "The app is reading those scores right now, in single-digit milliseconds, while new events keep landing."
+      },
+      {
+        "id": "adhoc-analytics",
+        "label": "Ad Hoc Analytics on Fresh Data",
+        "narration": "Same fresh data, same cluster, now answered by the columnar engine instead of the row store - no second database."
+      },
+      {
+        "id": "rule-change",
+        "label": "Changing the Rule Live",
+        "narration": "Swapping the scoring rule is a SQL change on the Databricks side - nothing in TiDB or the app has to redeploy."
+      }
+    ],
+    "checks": [
+      {
+        "id": "federation-reachable",
+        "label": "Databricks Can Read TiDB",
+        "description": "The first federated SELECT MAX(written_at) against the TiDB foreign catalog returns a row."
+      },
+      {
+        "id": "scores-written-back",
+        "label": "Scores Land Back in TiDB",
+        "description": "The reverse-ETL upsert into customer_risk_scores completes without error."
+      },
+      {
+        "id": "loop-closed",
+        "label": "Full Loop Closes",
+        "description": "computeFullLoopSeconds returns a finite, non-negative duration for the run."
+      },
+      {
+        "id": "writes-continue-during-scoring",
+        "label": "OLTP Writes Never Pause",
+        "description": "No tick during the scoring/write-back window recorded zero event writes."
+      }
+    ],
+    "controls": [
+      {
+        "id": "trigger-scoring",
+        "label": "Run scoring now",
+        "description": "Immediately runs the federated-read -> score -> write-back sequence."
+      },
+      {
+        "id": "burst-events",
+        "label": "Burst events",
+        "description": "Writes BURST_EVENT_COUNT synthetic events back-to-back."
+      },
+      {
+        "id": "change-rule",
+        "label": "Change scoring rule",
+        "description": "Toggles the scoring rule between velocity and amount for the next run."
+      },
+      {
+        "id": "run-analytics",
+        "label": "Run ad hoc analytics",
+        "description": "Runs one TiFlash-hinted aggregate query against TiDB and times it."
+      }
+    ]
+  },
+  "recordedAt": "2026-09-29T12:28:14.219Z",
+  "environment": {
+    "tidb": "TiDB Cloud Starter (public endpoint)",
+    "components": {
+      "databricks": "Databricks SQL Warehouse (serverless)"
+    },
+    "notes": "Databricks reads this cluster over Lakehouse Federation; local tiup playground is not used because Databricks cannot reach a laptop behind NAT."
+  },
+  "durationMs": 210529,
+  "events": [
+    {
+      "type": "node",
+      "t": 2033,
+      "node": "app",
+      "status": "healthy"
+    },
+    {
+      "type": "node",
+      "t": 2033,
+      "node": "tidb",
+      "status": "healthy"
+    },
+    {
+      "type": "node",
+      "t": 2033,
+      "node": "tiflash",
+      "status": "healthy"
+    },
+    {
+      "type": "node",
+      "t": 2033,
+      "node": "databricks",
+      "status": "idle"
+    },
+    {
+      "type": "phase",
+      "t": 2033,
+      "phase": "steady-writes"
+    },
+    {
+      "type": "check",
+      "t": 2036,
+      "id": "federation-reachable",
+      "status": "pending"
+    },
+    {
+      "type": "check",
+      "t": 2036,
+      "id": "scores-written-back",
+      "status": "pending"
+    },
+    {
+      "type": "check",
+      "t": 2036,
+      "id": "loop-closed",
+      "status": "pending"
+    },
+    {
+      "type": "check",
+      "t": 2036,
+      "id": "writes-continue-during-scoring",
+      "status": "pending"
+    },
+    {
+      "type": "phase",
+      "t": 2036,
+      "phase": "federated-read"
+    },
+    {
+      "type": "node",
+      "t": 2036,
+      "node": "databricks",
+      "status": "busy",
+      "note": "reading TiDB via Lakehouse Federation"
+    },
+    {
+      "type": "flow",
+      "t": 2601,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 2601,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 2601,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 2601,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 2602,
+      "id": "serving-p50",
+      "value": 181.27945900000032
+    },
+    {
+      "type": "metric",
+      "t": 2602,
+      "id": "serving-p99",
+      "value": 181.27945900000032
+    },
+    {
+      "type": "flow",
+      "t": 3319,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 3319,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 3319,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 3319,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 3319,
+      "id": "serving-p50",
+      "value": 90.11345799999981
+    },
+    {
+      "type": "metric",
+      "t": 3319,
+      "id": "serving-p99",
+      "value": 90.11345799999981
+    },
+    {
+      "type": "flow",
+      "t": 4319,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 4319,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 4319,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 4319,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 4319,
+      "id": "serving-p50",
+      "value": 90.87816699999985
+    },
+    {
+      "type": "metric",
+      "t": 4319,
+      "id": "serving-p99",
+      "value": 90.87816699999985
+    },
+    {
+      "type": "flow",
+      "t": 5319,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 5319,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 5319,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 5319,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 5320,
+      "id": "serving-p50",
+      "value": 89.82612499999959
+    },
+    {
+      "type": "metric",
+      "t": 5320,
+      "id": "serving-p99",
+      "value": 89.82612499999959
+    },
+    {
+      "type": "metric",
+      "t": 5895,
+      "id": "freshness-lag-ms",
+      "value": 759
+    },
+    {
+      "type": "check",
+      "t": 5895,
+      "id": "federation-reachable",
+      "status": "pass",
+      "observed": "759ms lag"
+    },
+    {
+      "type": "flow",
+      "t": 6319,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 6319,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 6319,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 6319,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 6319,
+      "id": "serving-p50",
+      "value": 90.79141600000003
+    },
+    {
+      "type": "metric",
+      "t": 6319,
+      "id": "serving-p99",
+      "value": 90.79141600000003
+    },
+    {
+      "type": "flow",
+      "t": 7334,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 7334,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 7334,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 7334,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 7335,
+      "id": "serving-p50",
+      "value": 97.00154199999997
+    },
+    {
+      "type": "metric",
+      "t": 7335,
+      "id": "serving-p99",
+      "value": 97.00154199999997
+    },
+    {
+      "type": "flow",
+      "t": 8324,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 8324,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 8324,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 8324,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 8324,
+      "id": "serving-p50",
+      "value": 91.06254199999967
+    },
+    {
+      "type": "metric",
+      "t": 8324,
+      "id": "serving-p99",
+      "value": 91.06254199999967
+    },
+    {
+      "type": "flow",
+      "t": 9323,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 9324,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 9324,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 9324,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 9324,
+      "id": "serving-p50",
+      "value": 91.65941699999894
+    },
+    {
+      "type": "metric",
+      "t": 9324,
+      "id": "serving-p99",
+      "value": 91.65941699999894
+    },
+    {
+      "type": "flow",
+      "t": 10329,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 10329,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 10329,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 10329,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 10329,
+      "id": "serving-p50",
+      "value": 90.48220899999978
+    },
+    {
+      "type": "metric",
+      "t": 10329,
+      "id": "serving-p99",
+      "value": 90.48220899999978
+    },
+    {
+      "type": "metric",
+      "t": 10931,
+      "id": "rows-synced",
+      "value": 1
+    },
+    {
+      "type": "flow",
+      "t": 10931,
+      "edge": "federated-read",
+      "count": 1
+    },
+    {
+      "type": "phase",
+      "t": 10931,
+      "phase": "score-write-back"
+    },
+    {
+      "type": "node",
+      "t": 10931,
+      "node": "databricks",
+      "status": "healthy",
+      "note": "scoring complete"
+    },
+    {
+      "type": "flow",
+      "t": 11329,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 11329,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 11329,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 11329,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 11329,
+      "id": "serving-p50",
+      "value": 92.42595799999981
+    },
+    {
+      "type": "metric",
+      "t": 11329,
+      "id": "serving-p99",
+      "value": 92.42595799999981
+    },
+    {
+      "type": "metric",
+      "t": 12316,
+      "id": "write-back-rate",
+      "value": 1126.9925553472503
+    },
+    {
+      "type": "flow",
+      "t": 12316,
+      "edge": "reverse-etl",
+      "count": 325
+    },
+    {
+      "type": "check",
+      "t": 12316,
+      "id": "scores-written-back",
+      "status": "pass",
+      "observed": "325 rows"
+    },
+    {
+      "type": "metric",
+      "t": 12316,
+      "id": "full-loop-time",
+      "value": 12.027
+    },
+    {
+      "type": "check",
+      "t": 12316,
+      "id": "loop-closed",
+      "status": "pass",
+      "observed": "12.0s"
+    },
+    {
+      "type": "check",
+      "t": 12316,
+      "id": "writes-continue-during-scoring",
+      "status": "pass",
+      "observed": "writes continued throughout"
+    },
+    {
+      "type": "phase",
+      "t": 12316,
+      "phase": "low-latency-serving"
+    },
+    {
+      "type": "flow",
+      "t": 13097,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 13097,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 13097,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 13097,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 13097,
+      "id": "serving-p50",
+      "value": 185.97620900000038
+    },
+    {
+      "type": "metric",
+      "t": 13097,
+      "id": "serving-p99",
+      "value": 185.97620900000038
+    },
+    {
+      "type": "flow",
+      "t": 13384,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 13384,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 13384,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 13384,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 13384,
+      "id": "serving-p50",
+      "value": 93.34933300000012
+    },
+    {
+      "type": "metric",
+      "t": 13384,
+      "id": "serving-p99",
+      "value": 93.34933300000012
+    },
+    {
+      "type": "flow",
+      "t": 14383,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 14383,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 14383,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 14383,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 14383,
+      "id": "serving-p50",
+      "value": 92.40220799999952
+    },
+    {
+      "type": "metric",
+      "t": 14383,
+      "id": "serving-p99",
+      "value": 92.40220799999952
+    },
+    {
+      "type": "flow",
+      "t": 15389,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 15389,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 15389,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 15389,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 15389,
+      "id": "serving-p50",
+      "value": 93.52716599999985
+    },
+    {
+      "type": "metric",
+      "t": 15389,
+      "id": "serving-p99",
+      "value": 93.52716599999985
+    },
+    {
+      "type": "flow",
+      "t": 16388,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 16388,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 16388,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 16388,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 16388,
+      "id": "serving-p50",
+      "value": 94.51087499999994
+    },
+    {
+      "type": "metric",
+      "t": 16388,
+      "id": "serving-p99",
+      "value": 94.51087499999994
+    },
+    {
+      "type": "check",
+      "t": 17036,
+      "id": "loop-closed",
+      "status": "pending"
+    },
+    {
+      "type": "check",
+      "t": 17036,
+      "id": "writes-continue-during-scoring",
+      "status": "pending"
+    },
+    {
+      "type": "phase",
+      "t": 17036,
+      "phase": "federated-read"
+    },
+    {
+      "type": "node",
+      "t": 17036,
+      "node": "databricks",
+      "status": "busy",
+      "note": "reading TiDB via Lakehouse Federation"
+    },
+    {
+      "type": "flow",
+      "t": 17392,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 17392,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 17392,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 17392,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 17392,
+      "id": "serving-p50",
+      "value": 94.86079099999915
+    },
+    {
+      "type": "metric",
+      "t": 17392,
+      "id": "serving-p99",
+      "value": 94.86079099999915
+    },
+    {
+      "type": "flow",
+      "t": 18392,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 18392,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 18392,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 18392,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 18392,
+      "id": "serving-p50",
+      "value": 95.48795900000187
+    },
+    {
+      "type": "metric",
+      "t": 18392,
+      "id": "serving-p99",
+      "value": 95.48795900000187
+    },
+    {
+      "type": "flow",
+      "t": 19390,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 19390,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 19390,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 19390,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 19390,
+      "id": "serving-p50",
+      "value": 94.60054200000013
+    },
+    {
+      "type": "metric",
+      "t": 19390,
+      "id": "serving-p99",
+      "value": 94.60054200000013
+    },
+    {
+      "type": "metric",
+      "t": 20106,
+      "id": "freshness-lag-ms",
+      "value": 911
+    },
+    {
+      "type": "flow",
+      "t": 20388,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 20388,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 20388,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 20388,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 20388,
+      "id": "serving-p50",
+      "value": 93.30279200000223
+    },
+    {
+      "type": "metric",
+      "t": 20388,
+      "id": "serving-p99",
+      "value": 93.30279200000223
+    },
+    {
+      "type": "flow",
+      "t": 21391,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 21391,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 21391,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 21391,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 21391,
+      "id": "serving-p50",
+      "value": 95.73587499999849
+    },
+    {
+      "type": "metric",
+      "t": 21391,
+      "id": "serving-p99",
+      "value": 95.73587499999849
+    },
+    {
+      "type": "flow",
+      "t": 22397,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 22397,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 22397,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 22397,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 22397,
+      "id": "serving-p50",
+      "value": 95.3325420000001
+    },
+    {
+      "type": "metric",
+      "t": 22397,
+      "id": "serving-p99",
+      "value": 95.3325420000001
+    },
+    {
+      "type": "flow",
+      "t": 23398,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 23398,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 23398,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 23398,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 23398,
+      "id": "serving-p50",
+      "value": 95.55654200000208
+    },
+    {
+      "type": "metric",
+      "t": 23398,
+      "id": "serving-p99",
+      "value": 95.55654200000208
+    },
+    {
+      "type": "flow",
+      "t": 24396,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 24396,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 24396,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 24396,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 24396,
+      "id": "serving-p50",
+      "value": 95.72825000000012
+    },
+    {
+      "type": "metric",
+      "t": 24396,
+      "id": "serving-p99",
+      "value": 95.72825000000012
+    },
+    {
+      "type": "metric",
+      "t": 24588,
+      "id": "rows-synced",
+      "value": 1
+    },
+    {
+      "type": "flow",
+      "t": 24588,
+      "edge": "federated-read",
+      "count": 1
+    },
+    {
+      "type": "phase",
+      "t": 24588,
+      "phase": "score-write-back"
+    },
+    {
+      "type": "node",
+      "t": 24588,
+      "node": "databricks",
+      "status": "healthy",
+      "note": "scoring complete"
+    },
+    {
+      "type": "flow",
+      "t": 25392,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 25392,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 25392,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 25392,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 25392,
+      "id": "serving-p50",
+      "value": 92.95262500000172
+    },
+    {
+      "type": "metric",
+      "t": 25392,
+      "id": "serving-p99",
+      "value": 92.95262500000172
+    },
+    {
+      "type": "metric",
+      "t": 26009,
+      "id": "write-back-rate",
+      "value": 1138.4579999707314
+    },
+    {
+      "type": "flow",
+      "t": 26009,
+      "edge": "reverse-etl",
+      "count": 341
+    },
+    {
+      "type": "metric",
+      "t": 26009,
+      "id": "full-loop-time",
+      "value": 9.512
+    },
+    {
+      "type": "check",
+      "t": 26009,
+      "id": "loop-closed",
+      "status": "pass",
+      "observed": "9.5s"
+    },
+    {
+      "type": "check",
+      "t": 26009,
+      "id": "writes-continue-during-scoring",
+      "status": "pass",
+      "observed": "writes continued throughout"
+    },
+    {
+      "type": "phase",
+      "t": 26009,
+      "phase": "low-latency-serving"
+    },
+    {
+      "type": "control",
+      "t": 26201,
+      "id": "trigger-scoring"
+    },
+    {
+      "type": "flow",
+      "t": 26392,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 26392,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 26392,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 26392,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 26392,
+      "id": "serving-p50",
+      "value": 93.51141600000119
+    },
+    {
+      "type": "metric",
+      "t": 26392,
+      "id": "serving-p99",
+      "value": 93.51141600000119
+    },
+    {
+      "type": "flow",
+      "t": 27396,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 27396,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 27396,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 27396,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 27396,
+      "id": "serving-p50",
+      "value": 98.63375000000087
+    },
+    {
+      "type": "metric",
+      "t": 27396,
+      "id": "serving-p99",
+      "value": 98.63375000000087
+    },
+    {
+      "type": "flow",
+      "t": 28392,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 28392,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 28392,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 28392,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 28392,
+      "id": "serving-p50",
+      "value": 94.14145899999858
+    },
+    {
+      "type": "metric",
+      "t": 28392,
+      "id": "serving-p99",
+      "value": 94.14145899999858
+    },
+    {
+      "type": "flow",
+      "t": 29392,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 29392,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 29392,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 29392,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 29392,
+      "id": "serving-p50",
+      "value": 95.16258300000118
+    },
+    {
+      "type": "metric",
+      "t": 29392,
+      "id": "serving-p99",
+      "value": 95.16258300000118
+    },
+    {
+      "type": "flow",
+      "t": 30392,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 30392,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 30392,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 30392,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 30392,
+      "id": "serving-p50",
+      "value": 93.88058400000227
+    },
+    {
+      "type": "metric",
+      "t": 30392,
+      "id": "serving-p99",
+      "value": 93.88058400000227
+    },
+    {
+      "type": "flow",
+      "t": 31396,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 31396,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 31396,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 31396,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 31396,
+      "id": "serving-p50",
+      "value": 93.38974999999846
+    },
+    {
+      "type": "metric",
+      "t": 31396,
+      "id": "serving-p99",
+      "value": 93.38974999999846
+    },
+    {
+      "type": "check",
+      "t": 32036,
+      "id": "loop-closed",
+      "status": "pending"
+    },
+    {
+      "type": "check",
+      "t": 32036,
+      "id": "writes-continue-during-scoring",
+      "status": "pending"
+    },
+    {
+      "type": "phase",
+      "t": 32036,
+      "phase": "federated-read"
+    },
+    {
+      "type": "node",
+      "t": 32036,
+      "node": "databricks",
+      "status": "busy",
+      "note": "reading TiDB via Lakehouse Federation"
+    },
+    {
+      "type": "flow",
+      "t": 32395,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 32395,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 32395,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 32395,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 32395,
+      "id": "serving-p50",
+      "value": 93.95416599999953
+    },
+    {
+      "type": "metric",
+      "t": 32395,
+      "id": "serving-p99",
+      "value": 93.95416599999953
+    },
+    {
+      "type": "flow",
+      "t": 33397,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 33397,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 33397,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 33397,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 33397,
+      "id": "serving-p50",
+      "value": 93.47729199999594
+    },
+    {
+      "type": "metric",
+      "t": 33397,
+      "id": "serving-p99",
+      "value": 93.47729199999594
+    },
+    {
+      "type": "phase",
+      "t": 33928,
+      "phase": "adhoc-analytics"
+    },
+    {
+      "type": "metric",
+      "t": 34025,
+      "id": "analytics-query-ms",
+      "value": 96.56820799999696
+    },
+    {
+      "type": "flow",
+      "t": 34025,
+      "edge": "analytics-query",
+      "count": 3
+    },
+    {
+      "type": "control",
+      "t": 34223,
+      "id": "run-analytics"
+    },
+    {
+      "type": "flow",
+      "t": 34400,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 34400,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 34400,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 34400,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 34400,
+      "id": "serving-p50",
+      "value": 94.05154200000106
+    },
+    {
+      "type": "metric",
+      "t": 34400,
+      "id": "serving-p99",
+      "value": 94.05154200000106
+    },
+    {
+      "type": "metric",
+      "t": 35040,
+      "id": "freshness-lag-ms",
+      "value": 831
+    },
+    {
+      "type": "flow",
+      "t": 35411,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 35411,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 35411,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 35411,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 35411,
+      "id": "serving-p50",
+      "value": 94.6472089999952
+    },
+    {
+      "type": "metric",
+      "t": 35411,
+      "id": "serving-p99",
+      "value": 94.6472089999952
+    },
+    {
+      "type": "flow",
+      "t": 36399,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 36399,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 36399,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 36399,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 36399,
+      "id": "serving-p50",
+      "value": 93.1594999999943
+    },
+    {
+      "type": "metric",
+      "t": 36399,
+      "id": "serving-p99",
+      "value": 93.1594999999943
+    },
+    {
+      "type": "flow",
+      "t": 37401,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 37401,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 37401,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 37401,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 37401,
+      "id": "serving-p50",
+      "value": 92.5681670000049
+    },
+    {
+      "type": "metric",
+      "t": 37401,
+      "id": "serving-p99",
+      "value": 92.5681670000049
+    },
+    {
+      "type": "log",
+      "t": 37952,
+      "level": "info",
+      "msg": "scoring rule now: amount"
+    },
+    {
+      "type": "phase",
+      "t": 37952,
+      "phase": "rule-change"
+    },
+    {
+      "type": "control",
+      "t": 38247,
+      "id": "change-rule"
+    },
+    {
+      "type": "flow",
+      "t": 38403,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 38403,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 38403,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 38403,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 38403,
+      "id": "serving-p50",
+      "value": 94.16762500000186
+    },
+    {
+      "type": "metric",
+      "t": 38403,
+      "id": "serving-p99",
+      "value": 94.16762500000186
+    },
+    {
+      "type": "flow",
+      "t": 39407,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 39407,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 39407,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 39407,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 39407,
+      "id": "serving-p50",
+      "value": 94.61683300000004
+    },
+    {
+      "type": "metric",
+      "t": 39407,
+      "id": "serving-p99",
+      "value": 94.61683300000004
+    },
+    {
+      "type": "metric",
+      "t": 39536,
+      "id": "rows-synced",
+      "value": 1
+    },
+    {
+      "type": "flow",
+      "t": 39536,
+      "edge": "federated-read",
+      "count": 1
+    },
+    {
+      "type": "phase",
+      "t": 39536,
+      "phase": "score-write-back"
+    },
+    {
+      "type": "node",
+      "t": 39536,
+      "node": "databricks",
+      "status": "healthy",
+      "note": "scoring complete"
+    },
+    {
+      "type": "control",
+      "t": 40268,
+      "id": "trigger-scoring"
+    },
+    {
+      "type": "flow",
+      "t": 40403,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 40403,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 40403,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 40403,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 40404,
+      "id": "serving-p50",
+      "value": 92.89329199999338
+    },
+    {
+      "type": "metric",
+      "t": 40404,
+      "id": "serving-p99",
+      "value": 92.89329199999338
+    },
+    {
+      "type": "metric",
+      "t": 40788,
+      "id": "write-back-rate",
+      "value": 1408.321474050238
+    },
+    {
+      "type": "flow",
+      "t": 40788,
+      "edge": "reverse-etl",
+      "count": 550
+    },
+    {
+      "type": "metric",
+      "t": 40788,
+      "id": "full-loop-time",
+      "value": 9.19
+    },
+    {
+      "type": "check",
+      "t": 40788,
+      "id": "loop-closed",
+      "status": "pass",
+      "observed": "9.2s"
+    },
+    {
+      "type": "check",
+      "t": 40788,
+      "id": "writes-continue-during-scoring",
+      "status": "pass",
+      "observed": "writes continued throughout"
+    },
+    {
+      "type": "phase",
+      "t": 40788,
+      "phase": "low-latency-serving"
+    },
+    {
+      "type": "flow",
+      "t": 41396,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 41396,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 41396,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 41396,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 41396,
+      "id": "serving-p50",
+      "value": 90.39366600000358
+    },
+    {
+      "type": "metric",
+      "t": 41396,
+      "id": "serving-p99",
+      "value": 90.39366600000358
+    },
+    {
+      "type": "flow",
+      "t": 42401,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 42401,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 42401,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 42401,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 42401,
+      "id": "serving-p50",
+      "value": 93.33033299999806
+    },
+    {
+      "type": "metric",
+      "t": 42401,
+      "id": "serving-p99",
+      "value": 93.33033299999806
+    },
+    {
+      "type": "flow",
+      "t": 43400,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 43400,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 43400,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 43400,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 43400,
+      "id": "serving-p50",
+      "value": 89.36183300000266
+    },
+    {
+      "type": "metric",
+      "t": 43400,
+      "id": "serving-p99",
+      "value": 89.36183300000266
+    },
+    {
+      "type": "flow",
+      "t": 44397,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 44397,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 44397,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 44397,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 44397,
+      "id": "serving-p50",
+      "value": 90.14233300000342
+    },
+    {
+      "type": "metric",
+      "t": 44397,
+      "id": "serving-p99",
+      "value": 90.14233300000342
+    },
+    {
+      "type": "flow",
+      "t": 45399,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 45399,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 45399,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 45399,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 45399,
+      "id": "serving-p50",
+      "value": 89.66754199999559
+    },
+    {
+      "type": "metric",
+      "t": 45399,
+      "id": "serving-p99",
+      "value": 89.66754199999559
+    },
+    {
+      "type": "flow",
+      "t": 46400,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 46400,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 46400,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 46400,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 46400,
+      "id": "serving-p50",
+      "value": 91.02404199999728
+    },
+    {
+      "type": "metric",
+      "t": 46400,
+      "id": "serving-p99",
+      "value": 91.02404199999728
+    },
+    {
+      "type": "check",
+      "t": 47037,
+      "id": "loop-closed",
+      "status": "pending"
+    },
+    {
+      "type": "check",
+      "t": 47037,
+      "id": "writes-continue-during-scoring",
+      "status": "pending"
+    },
+    {
+      "type": "phase",
+      "t": 47037,
+      "phase": "federated-read"
+    },
+    {
+      "type": "node",
+      "t": 47037,
+      "node": "databricks",
+      "status": "busy",
+      "note": "reading TiDB via Lakehouse Federation"
+    },
+    {
+      "type": "flow",
+      "t": 47405,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 47405,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 47405,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 47405,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 47405,
+      "id": "serving-p50",
+      "value": 92.60349999999744
+    },
+    {
+      "type": "metric",
+      "t": 47405,
+      "id": "serving-p99",
+      "value": 92.60349999999744
+    },
+    {
+      "type": "control",
+      "t": 48293,
+      "id": "burst-events"
+    },
+    {
+      "type": "flow",
+      "t": 48412,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 48412,
+      "edge": "writes",
+      "count": 4
+    },
+    {
+      "type": "flow",
+      "t": 48412,
+      "edge": "replication",
+      "count": 4
+    },
+    {
+      "type": "metric",
+      "t": 48412,
+      "id": "event-write-rate",
+      "value": 4
+    },
+    {
+      "type": "metric",
+      "t": 48412,
+      "id": "serving-p50",
+      "value": 94.20883300000423
+    },
+    {
+      "type": "metric",
+      "t": 48412,
+      "id": "serving-p99",
+      "value": 94.20883300000423
+    },
+    {
+      "type": "flow",
+      "t": 49415,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 49415,
+      "edge": "writes",
+      "count": 4
+    },
+    {
+      "type": "flow",
+      "t": 49415,
+      "edge": "replication",
+      "count": 4
+    },
+    {
+      "type": "metric",
+      "t": 49415,
+      "id": "event-write-rate",
+      "value": 4
+    },
+    {
+      "type": "metric",
+      "t": 49415,
+      "id": "serving-p50",
+      "value": 94.51687500000116
+    },
+    {
+      "type": "metric",
+      "t": 49415,
+      "id": "serving-p99",
+      "value": 94.51687500000116
+    },
+    {
+      "type": "metric",
+      "t": 50181,
+      "id": "freshness-lag-ms",
+      "value": 957
+    },
+    {
+      "type": "flow",
+      "t": 50417,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 50417,
+      "edge": "writes",
+      "count": 4
+    },
+    {
+      "type": "flow",
+      "t": 50417,
+      "edge": "replication",
+      "count": 4
+    },
+    {
+      "type": "metric",
+      "t": 50417,
+      "id": "event-write-rate",
+      "value": 4
+    },
+    {
+      "type": "metric",
+      "t": 50417,
+      "id": "serving-p50",
+      "value": 93.17833399999654
+    },
+    {
+      "type": "metric",
+      "t": 50417,
+      "id": "serving-p99",
+      "value": 93.17833399999654
+    },
+    {
+      "type": "flow",
+      "t": 51411,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 51411,
+      "edge": "writes",
+      "count": 4
+    },
+    {
+      "type": "flow",
+      "t": 51411,
+      "edge": "replication",
+      "count": 4
+    },
+    {
+      "type": "metric",
+      "t": 51411,
+      "id": "event-write-rate",
+      "value": 4
+    },
+    {
+      "type": "metric",
+      "t": 51411,
+      "id": "serving-p50",
+      "value": 90.67233300000225
+    },
+    {
+      "type": "metric",
+      "t": 51411,
+      "id": "serving-p99",
+      "value": 90.67233300000225
+    },
+    {
+      "type": "flow",
+      "t": 52417,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 52417,
+      "edge": "writes",
+      "count": 4
+    },
+    {
+      "type": "flow",
+      "t": 52417,
+      "edge": "replication",
+      "count": 4
+    },
+    {
+      "type": "metric",
+      "t": 52417,
+      "id": "event-write-rate",
+      "value": 4
+    },
+    {
+      "type": "metric",
+      "t": 52417,
+      "id": "serving-p50",
+      "value": 92.28837499999645
+    },
+    {
+      "type": "metric",
+      "t": 52417,
+      "id": "serving-p99",
+      "value": 92.28837499999645
+    },
+    {
+      "type": "control",
+      "t": 53316,
+      "id": "trigger-scoring"
+    },
+    {
+      "type": "flow",
+      "t": 53417,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 53417,
+      "edge": "writes",
+      "count": 4
+    },
+    {
+      "type": "flow",
+      "t": 53417,
+      "edge": "replication",
+      "count": 4
+    },
+    {
+      "type": "metric",
+      "t": 53417,
+      "id": "event-write-rate",
+      "value": 4
+    },
+    {
+      "type": "metric",
+      "t": 53417,
+      "id": "serving-p50",
+      "value": 94.54016599999886
+    },
+    {
+      "type": "metric",
+      "t": 53417,
+      "id": "serving-p99",
+      "value": 94.54016599999886
+    },
+    {
+      "type": "flow",
+      "t": 54417,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 54417,
+      "edge": "writes",
+      "count": 4
+    },
+    {
+      "type": "flow",
+      "t": 54417,
+      "edge": "replication",
+      "count": 4
+    },
+    {
+      "type": "metric",
+      "t": 54417,
+      "id": "event-write-rate",
+      "value": 4
+    },
+    {
+      "type": "metric",
+      "t": 54417,
+      "id": "serving-p50",
+      "value": 94.51658399999724
+    },
+    {
+      "type": "metric",
+      "t": 54417,
+      "id": "serving-p99",
+      "value": 94.51658399999724
+    },
+    {
+      "type": "metric",
+      "t": 55286,
+      "id": "rows-synced",
+      "value": 1
+    },
+    {
+      "type": "flow",
+      "t": 55286,
+      "edge": "federated-read",
+      "count": 1
+    },
+    {
+      "type": "phase",
+      "t": 55286,
+      "phase": "score-write-back"
+    },
+    {
+      "type": "node",
+      "t": 55286,
+      "node": "databricks",
+      "status": "healthy",
+      "note": "scoring complete"
+    },
+    {
+      "type": "flow",
+      "t": 55414,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 55414,
+      "edge": "writes",
+      "count": 4
+    },
+    {
+      "type": "flow",
+      "t": 55414,
+      "edge": "replication",
+      "count": 4
+    },
+    {
+      "type": "metric",
+      "t": 55414,
+      "id": "event-write-rate",
+      "value": 4
+    },
+    {
+      "type": "metric",
+      "t": 55414,
+      "id": "serving-p50",
+      "value": 92.62599999999657
+    },
+    {
+      "type": "metric",
+      "t": 55414,
+      "id": "serving-p99",
+      "value": 92.62599999999657
+    },
+    {
+      "type": "flow",
+      "t": 56417,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 56417,
+      "edge": "writes",
+      "count": 4
+    },
+    {
+      "type": "flow",
+      "t": 56417,
+      "edge": "replication",
+      "count": 4
+    },
+    {
+      "type": "metric",
+      "t": 56417,
+      "id": "event-write-rate",
+      "value": 4
+    },
+    {
+      "type": "metric",
+      "t": 56417,
+      "id": "serving-p50",
+      "value": 94.34745799999655
+    },
+    {
+      "type": "metric",
+      "t": 56417,
+      "id": "serving-p99",
+      "value": 94.34745799999655
+    },
+    {
+      "type": "metric",
+      "t": 57263,
+      "id": "write-back-rate",
+      "value": 634.4289249782897
+    },
+    {
+      "type": "flow",
+      "t": 57263,
+      "edge": "reverse-etl",
+      "count": 600
+    },
+    {
+      "type": "metric",
+      "t": 57263,
+      "id": "full-loop-time",
+      "value": 10.101
+    },
+    {
+      "type": "check",
+      "t": 57263,
+      "id": "loop-closed",
+      "status": "pass",
+      "observed": "10.1s"
+    },
+    {
+      "type": "check",
+      "t": 57263,
+      "id": "writes-continue-during-scoring",
+      "status": "pass",
+      "observed": "writes continued throughout"
+    },
+    {
+      "type": "phase",
+      "t": 57263,
+      "phase": "low-latency-serving"
+    },
+    {
+      "type": "flow",
+      "t": 57417,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 57417,
+      "edge": "writes",
+      "count": 4
+    },
+    {
+      "type": "flow",
+      "t": 57417,
+      "edge": "replication",
+      "count": 4
+    },
+    {
+      "type": "metric",
+      "t": 57417,
+      "id": "event-write-rate",
+      "value": 4
+    },
+    {
+      "type": "metric",
+      "t": 57417,
+      "id": "serving-p50",
+      "value": 94.07670900000085
+    },
+    {
+      "type": "metric",
+      "t": 57417,
+      "id": "serving-p99",
+      "value": 94.07670900000085
+    },
+    {
+      "type": "flow",
+      "t": 58417,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 58417,
+      "edge": "writes",
+      "count": 4
+    },
+    {
+      "type": "flow",
+      "t": 58417,
+      "edge": "replication",
+      "count": 4
+    },
+    {
+      "type": "metric",
+      "t": 58417,
+      "id": "event-write-rate",
+      "value": 4
+    },
+    {
+      "type": "metric",
+      "t": 58417,
+      "id": "serving-p50",
+      "value": 94.40404200000194
+    },
+    {
+      "type": "metric",
+      "t": 58417,
+      "id": "serving-p99",
+      "value": 94.40404200000194
+    },
+    {
+      "type": "flow",
+      "t": 59416,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 59416,
+      "edge": "writes",
+      "count": 4
+    },
+    {
+      "type": "flow",
+      "t": 59416,
+      "edge": "replication",
+      "count": 4
+    },
+    {
+      "type": "metric",
+      "t": 59416,
+      "id": "event-write-rate",
+      "value": 4
+    },
+    {
+      "type": "metric",
+      "t": 59416,
+      "id": "serving-p50",
+      "value": 91.54804200000217
+    },
+    {
+      "type": "metric",
+      "t": 59416,
+      "id": "serving-p99",
+      "value": 91.54804200000217
+    },
+    {
+      "type": "flow",
+      "t": 60418,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 60418,
+      "edge": "writes",
+      "count": 4
+    },
+    {
+      "type": "flow",
+      "t": 60418,
+      "edge": "replication",
+      "count": 4
+    },
+    {
+      "type": "metric",
+      "t": 60418,
+      "id": "event-write-rate",
+      "value": 4
+    },
+    {
+      "type": "metric",
+      "t": 60418,
+      "id": "serving-p50",
+      "value": 93.30545800000255
+    },
+    {
+      "type": "metric",
+      "t": 60418,
+      "id": "serving-p99",
+      "value": 93.30545800000255
+    },
+    {
+      "type": "flow",
+      "t": 61417,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 61418,
+      "edge": "writes",
+      "count": 4
+    },
+    {
+      "type": "flow",
+      "t": 61418,
+      "edge": "replication",
+      "count": 4
+    },
+    {
+      "type": "metric",
+      "t": 61418,
+      "id": "event-write-rate",
+      "value": 4
+    },
+    {
+      "type": "metric",
+      "t": 61418,
+      "id": "serving-p50",
+      "value": 93.23362500000076
+    },
+    {
+      "type": "metric",
+      "t": 61418,
+      "id": "serving-p99",
+      "value": 93.23362500000076
+    },
+    {
+      "type": "check",
+      "t": 62038,
+      "id": "loop-closed",
+      "status": "pending"
+    },
+    {
+      "type": "check",
+      "t": 62038,
+      "id": "writes-continue-during-scoring",
+      "status": "pending"
+    },
+    {
+      "type": "phase",
+      "t": 62038,
+      "phase": "federated-read"
+    },
+    {
+      "type": "node",
+      "t": 62038,
+      "node": "databricks",
+      "status": "busy",
+      "note": "reading TiDB via Lakehouse Federation"
+    },
+    {
+      "type": "flow",
+      "t": 62417,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 62417,
+      "edge": "writes",
+      "count": 4
+    },
+    {
+      "type": "flow",
+      "t": 62417,
+      "edge": "replication",
+      "count": 4
+    },
+    {
+      "type": "metric",
+      "t": 62417,
+      "id": "event-write-rate",
+      "value": 4
+    },
+    {
+      "type": "metric",
+      "t": 62417,
+      "id": "serving-p50",
+      "value": 93.8657499999972
+    },
+    {
+      "type": "metric",
+      "t": 62417,
+      "id": "serving-p99",
+      "value": 93.8657499999972
+    },
+    {
+      "type": "flow",
+      "t": 63422,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 63423,
+      "edge": "writes",
+      "count": 4
+    },
+    {
+      "type": "flow",
+      "t": 63423,
+      "edge": "replication",
+      "count": 4
+    },
+    {
+      "type": "metric",
+      "t": 63423,
+      "id": "event-write-rate",
+      "value": 4
+    },
+    {
+      "type": "metric",
+      "t": 63423,
+      "id": "serving-p50",
+      "value": 94.25062500000058
+    },
+    {
+      "type": "metric",
+      "t": 63423,
+      "id": "serving-p99",
+      "value": 94.25062500000058
+    },
+    {
+      "type": "flow",
+      "t": 64416,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 64416,
+      "edge": "writes",
+      "count": 4
+    },
+    {
+      "type": "flow",
+      "t": 64416,
+      "edge": "replication",
+      "count": 4
+    },
+    {
+      "type": "metric",
+      "t": 64416,
+      "id": "event-write-rate",
+      "value": 4
+    },
+    {
+      "type": "metric",
+      "t": 64416,
+      "id": "serving-p50",
+      "value": 95.05425000000105
+    },
+    {
+      "type": "metric",
+      "t": 64416,
+      "id": "serving-p99",
+      "value": 95.05425000000105
+    },
+    {
+      "type": "metric",
+      "t": 65045,
+      "id": "freshness-lag-ms",
+      "value": 822
+    },
+    {
+      "type": "flow",
+      "t": 65419,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 65419,
+      "edge": "writes",
+      "count": 4
+    },
+    {
+      "type": "flow",
+      "t": 65419,
+      "edge": "replication",
+      "count": 4
+    },
+    {
+      "type": "metric",
+      "t": 65419,
+      "id": "event-write-rate",
+      "value": 4
+    },
+    {
+      "type": "metric",
+      "t": 65419,
+      "id": "serving-p50",
+      "value": 92.29299999999057
+    },
+    {
+      "type": "metric",
+      "t": 65419,
+      "id": "serving-p99",
+      "value": 92.29299999999057
+    },
+    {
+      "type": "flow",
+      "t": 66418,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 66418,
+      "edge": "writes",
+      "count": 4
+    },
+    {
+      "type": "flow",
+      "t": 66418,
+      "edge": "replication",
+      "count": 4
+    },
+    {
+      "type": "metric",
+      "t": 66418,
+      "id": "event-write-rate",
+      "value": 4
+    },
+    {
+      "type": "metric",
+      "t": 66418,
+      "id": "serving-p50",
+      "value": 92.70420799999556
+    },
+    {
+      "type": "metric",
+      "t": 66418,
+      "id": "serving-p99",
+      "value": 92.70420799999556
+    },
+    {
+      "type": "flow",
+      "t": 67409,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 67409,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 67409,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 67409,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 67409,
+      "id": "serving-p50",
+      "value": 91.0001670000056
+    },
+    {
+      "type": "metric",
+      "t": 67409,
+      "id": "serving-p99",
+      "value": 91.0001670000056
+    },
+    {
+      "type": "flow",
+      "t": 68409,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 68409,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 68409,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 68409,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 68409,
+      "id": "serving-p50",
+      "value": 90.46833299999707
+    },
+    {
+      "type": "metric",
+      "t": 68409,
+      "id": "serving-p99",
+      "value": 90.46833299999707
+    },
+    {
+      "type": "metric",
+      "t": 69255,
+      "id": "rows-synced",
+      "value": 1
+    },
+    {
+      "type": "flow",
+      "t": 69255,
+      "edge": "federated-read",
+      "count": 1
+    },
+    {
+      "type": "phase",
+      "t": 69255,
+      "phase": "score-write-back"
+    },
+    {
+      "type": "node",
+      "t": 69255,
+      "node": "databricks",
+      "status": "healthy",
+      "note": "scoring complete"
+    },
+    {
+      "type": "flow",
+      "t": 69409,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 69409,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 69409,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 69409,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 69409,
+      "id": "serving-p50",
+      "value": 90.68370799999684
+    },
+    {
+      "type": "metric",
+      "t": 69409,
+      "id": "serving-p99",
+      "value": 90.68370799999684
+    },
+    {
+      "type": "flow",
+      "t": 70408,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 70408,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 70408,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 70408,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 70408,
+      "id": "serving-p50",
+      "value": 91.8932080000086
+    },
+    {
+      "type": "metric",
+      "t": 70408,
+      "id": "serving-p99",
+      "value": 91.8932080000086
+    },
+    {
+      "type": "metric",
+      "t": 70713,
+      "id": "write-back-rate",
+      "value": 1607.3690024803118
+    },
+    {
+      "type": "flow",
+      "t": 70713,
+      "edge": "reverse-etl",
+      "count": 650
+    },
+    {
+      "type": "metric",
+      "t": 70713,
+      "id": "full-loop-time",
+      "value": 8.314
+    },
+    {
+      "type": "check",
+      "t": 70713,
+      "id": "loop-closed",
+      "status": "pass",
+      "observed": "8.3s"
+    },
+    {
+      "type": "check",
+      "t": 70713,
+      "id": "writes-continue-during-scoring",
+      "status": "pass",
+      "observed": "writes continued throughout"
+    },
+    {
+      "type": "phase",
+      "t": 70713,
+      "phase": "low-latency-serving"
+    },
+    {
+      "type": "flow",
+      "t": 71428,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 71428,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 71428,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 71428,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 71428,
+      "id": "serving-p50",
+      "value": 100.00641699999687
+    },
+    {
+      "type": "metric",
+      "t": 71428,
+      "id": "serving-p99",
+      "value": 100.00641699999687
+    },
+    {
+      "type": "flow",
+      "t": 72420,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 72420,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 72420,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 72420,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 72420,
+      "id": "serving-p50",
+      "value": 94.45350000000326
+    },
+    {
+      "type": "metric",
+      "t": 72420,
+      "id": "serving-p99",
+      "value": 94.45350000000326
+    },
+    {
+      "type": "flow",
+      "t": 73427,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 73427,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 73427,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 73427,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 73427,
+      "id": "serving-p50",
+      "value": 95.7647500000021
+    },
+    {
+      "type": "metric",
+      "t": 73427,
+      "id": "serving-p99",
+      "value": 95.7647500000021
+    },
+    {
+      "type": "flow",
+      "t": 74424,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 74424,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 74424,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 74425,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 74425,
+      "id": "serving-p50",
+      "value": 90.90091699999175
+    },
+    {
+      "type": "metric",
+      "t": 74425,
+      "id": "serving-p99",
+      "value": 90.90091699999175
+    },
+    {
+      "type": "flow",
+      "t": 75425,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 75425,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 75425,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 75425,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 75426,
+      "id": "serving-p50",
+      "value": 91.70129100000486
+    },
+    {
+      "type": "metric",
+      "t": 75426,
+      "id": "serving-p99",
+      "value": 91.70129100000486
+    },
+    {
+      "type": "flow",
+      "t": 76443,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 76443,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 76443,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 76443,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 76443,
+      "id": "serving-p50",
+      "value": 91.84262499999022
+    },
+    {
+      "type": "metric",
+      "t": 76443,
+      "id": "serving-p99",
+      "value": 91.84262499999022
+    },
+    {
+      "type": "check",
+      "t": 77038,
+      "id": "loop-closed",
+      "status": "pending"
+    },
+    {
+      "type": "check",
+      "t": 77038,
+      "id": "writes-continue-during-scoring",
+      "status": "pending"
+    },
+    {
+      "type": "phase",
+      "t": 77038,
+      "phase": "federated-read"
+    },
+    {
+      "type": "node",
+      "t": 77038,
+      "node": "databricks",
+      "status": "busy",
+      "note": "reading TiDB via Lakehouse Federation"
+    },
+    {
+      "type": "flow",
+      "t": 77434,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 77434,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 77434,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 77434,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 77434,
+      "id": "serving-p50",
+      "value": 92.86820799999987
+    },
+    {
+      "type": "metric",
+      "t": 77434,
+      "id": "serving-p99",
+      "value": 92.86820799999987
+    },
+    {
+      "type": "flow",
+      "t": 78433,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 78433,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 78433,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 78433,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 78433,
+      "id": "serving-p50",
+      "value": 97.18499999999767
+    },
+    {
+      "type": "metric",
+      "t": 78433,
+      "id": "serving-p99",
+      "value": 97.18499999999767
+    },
+    {
+      "type": "flow",
+      "t": 79433,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 79433,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 79433,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 79433,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 79433,
+      "id": "serving-p50",
+      "value": 94.77283299999544
+    },
+    {
+      "type": "metric",
+      "t": 79433,
+      "id": "serving-p99",
+      "value": 94.77283299999544
+    },
+    {
+      "type": "metric",
+      "t": 80331,
+      "id": "freshness-lag-ms",
+      "value": 1091
+    },
+    {
+      "type": "flow",
+      "t": 80433,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 80433,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 80433,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 80433,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 80433,
+      "id": "serving-p50",
+      "value": 95.46941599999263
+    },
+    {
+      "type": "metric",
+      "t": 80433,
+      "id": "serving-p99",
+      "value": 95.46941599999263
+    },
+    {
+      "type": "flow",
+      "t": 81428,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 81428,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 81428,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 81428,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 81428,
+      "id": "serving-p50",
+      "value": 91.52129199999035
+    },
+    {
+      "type": "metric",
+      "t": 81428,
+      "id": "serving-p99",
+      "value": 91.52129199999035
+    },
+    {
+      "type": "flow",
+      "t": 82426,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 82426,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 82426,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 82426,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 82426,
+      "id": "serving-p50",
+      "value": 91.7824580000015
+    },
+    {
+      "type": "metric",
+      "t": 82426,
+      "id": "serving-p99",
+      "value": 91.7824580000015
+    },
+    {
+      "type": "flow",
+      "t": 83434,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 83434,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 83434,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 83434,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 83434,
+      "id": "serving-p50",
+      "value": 101.72666699999536
+    },
+    {
+      "type": "metric",
+      "t": 83434,
+      "id": "serving-p99",
+      "value": 101.72666699999536
+    },
+    {
+      "type": "flow",
+      "t": 84432,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 84432,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 84432,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 84432,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 84432,
+      "id": "serving-p50",
+      "value": 93.83170899999095
+    },
+    {
+      "type": "metric",
+      "t": 84432,
+      "id": "serving-p99",
+      "value": 93.83170899999095
+    },
+    {
+      "type": "metric",
+      "t": 84645,
+      "id": "rows-synced",
+      "value": 1
+    },
+    {
+      "type": "flow",
+      "t": 84645,
+      "edge": "federated-read",
+      "count": 1
+    },
+    {
+      "type": "phase",
+      "t": 84645,
+      "phase": "score-write-back"
+    },
+    {
+      "type": "node",
+      "t": 84645,
+      "node": "databricks",
+      "status": "healthy",
+      "note": "scoring complete"
+    },
+    {
+      "type": "flow",
+      "t": 85428,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 85428,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 85428,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 85428,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 85428,
+      "id": "serving-p50",
+      "value": 93.32283299999835
+    },
+    {
+      "type": "metric",
+      "t": 85428,
+      "id": "serving-p99",
+      "value": 93.32283299999835
+    },
+    {
+      "type": "metric",
+      "t": 86396,
+      "id": "write-back-rate",
+      "value": 1763.987130232111
+    },
+    {
+      "type": "flow",
+      "t": 86396,
+      "edge": "reverse-etl",
+      "count": 700
+    },
+    {
+      "type": "metric",
+      "t": 86396,
+      "id": "full-loop-time",
+      "value": 9.743
+    },
+    {
+      "type": "check",
+      "t": 86396,
+      "id": "loop-closed",
+      "status": "pass",
+      "observed": "9.7s"
+    },
+    {
+      "type": "check",
+      "t": 86396,
+      "id": "writes-continue-during-scoring",
+      "status": "pass",
+      "observed": "writes continued throughout"
+    },
+    {
+      "type": "phase",
+      "t": 86396,
+      "phase": "low-latency-serving"
+    },
+    {
+      "type": "flow",
+      "t": 86419,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 86419,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 86419,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 86419,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 86419,
+      "id": "serving-p50",
+      "value": 90.9800830000022
+    },
+    {
+      "type": "metric",
+      "t": 86419,
+      "id": "serving-p99",
+      "value": 90.9800830000022
+    },
+    {
+      "type": "flow",
+      "t": 87420,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 87420,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 87420,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 87420,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 87420,
+      "id": "serving-p50",
+      "value": 91.25045799999498
+    },
+    {
+      "type": "metric",
+      "t": 87420,
+      "id": "serving-p99",
+      "value": 91.25045799999498
+    },
+    {
+      "type": "flow",
+      "t": 88419,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 88419,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 88419,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 88419,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 88419,
+      "id": "serving-p50",
+      "value": 90.67295900000317
+    },
+    {
+      "type": "metric",
+      "t": 88419,
+      "id": "serving-p99",
+      "value": 90.67295900000317
+    },
+    {
+      "type": "flow",
+      "t": 89415,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 89415,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 89415,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 89415,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 89415,
+      "id": "serving-p50",
+      "value": 88.18054200000188
+    },
+    {
+      "type": "metric",
+      "t": 89415,
+      "id": "serving-p99",
+      "value": 88.18054200000188
+    },
+    {
+      "type": "flow",
+      "t": 90418,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 90418,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 90418,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 90418,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 90418,
+      "id": "serving-p50",
+      "value": 90.97916699999769
+    },
+    {
+      "type": "metric",
+      "t": 90418,
+      "id": "serving-p99",
+      "value": 90.97916699999769
+    },
+    {
+      "type": "flow",
+      "t": 91427,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 91427,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 91427,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 91427,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 91427,
+      "id": "serving-p50",
+      "value": 95.22200000000885
+    },
+    {
+      "type": "metric",
+      "t": 91427,
+      "id": "serving-p99",
+      "value": 95.22200000000885
+    },
+    {
+      "type": "check",
+      "t": 92038,
+      "id": "loop-closed",
+      "status": "pending"
+    },
+    {
+      "type": "check",
+      "t": 92038,
+      "id": "writes-continue-during-scoring",
+      "status": "pending"
+    },
+    {
+      "type": "phase",
+      "t": 92038,
+      "phase": "federated-read"
+    },
+    {
+      "type": "node",
+      "t": 92038,
+      "node": "databricks",
+      "status": "busy",
+      "note": "reading TiDB via Lakehouse Federation"
+    },
+    {
+      "type": "flow",
+      "t": 92422,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 92422,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 92422,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 92422,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 92422,
+      "id": "serving-p50",
+      "value": 91.5882500000007
+    },
+    {
+      "type": "metric",
+      "t": 92422,
+      "id": "serving-p99",
+      "value": 91.5882500000007
+    },
+    {
+      "type": "flow",
+      "t": 93422,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 93422,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 93422,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 93422,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 93422,
+      "id": "serving-p50",
+      "value": 90.08475000000908
+    },
+    {
+      "type": "metric",
+      "t": 93422,
+      "id": "serving-p99",
+      "value": 90.08475000000908
+    },
+    {
+      "type": "flow",
+      "t": 94420,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 94420,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 94420,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 94420,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 94420,
+      "id": "serving-p50",
+      "value": 89.94466699998884
+    },
+    {
+      "type": "metric",
+      "t": 94420,
+      "id": "serving-p99",
+      "value": 89.94466699998884
+    },
+    {
+      "type": "metric",
+      "t": 94859,
+      "id": "freshness-lag-ms",
+      "value": 623
+    },
+    {
+      "type": "flow",
+      "t": 95419,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 95419,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 95419,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 95419,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 95419,
+      "id": "serving-p50",
+      "value": 89.41008399998827
+    },
+    {
+      "type": "metric",
+      "t": 95419,
+      "id": "serving-p99",
+      "value": 89.41008399998827
+    },
+    {
+      "type": "flow",
+      "t": 96424,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 96424,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 96424,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 96424,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 96424,
+      "id": "serving-p50",
+      "value": 91.3979999999865
+    },
+    {
+      "type": "metric",
+      "t": 96424,
+      "id": "serving-p99",
+      "value": 91.3979999999865
+    },
+    {
+      "type": "flow",
+      "t": 97424,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 97424,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 97424,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 97424,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 97424,
+      "id": "serving-p50",
+      "value": 91.24220799999603
+    },
+    {
+      "type": "metric",
+      "t": 97424,
+      "id": "serving-p99",
+      "value": 91.24220799999603
+    },
+    {
+      "type": "flow",
+      "t": 98425,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 98425,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 98425,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 98425,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 98425,
+      "id": "serving-p50",
+      "value": 87.65262500000244
+    },
+    {
+      "type": "metric",
+      "t": 98425,
+      "id": "serving-p99",
+      "value": 87.65262500000244
+    },
+    {
+      "type": "metric",
+      "t": 99287,
+      "id": "rows-synced",
+      "value": 1
+    },
+    {
+      "type": "flow",
+      "t": 99287,
+      "edge": "federated-read",
+      "count": 1
+    },
+    {
+      "type": "phase",
+      "t": 99287,
+      "phase": "score-write-back"
+    },
+    {
+      "type": "node",
+      "t": 99287,
+      "node": "databricks",
+      "status": "healthy",
+      "note": "scoring complete"
+    },
+    {
+      "type": "flow",
+      "t": 99426,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 99427,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 99427,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 99427,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 99427,
+      "id": "serving-p50",
+      "value": 90.16695900000923
+    },
+    {
+      "type": "metric",
+      "t": 99427,
+      "id": "serving-p99",
+      "value": 90.16695900000923
+    },
+    {
+      "type": "flow",
+      "t": 100430,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 100430,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 100430,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 100430,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 100430,
+      "id": "serving-p50",
+      "value": 92.26558300000033
+    },
+    {
+      "type": "metric",
+      "t": 100430,
+      "id": "serving-p99",
+      "value": 92.26558300000033
+    },
+    {
+      "type": "metric",
+      "t": 100664,
+      "id": "write-back-rate",
+      "value": 1823.7568062026776
+    },
+    {
+      "type": "flow",
+      "t": 100664,
+      "edge": "reverse-etl",
+      "count": 750
+    },
+    {
+      "type": "metric",
+      "t": 100664,
+      "id": "full-loop-time",
+      "value": 9.014
+    },
+    {
+      "type": "check",
+      "t": 100664,
+      "id": "loop-closed",
+      "status": "pass",
+      "observed": "9.0s"
+    },
+    {
+      "type": "check",
+      "t": 100664,
+      "id": "writes-continue-during-scoring",
+      "status": "pass",
+      "observed": "writes continued throughout"
+    },
+    {
+      "type": "phase",
+      "t": 100664,
+      "phase": "low-latency-serving"
+    },
+    {
+      "type": "flow",
+      "t": 101434,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 101434,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 101434,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 101434,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 101434,
+      "id": "serving-p50",
+      "value": 94.9292909999931
+    },
+    {
+      "type": "metric",
+      "t": 101434,
+      "id": "serving-p99",
+      "value": 94.9292909999931
+    },
+    {
+      "type": "flow",
+      "t": 102436,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 102436,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 102436,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 102436,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 102436,
+      "id": "serving-p50",
+      "value": 94.05845799999952
+    },
+    {
+      "type": "metric",
+      "t": 102436,
+      "id": "serving-p99",
+      "value": 94.05845799999952
+    },
+    {
+      "type": "flow",
+      "t": 103437,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 103437,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 103437,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 103437,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 103437,
+      "id": "serving-p50",
+      "value": 96.4488330000022
+    },
+    {
+      "type": "metric",
+      "t": 103437,
+      "id": "serving-p99",
+      "value": 96.4488330000022
+    },
+    {
+      "type": "flow",
+      "t": 104438,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 104438,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 104438,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 104438,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 104438,
+      "id": "serving-p50",
+      "value": 91.56766699999571
+    },
+    {
+      "type": "metric",
+      "t": 104438,
+      "id": "serving-p99",
+      "value": 91.56766699999571
+    },
+    {
+      "type": "flow",
+      "t": 105440,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 105440,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 105440,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 105440,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 105440,
+      "id": "serving-p50",
+      "value": 94.67208299999766
+    },
+    {
+      "type": "metric",
+      "t": 105440,
+      "id": "serving-p99",
+      "value": 94.67208299999766
+    },
+    {
+      "type": "flow",
+      "t": 106441,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 106441,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 106441,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 106441,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 106441,
+      "id": "serving-p50",
+      "value": 93.50754200000665
+    },
+    {
+      "type": "metric",
+      "t": 106441,
+      "id": "serving-p99",
+      "value": 93.50754200000665
+    },
+    {
+      "type": "check",
+      "t": 107037,
+      "id": "loop-closed",
+      "status": "pending"
+    },
+    {
+      "type": "check",
+      "t": 107038,
+      "id": "writes-continue-during-scoring",
+      "status": "pending"
+    },
+    {
+      "type": "phase",
+      "t": 107038,
+      "phase": "federated-read"
+    },
+    {
+      "type": "node",
+      "t": 107038,
+      "node": "databricks",
+      "status": "busy",
+      "note": "reading TiDB via Lakehouse Federation"
+    },
+    {
+      "type": "flow",
+      "t": 107436,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 107436,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 107436,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 107436,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 107436,
+      "id": "serving-p50",
+      "value": 92.56333299999824
+    },
+    {
+      "type": "metric",
+      "t": 107436,
+      "id": "serving-p99",
+      "value": 92.56333299999824
+    },
+    {
+      "type": "flow",
+      "t": 108443,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 108443,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 108443,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 108443,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 108443,
+      "id": "serving-p50",
+      "value": 92.97320899998886
+    },
+    {
+      "type": "metric",
+      "t": 108443,
+      "id": "serving-p99",
+      "value": 92.97320899998886
+    },
+    {
+      "type": "flow",
+      "t": 109436,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 109436,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 109436,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 109436,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 109436,
+      "id": "serving-p50",
+      "value": 91.9467500000028
+    },
+    {
+      "type": "metric",
+      "t": 109436,
+      "id": "serving-p99",
+      "value": 91.9467500000028
+    },
+    {
+      "type": "metric",
+      "t": 110109,
+      "id": "freshness-lag-ms",
+      "value": 864
+    },
+    {
+      "type": "flow",
+      "t": 110440,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 110440,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 110440,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 110440,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 110440,
+      "id": "serving-p50",
+      "value": 94.47024999999849
+    },
+    {
+      "type": "metric",
+      "t": 110440,
+      "id": "serving-p99",
+      "value": 94.47024999999849
+    },
+    {
+      "type": "flow",
+      "t": 111468,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 111468,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 111468,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 111468,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 111468,
+      "id": "serving-p50",
+      "value": 121.63812499999767
+    },
+    {
+      "type": "metric",
+      "t": 111468,
+      "id": "serving-p99",
+      "value": 121.63812499999767
+    },
+    {
+      "type": "flow",
+      "t": 112439,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 112439,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 112439,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 112439,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 112439,
+      "id": "serving-p50",
+      "value": 94.16195799999696
+    },
+    {
+      "type": "metric",
+      "t": 112439,
+      "id": "serving-p99",
+      "value": 94.16195799999696
+    },
+    {
+      "type": "flow",
+      "t": 113444,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 113444,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 113444,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 113444,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 113444,
+      "id": "serving-p50",
+      "value": 95.46924999999464
+    },
+    {
+      "type": "metric",
+      "t": 113444,
+      "id": "serving-p99",
+      "value": 95.46924999999464
+    },
+    {
+      "type": "flow",
+      "t": 114443,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 114443,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 114443,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 114443,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 114443,
+      "id": "serving-p50",
+      "value": 95.09329200000502
+    },
+    {
+      "type": "metric",
+      "t": 114443,
+      "id": "serving-p99",
+      "value": 95.09329200000502
+    },
+    {
+      "type": "metric",
+      "t": 114841,
+      "id": "rows-synced",
+      "value": 1
+    },
+    {
+      "type": "flow",
+      "t": 114841,
+      "edge": "federated-read",
+      "count": 1
+    },
+    {
+      "type": "phase",
+      "t": 114841,
+      "phase": "score-write-back"
+    },
+    {
+      "type": "node",
+      "t": 114841,
+      "node": "databricks",
+      "status": "healthy",
+      "note": "scoring complete"
+    },
+    {
+      "type": "flow",
+      "t": 115442,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 115442,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 115442,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 115442,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 115442,
+      "id": "serving-p50",
+      "value": 92.86912499999744
+    },
+    {
+      "type": "metric",
+      "t": 115442,
+      "id": "serving-p99",
+      "value": 92.86912499999744
+    },
+    {
+      "type": "flow",
+      "t": 116438,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 116438,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 116438,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 116438,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 116438,
+      "id": "serving-p50",
+      "value": 92.45079100001021
+    },
+    {
+      "type": "metric",
+      "t": 116438,
+      "id": "serving-p99",
+      "value": 92.45079100001021
+    },
+    {
+      "type": "metric",
+      "t": 117070,
+      "id": "write-back-rate",
+      "value": 1999.6685949237476
+    },
+    {
+      "type": "flow",
+      "t": 117070,
+      "edge": "reverse-etl",
+      "count": 800
+    },
+    {
+      "type": "metric",
+      "t": 117070,
+      "id": "full-loop-time",
+      "value": 10.421
+    },
+    {
+      "type": "check",
+      "t": 117070,
+      "id": "loop-closed",
+      "status": "pass",
+      "observed": "10.4s"
+    },
+    {
+      "type": "check",
+      "t": 117070,
+      "id": "writes-continue-during-scoring",
+      "status": "pass",
+      "observed": "writes continued throughout"
+    },
+    {
+      "type": "phase",
+      "t": 117070,
+      "phase": "low-latency-serving"
+    },
+    {
+      "type": "flow",
+      "t": 117444,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 117445,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 117445,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 117445,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 117445,
+      "id": "serving-p50",
+      "value": 93.25437500000407
+    },
+    {
+      "type": "metric",
+      "t": 117445,
+      "id": "serving-p99",
+      "value": 93.25437500000407
+    },
+    {
+      "type": "flow",
+      "t": 118447,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 118447,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 118447,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 118447,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 118447,
+      "id": "serving-p50",
+      "value": 93.59058299999742
+    },
+    {
+      "type": "metric",
+      "t": 118447,
+      "id": "serving-p99",
+      "value": 93.59058299999742
+    },
+    {
+      "type": "flow",
+      "t": 119447,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 119447,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 119447,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 119447,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 119447,
+      "id": "serving-p50",
+      "value": 93.71350000001257
+    },
+    {
+      "type": "metric",
+      "t": 119447,
+      "id": "serving-p99",
+      "value": 93.71350000001257
+    },
+    {
+      "type": "flow",
+      "t": 120442,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 120442,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 120442,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 120442,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 120442,
+      "id": "serving-p50",
+      "value": 92.15462500001013
+    },
+    {
+      "type": "metric",
+      "t": 120442,
+      "id": "serving-p99",
+      "value": 92.15462500001013
+    },
+    {
+      "type": "flow",
+      "t": 121444,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 121444,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 121444,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 121444,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 121444,
+      "id": "serving-p50",
+      "value": 93.30795799999032
+    },
+    {
+      "type": "metric",
+      "t": 121444,
+      "id": "serving-p99",
+      "value": 93.30795799999032
+    },
+    {
+      "type": "check",
+      "t": 122039,
+      "id": "loop-closed",
+      "status": "pending"
+    },
+    {
+      "type": "check",
+      "t": 122039,
+      "id": "writes-continue-during-scoring",
+      "status": "pending"
+    },
+    {
+      "type": "phase",
+      "t": 122039,
+      "phase": "federated-read"
+    },
+    {
+      "type": "node",
+      "t": 122039,
+      "node": "databricks",
+      "status": "busy",
+      "note": "reading TiDB via Lakehouse Federation"
+    },
+    {
+      "type": "flow",
+      "t": 122451,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 122451,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 122451,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 122451,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 122451,
+      "id": "serving-p50",
+      "value": 93.2247500000085
+    },
+    {
+      "type": "metric",
+      "t": 122451,
+      "id": "serving-p99",
+      "value": 93.2247500000085
+    },
+    {
+      "type": "flow",
+      "t": 123456,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 123457,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 123457,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 123457,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 123457,
+      "id": "serving-p50",
+      "value": 99.12854199999128
+    },
+    {
+      "type": "metric",
+      "t": 123457,
+      "id": "serving-p99",
+      "value": 99.12854199999128
+    },
+    {
+      "type": "flow",
+      "t": 124450,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 124450,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 124450,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 124450,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 124450,
+      "id": "serving-p50",
+      "value": 93.52920799999265
+    },
+    {
+      "type": "metric",
+      "t": 124450,
+      "id": "serving-p99",
+      "value": 93.52920799999265
+    },
+    {
+      "type": "metric",
+      "t": 125067,
+      "id": "freshness-lag-ms",
+      "value": 807
+    },
+    {
+      "type": "flow",
+      "t": 125449,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 125450,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 125450,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 125450,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 125450,
+      "id": "serving-p50",
+      "value": 93.13141699999687
+    },
+    {
+      "type": "metric",
+      "t": 125450,
+      "id": "serving-p99",
+      "value": 93.13141699999687
+    },
+    {
+      "type": "flow",
+      "t": 126454,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 126454,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 126454,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 126454,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 126454,
+      "id": "serving-p50",
+      "value": 93.73937500000466
+    },
+    {
+      "type": "metric",
+      "t": 126454,
+      "id": "serving-p99",
+      "value": 93.73937500000466
+    },
+    {
+      "type": "flow",
+      "t": 127471,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 127471,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 127471,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 127471,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 127471,
+      "id": "serving-p50",
+      "value": 93.92379200000141
+    },
+    {
+      "type": "metric",
+      "t": 127471,
+      "id": "serving-p99",
+      "value": 93.92379200000141
+    },
+    {
+      "type": "flow",
+      "t": 128459,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 128459,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 128459,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 128459,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 128459,
+      "id": "serving-p50",
+      "value": 94.02920799999265
+    },
+    {
+      "type": "metric",
+      "t": 128459,
+      "id": "serving-p99",
+      "value": 94.02920799999265
+    },
+    {
+      "type": "metric",
+      "t": 129381,
+      "id": "rows-synced",
+      "value": 1
+    },
+    {
+      "type": "flow",
+      "t": 129381,
+      "edge": "federated-read",
+      "count": 1
+    },
+    {
+      "type": "phase",
+      "t": 129381,
+      "phase": "score-write-back"
+    },
+    {
+      "type": "node",
+      "t": 129381,
+      "node": "databricks",
+      "status": "healthy",
+      "note": "scoring complete"
+    },
+    {
+      "type": "flow",
+      "t": 129456,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 129456,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 129456,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 129456,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 129456,
+      "id": "serving-p50",
+      "value": 93.71041699999478
+    },
+    {
+      "type": "metric",
+      "t": 129456,
+      "id": "serving-p99",
+      "value": 93.71041699999478
+    },
+    {
+      "type": "flow",
+      "t": 130464,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 130464,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 130464,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 130464,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 130464,
+      "id": "serving-p50",
+      "value": 93.5273329999909
+    },
+    {
+      "type": "metric",
+      "t": 130464,
+      "id": "serving-p99",
+      "value": 93.5273329999909
+    },
+    {
+      "type": "metric",
+      "t": 130842,
+      "id": "write-back-rate",
+      "value": 2135.9957053921626
+    },
+    {
+      "type": "flow",
+      "t": 130842,
+      "edge": "reverse-etl",
+      "count": 850
+    },
+    {
+      "type": "metric",
+      "t": 130842,
+      "id": "full-loop-time",
+      "value": 9.188
+    },
+    {
+      "type": "check",
+      "t": 130842,
+      "id": "loop-closed",
+      "status": "pass",
+      "observed": "9.2s"
+    },
+    {
+      "type": "check",
+      "t": 130842,
+      "id": "writes-continue-during-scoring",
+      "status": "pass",
+      "observed": "writes continued throughout"
+    },
+    {
+      "type": "phase",
+      "t": 130842,
+      "phase": "low-latency-serving"
+    },
+    {
+      "type": "flow",
+      "t": 131446,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 131446,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 131446,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 131446,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 131446,
+      "id": "serving-p50",
+      "value": 90.55341699998826
+    },
+    {
+      "type": "metric",
+      "t": 131446,
+      "id": "serving-p99",
+      "value": 90.55341699998826
+    },
+    {
+      "type": "flow",
+      "t": 132450,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 132450,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 132450,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 132450,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 132450,
+      "id": "serving-p50",
+      "value": 91.40129199999501
+    },
+    {
+      "type": "metric",
+      "t": 132450,
+      "id": "serving-p99",
+      "value": 91.40129199999501
+    },
+    {
+      "type": "flow",
+      "t": 133448,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 133448,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 133448,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 133448,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 133448,
+      "id": "serving-p50",
+      "value": 89.94412499997998
+    },
+    {
+      "type": "metric",
+      "t": 133448,
+      "id": "serving-p99",
+      "value": 89.94412499997998
+    },
+    {
+      "type": "flow",
+      "t": 134448,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 134448,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 134448,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 134448,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 134448,
+      "id": "serving-p50",
+      "value": 88.6428340000275
+    },
+    {
+      "type": "metric",
+      "t": 134448,
+      "id": "serving-p99",
+      "value": 88.6428340000275
+    },
+    {
+      "type": "flow",
+      "t": 135449,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 135449,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 135449,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 135449,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 135449,
+      "id": "serving-p50",
+      "value": 92.00429099999019
+    },
+    {
+      "type": "metric",
+      "t": 135449,
+      "id": "serving-p99",
+      "value": 92.00429099999019
+    },
+    {
+      "type": "flow",
+      "t": 136460,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 136460,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 136460,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 136460,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 136460,
+      "id": "serving-p50",
+      "value": 89.92774999997346
+    },
+    {
+      "type": "metric",
+      "t": 136460,
+      "id": "serving-p99",
+      "value": 89.92774999997346
+    },
+    {
+      "type": "check",
+      "t": 137040,
+      "id": "loop-closed",
+      "status": "pending"
+    },
+    {
+      "type": "check",
+      "t": 137040,
+      "id": "writes-continue-during-scoring",
+      "status": "pending"
+    },
+    {
+      "type": "phase",
+      "t": 137040,
+      "phase": "federated-read"
+    },
+    {
+      "type": "node",
+      "t": 137040,
+      "node": "databricks",
+      "status": "busy",
+      "note": "reading TiDB via Lakehouse Federation"
+    },
+    {
+      "type": "flow",
+      "t": 137450,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 137450,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 137450,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 137451,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 137451,
+      "id": "serving-p50",
+      "value": 90.06904100000975
+    },
+    {
+      "type": "metric",
+      "t": 137451,
+      "id": "serving-p99",
+      "value": 90.06904100000975
+    },
+    {
+      "type": "flow",
+      "t": 138453,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 138453,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 138453,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 138453,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 138453,
+      "id": "serving-p50",
+      "value": 89.24887499999022
+    },
+    {
+      "type": "metric",
+      "t": 138453,
+      "id": "serving-p99",
+      "value": 89.24887499999022
+    },
+    {
+      "type": "flow",
+      "t": 139450,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 139450,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 139450,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 139450,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 139450,
+      "id": "serving-p50",
+      "value": 88.85345799999777
+    },
+    {
+      "type": "metric",
+      "t": 139450,
+      "id": "serving-p99",
+      "value": 88.85345799999777
+    },
+    {
+      "type": "metric",
+      "t": 139871,
+      "id": "freshness-lag-ms",
+      "value": 605
+    },
+    {
+      "type": "flow",
+      "t": 140450,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 140450,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 140450,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 140450,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 140450,
+      "id": "serving-p50",
+      "value": 90.74220899998909
+    },
+    {
+      "type": "metric",
+      "t": 140450,
+      "id": "serving-p99",
+      "value": 90.74220899998909
+    },
+    {
+      "type": "flow",
+      "t": 141454,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 141454,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 141454,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 141454,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 141454,
+      "id": "serving-p50",
+      "value": 93.59987500001444
+    },
+    {
+      "type": "metric",
+      "t": 141454,
+      "id": "serving-p99",
+      "value": 93.59987500001444
+    },
+    {
+      "type": "flow",
+      "t": 142454,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 142454,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 142454,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 142454,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 142454,
+      "id": "serving-p50",
+      "value": 90.73995800002012
+    },
+    {
+      "type": "metric",
+      "t": 142454,
+      "id": "serving-p99",
+      "value": 90.73995800002012
+    },
+    {
+      "type": "flow",
+      "t": 143454,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 143454,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 143454,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 143454,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 143454,
+      "id": "serving-p50",
+      "value": 90.08158299999195
+    },
+    {
+      "type": "metric",
+      "t": 143454,
+      "id": "serving-p99",
+      "value": 90.08158299999195
+    },
+    {
+      "type": "metric",
+      "t": 144153,
+      "id": "rows-synced",
+      "value": 1
+    },
+    {
+      "type": "flow",
+      "t": 144153,
+      "edge": "federated-read",
+      "count": 1
+    },
+    {
+      "type": "phase",
+      "t": 144153,
+      "phase": "score-write-back"
+    },
+    {
+      "type": "node",
+      "t": 144153,
+      "node": "databricks",
+      "status": "healthy",
+      "note": "scoring complete"
+    },
+    {
+      "type": "flow",
+      "t": 144455,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 144455,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 144455,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 144455,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 144455,
+      "id": "serving-p50",
+      "value": 90.46762499999022
+    },
+    {
+      "type": "metric",
+      "t": 144455,
+      "id": "serving-p99",
+      "value": 90.46762499999022
+    },
+    {
+      "type": "flow",
+      "t": 145460,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 145460,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 145460,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 145460,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 145460,
+      "id": "serving-p50",
+      "value": 93.39529200000106
+    },
+    {
+      "type": "metric",
+      "t": 145460,
+      "id": "serving-p99",
+      "value": 93.39529200000106
+    },
+    {
+      "type": "metric",
+      "t": 145673,
+      "id": "write-back-rate",
+      "value": 2204.370225203933
+    },
+    {
+      "type": "flow",
+      "t": 145673,
+      "edge": "reverse-etl",
+      "count": 900
+    },
+    {
+      "type": "metric",
+      "t": 145673,
+      "id": "full-loop-time",
+      "value": 8.992
+    },
+    {
+      "type": "check",
+      "t": 145674,
+      "id": "loop-closed",
+      "status": "pass",
+      "observed": "9.0s"
+    },
+    {
+      "type": "check",
+      "t": 145674,
+      "id": "writes-continue-during-scoring",
+      "status": "pass",
+      "observed": "writes continued throughout"
+    },
+    {
+      "type": "phase",
+      "t": 145674,
+      "phase": "low-latency-serving"
+    },
+    {
+      "type": "flow",
+      "t": 146471,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 146471,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 146471,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 146471,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 146471,
+      "id": "serving-p50",
+      "value": 94.46858300000895
+    },
+    {
+      "type": "metric",
+      "t": 146471,
+      "id": "serving-p99",
+      "value": 94.46858300000895
+    },
+    {
+      "type": "flow",
+      "t": 147468,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 147468,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 147468,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 147468,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 147468,
+      "id": "serving-p50",
+      "value": 92.12479199998779
+    },
+    {
+      "type": "metric",
+      "t": 147468,
+      "id": "serving-p99",
+      "value": 92.12479199998779
+    },
+    {
+      "type": "flow",
+      "t": 148471,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 148471,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 148471,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 148471,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 148471,
+      "id": "serving-p50",
+      "value": 93.62383399999817
+    },
+    {
+      "type": "metric",
+      "t": 148471,
+      "id": "serving-p99",
+      "value": 93.62383399999817
+    },
+    {
+      "type": "flow",
+      "t": 149471,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 149471,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 149471,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 149471,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 149471,
+      "id": "serving-p50",
+      "value": 92.6713340000133
+    },
+    {
+      "type": "metric",
+      "t": 149471,
+      "id": "serving-p99",
+      "value": 92.6713340000133
+    },
+    {
+      "type": "flow",
+      "t": 150471,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 150471,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 150471,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 150471,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 150471,
+      "id": "serving-p50",
+      "value": 93.287416999985
+    },
+    {
+      "type": "metric",
+      "t": 150471,
+      "id": "serving-p99",
+      "value": 93.287416999985
+    },
+    {
+      "type": "flow",
+      "t": 151470,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 151470,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 151470,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 151470,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 151470,
+      "id": "serving-p50",
+      "value": 92.15600000001723
+    },
+    {
+      "type": "metric",
+      "t": 151470,
+      "id": "serving-p99",
+      "value": 92.15600000001723
+    },
+    {
+      "type": "check",
+      "t": 152041,
+      "id": "loop-closed",
+      "status": "pending"
+    },
+    {
+      "type": "check",
+      "t": 152041,
+      "id": "writes-continue-during-scoring",
+      "status": "pending"
+    },
+    {
+      "type": "phase",
+      "t": 152041,
+      "phase": "federated-read"
+    },
+    {
+      "type": "node",
+      "t": 152041,
+      "node": "databricks",
+      "status": "busy",
+      "note": "reading TiDB via Lakehouse Federation"
+    },
+    {
+      "type": "flow",
+      "t": 152471,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 152471,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 152471,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 152471,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 152471,
+      "id": "serving-p50",
+      "value": 93.54654099998879
+    },
+    {
+      "type": "metric",
+      "t": 152471,
+      "id": "serving-p99",
+      "value": 93.54654099998879
+    },
+    {
+      "type": "flow",
+      "t": 153477,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 153477,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 153477,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 153477,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 153477,
+      "id": "serving-p50",
+      "value": 92.86804199998733
+    },
+    {
+      "type": "metric",
+      "t": 153477,
+      "id": "serving-p99",
+      "value": 92.86804199998733
+    },
+    {
+      "type": "flow",
+      "t": 154473,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 154473,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 154473,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 154473,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 154473,
+      "id": "serving-p50",
+      "value": 92.78187499998603
+    },
+    {
+      "type": "metric",
+      "t": 154473,
+      "id": "serving-p99",
+      "value": 92.78187499998603
+    },
+    {
+      "type": "metric",
+      "t": 154928,
+      "id": "freshness-lag-ms",
+      "value": 646
+    },
+    {
+      "type": "flow",
+      "t": 155472,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 155472,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 155472,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 155472,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 155472,
+      "id": "serving-p50",
+      "value": 92.09608399998979
+    },
+    {
+      "type": "metric",
+      "t": 155472,
+      "id": "serving-p99",
+      "value": 92.09608399998979
+    },
+    {
+      "type": "flow",
+      "t": 156476,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 156476,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 156476,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 156476,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 156476,
+      "id": "serving-p50",
+      "value": 93.89970799998264
+    },
+    {
+      "type": "metric",
+      "t": 156476,
+      "id": "serving-p99",
+      "value": 93.89970799998264
+    },
+    {
+      "type": "flow",
+      "t": 157472,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 157472,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 157472,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 157472,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 157472,
+      "id": "serving-p50",
+      "value": 92.377542000002
+    },
+    {
+      "type": "metric",
+      "t": 157472,
+      "id": "serving-p99",
+      "value": 92.377542000002
+    },
+    {
+      "type": "flow",
+      "t": 158476,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 158476,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 158476,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 158476,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 158476,
+      "id": "serving-p50",
+      "value": 95.26249999998254
+    },
+    {
+      "type": "metric",
+      "t": 158476,
+      "id": "serving-p99",
+      "value": 95.26249999998254
+    },
+    {
+      "type": "flow",
+      "t": 159472,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 159472,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 159472,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 159472,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 159472,
+      "id": "serving-p50",
+      "value": 92.72500000000582
+    },
+    {
+      "type": "metric",
+      "t": 159472,
+      "id": "serving-p99",
+      "value": 92.72500000000582
+    },
+    {
+      "type": "flow",
+      "t": 160471,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 160471,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 160471,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 160471,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 160471,
+      "id": "serving-p50",
+      "value": 92.93741699997918
+    },
+    {
+      "type": "metric",
+      "t": 160471,
+      "id": "serving-p99",
+      "value": 92.93741699997918
+    },
+    {
+      "type": "metric",
+      "t": 160745,
+      "id": "rows-synced",
+      "value": 1
+    },
+    {
+      "type": "flow",
+      "t": 160745,
+      "edge": "federated-read",
+      "count": 1
+    },
+    {
+      "type": "phase",
+      "t": 160745,
+      "phase": "score-write-back"
+    },
+    {
+      "type": "node",
+      "t": 160745,
+      "node": "databricks",
+      "status": "healthy",
+      "note": "scoring complete"
+    },
+    {
+      "type": "flow",
+      "t": 161478,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 161478,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 161478,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 161478,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 161478,
+      "id": "serving-p50",
+      "value": 93.17291600001045
+    },
+    {
+      "type": "metric",
+      "t": 161478,
+      "id": "serving-p99",
+      "value": 93.17291600001045
+    },
+    {
+      "type": "metric",
+      "t": 162343,
+      "id": "write-back-rate",
+      "value": 2306.0439978582344
+    },
+    {
+      "type": "flow",
+      "t": 162343,
+      "edge": "reverse-etl",
+      "count": 950
+    },
+    {
+      "type": "metric",
+      "t": 162343,
+      "id": "full-loop-time",
+      "value": 10.652
+    },
+    {
+      "type": "check",
+      "t": 162343,
+      "id": "loop-closed",
+      "status": "pass",
+      "observed": "10.7s"
+    },
+    {
+      "type": "check",
+      "t": 162343,
+      "id": "writes-continue-during-scoring",
+      "status": "pass",
+      "observed": "writes continued throughout"
+    },
+    {
+      "type": "phase",
+      "t": 162343,
+      "phase": "low-latency-serving"
+    },
+    {
+      "type": "flow",
+      "t": 162466,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 162466,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 162466,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 162466,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 162466,
+      "id": "serving-p50",
+      "value": 90.15174999998999
+    },
+    {
+      "type": "metric",
+      "t": 162466,
+      "id": "serving-p99",
+      "value": 90.15174999998999
+    },
+    {
+      "type": "flow",
+      "t": 163467,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 163467,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 163467,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 163467,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 163467,
+      "id": "serving-p50",
+      "value": 90.98800000001211
+    },
+    {
+      "type": "metric",
+      "t": 163467,
+      "id": "serving-p99",
+      "value": 90.98800000001211
+    },
+    {
+      "type": "flow",
+      "t": 164479,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 164479,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 164479,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 164479,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 164479,
+      "id": "serving-p50",
+      "value": 91.3780830000178
+    },
+    {
+      "type": "metric",
+      "t": 164479,
+      "id": "serving-p99",
+      "value": 91.3780830000178
+    },
+    {
+      "type": "flow",
+      "t": 165468,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 165468,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 165468,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 165468,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 165468,
+      "id": "serving-p50",
+      "value": 90.79033300001174
+    },
+    {
+      "type": "metric",
+      "t": 165468,
+      "id": "serving-p99",
+      "value": 90.79033300001174
+    },
+    {
+      "type": "flow",
+      "t": 166468,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 166468,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 166468,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 166468,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 166468,
+      "id": "serving-p50",
+      "value": 88.38166700000875
+    },
+    {
+      "type": "metric",
+      "t": 166468,
+      "id": "serving-p99",
+      "value": 88.38166700000875
+    },
+    {
+      "type": "check",
+      "t": 167042,
+      "id": "loop-closed",
+      "status": "pending"
+    },
+    {
+      "type": "check",
+      "t": 167042,
+      "id": "writes-continue-during-scoring",
+      "status": "pending"
+    },
+    {
+      "type": "phase",
+      "t": 167042,
+      "phase": "federated-read"
+    },
+    {
+      "type": "node",
+      "t": 167042,
+      "node": "databricks",
+      "status": "busy",
+      "note": "reading TiDB via Lakehouse Federation"
+    },
+    {
+      "type": "flow",
+      "t": 167467,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 167467,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 167467,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 167467,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 167467,
+      "id": "serving-p50",
+      "value": 89.39299999998184
+    },
+    {
+      "type": "metric",
+      "t": 167467,
+      "id": "serving-p99",
+      "value": 89.39299999998184
+    },
+    {
+      "type": "flow",
+      "t": 168473,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 168473,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 168473,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 168473,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 168473,
+      "id": "serving-p50",
+      "value": 88.63825000001816
+    },
+    {
+      "type": "metric",
+      "t": 168473,
+      "id": "serving-p99",
+      "value": 88.63825000001816
+    },
+    {
+      "type": "flow",
+      "t": 169478,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 169478,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 169478,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 169478,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 169478,
+      "id": "serving-p50",
+      "value": 90.49904100000276
+    },
+    {
+      "type": "metric",
+      "t": 169478,
+      "id": "serving-p99",
+      "value": 90.49904100000276
+    },
+    {
+      "type": "metric",
+      "t": 170125,
+      "id": "freshness-lag-ms",
+      "value": 830
+    },
+    {
+      "type": "flow",
+      "t": 170475,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 170475,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 170475,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 170475,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 170475,
+      "id": "serving-p50",
+      "value": 89.97879200000898
+    },
+    {
+      "type": "metric",
+      "t": 170475,
+      "id": "serving-p99",
+      "value": 89.97879200000898
+    },
+    {
+      "type": "flow",
+      "t": 171479,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 171479,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 171479,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 171479,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 171479,
+      "id": "serving-p50",
+      "value": 90.62550000002375
+    },
+    {
+      "type": "metric",
+      "t": 171479,
+      "id": "serving-p99",
+      "value": 90.62550000002375
+    },
+    {
+      "type": "flow",
+      "t": 172478,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 172478,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 172478,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 172478,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 172478,
+      "id": "serving-p50",
+      "value": 91.13783299998613
+    },
+    {
+      "type": "metric",
+      "t": 172478,
+      "id": "serving-p99",
+      "value": 91.13783299998613
+    },
+    {
+      "type": "flow",
+      "t": 173478,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 173478,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 173478,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 173478,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 173478,
+      "id": "serving-p50",
+      "value": 89.99733300000662
+    },
+    {
+      "type": "metric",
+      "t": 173478,
+      "id": "serving-p99",
+      "value": 89.99733300000662
+    },
+    {
+      "type": "metric",
+      "t": 174410,
+      "id": "rows-synced",
+      "value": 1
+    },
+    {
+      "type": "flow",
+      "t": 174411,
+      "edge": "federated-read",
+      "count": 1
+    },
+    {
+      "type": "phase",
+      "t": 174411,
+      "phase": "score-write-back"
+    },
+    {
+      "type": "node",
+      "t": 174411,
+      "node": "databricks",
+      "status": "healthy",
+      "note": "scoring complete"
+    },
+    {
+      "type": "flow",
+      "t": 174478,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 174478,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 174478,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 174478,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 174478,
+      "id": "serving-p50",
+      "value": 89.74779200000921
+    },
+    {
+      "type": "metric",
+      "t": 174478,
+      "id": "serving-p99",
+      "value": 89.74779200000921
+    },
+    {
+      "type": "flow",
+      "t": 175480,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 175480,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 175480,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 175480,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 175480,
+      "id": "serving-p50",
+      "value": 89.52437500000815
+    },
+    {
+      "type": "metric",
+      "t": 175480,
+      "id": "serving-p99",
+      "value": 89.52437500000815
+    },
+    {
+      "type": "metric",
+      "t": 175890,
+      "id": "write-back-rate",
+      "value": 1992.899299794784
+    },
+    {
+      "type": "flow",
+      "t": 175890,
+      "edge": "reverse-etl",
+      "count": 1000
+    },
+    {
+      "type": "metric",
+      "t": 175890,
+      "id": "full-loop-time",
+      "value": 9.103
+    },
+    {
+      "type": "check",
+      "t": 175890,
+      "id": "loop-closed",
+      "status": "pass",
+      "observed": "9.1s"
+    },
+    {
+      "type": "check",
+      "t": 175890,
+      "id": "writes-continue-during-scoring",
+      "status": "pass",
+      "observed": "writes continued throughout"
+    },
+    {
+      "type": "phase",
+      "t": 175890,
+      "phase": "low-latency-serving"
+    },
+    {
+      "type": "flow",
+      "t": 176486,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 176486,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 176486,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 176486,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 176486,
+      "id": "serving-p50",
+      "value": 91.91583300000639
+    },
+    {
+      "type": "metric",
+      "t": 176486,
+      "id": "serving-p99",
+      "value": 91.91583300000639
+    },
+    {
+      "type": "flow",
+      "t": 177492,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 177492,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 177492,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 177492,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 177492,
+      "id": "serving-p50",
+      "value": 92.64345800000592
+    },
+    {
+      "type": "metric",
+      "t": 177492,
+      "id": "serving-p99",
+      "value": 92.64345800000592
+    },
+    {
+      "type": "flow",
+      "t": 178493,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 178493,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 178493,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 178493,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 178493,
+      "id": "serving-p50",
+      "value": 93.90279200000805
+    },
+    {
+      "type": "metric",
+      "t": 178493,
+      "id": "serving-p99",
+      "value": 93.90279200000805
+    },
+    {
+      "type": "flow",
+      "t": 179496,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 179496,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 179496,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 179496,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 179496,
+      "id": "serving-p50",
+      "value": 95.80399999997462
+    },
+    {
+      "type": "metric",
+      "t": 179496,
+      "id": "serving-p99",
+      "value": 95.80399999997462
+    },
+    {
+      "type": "flow",
+      "t": 180496,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 180496,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 180496,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 180496,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 180496,
+      "id": "serving-p50",
+      "value": 95.59962499997346
+    },
+    {
+      "type": "metric",
+      "t": 180496,
+      "id": "serving-p99",
+      "value": 95.59962499997346
+    },
+    {
+      "type": "flow",
+      "t": 181501,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 181501,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 181501,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 181502,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 181502,
+      "id": "serving-p50",
+      "value": 95.38208299997495
+    },
+    {
+      "type": "metric",
+      "t": 181502,
+      "id": "serving-p99",
+      "value": 95.38208299997495
+    },
+    {
+      "type": "check",
+      "t": 182041,
+      "id": "loop-closed",
+      "status": "pending"
+    },
+    {
+      "type": "check",
+      "t": 182041,
+      "id": "writes-continue-during-scoring",
+      "status": "pending"
+    },
+    {
+      "type": "phase",
+      "t": 182041,
+      "phase": "federated-read"
+    },
+    {
+      "type": "node",
+      "t": 182041,
+      "node": "databricks",
+      "status": "busy",
+      "note": "reading TiDB via Lakehouse Federation"
+    },
+    {
+      "type": "flow",
+      "t": 182498,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 182498,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 182498,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 182498,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 182498,
+      "id": "serving-p50",
+      "value": 93.95024999999441
+    },
+    {
+      "type": "metric",
+      "t": 182498,
+      "id": "serving-p99",
+      "value": 93.95024999999441
+    },
+    {
+      "type": "flow",
+      "t": 183501,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 183501,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 183501,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 183501,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 183501,
+      "id": "serving-p50",
+      "value": 94.73104199999943
+    },
+    {
+      "type": "metric",
+      "t": 183501,
+      "id": "serving-p99",
+      "value": 94.73104199999943
+    },
+    {
+      "type": "flow",
+      "t": 184498,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 184498,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 184498,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 184498,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 184498,
+      "id": "serving-p50",
+      "value": 94.27845899999375
+    },
+    {
+      "type": "metric",
+      "t": 184498,
+      "id": "serving-p99",
+      "value": 94.27845899999375
+    },
+    {
+      "type": "metric",
+      "t": 185057,
+      "id": "freshness-lag-ms",
+      "value": 748
+    },
+    {
+      "type": "flow",
+      "t": 185504,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 185504,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 185504,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 185504,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 185504,
+      "id": "serving-p50",
+      "value": 93.60995800001547
+    },
+    {
+      "type": "metric",
+      "t": 185504,
+      "id": "serving-p99",
+      "value": 93.60995800001547
+    },
+    {
+      "type": "flow",
+      "t": 186507,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 186507,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 186507,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 186507,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 186507,
+      "id": "serving-p50",
+      "value": 93.28162500000326
+    },
+    {
+      "type": "metric",
+      "t": 186507,
+      "id": "serving-p99",
+      "value": 93.28162500000326
+    },
+    {
+      "type": "flow",
+      "t": 187511,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 187511,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 187511,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 187511,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 187511,
+      "id": "serving-p50",
+      "value": 94.53174999999464
+    },
+    {
+      "type": "metric",
+      "t": 187511,
+      "id": "serving-p99",
+      "value": 94.53174999999464
+    },
+    {
+      "type": "flow",
+      "t": 188506,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 188506,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 188506,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 188506,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 188506,
+      "id": "serving-p50",
+      "value": 92.86620799999218
+    },
+    {
+      "type": "metric",
+      "t": 188506,
+      "id": "serving-p99",
+      "value": 92.86620799999218
+    },
+    {
+      "type": "flow",
+      "t": 189513,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 189513,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 189513,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 189513,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 189513,
+      "id": "serving-p50",
+      "value": 98.80945900001097
+    },
+    {
+      "type": "metric",
+      "t": 189513,
+      "id": "serving-p99",
+      "value": 98.80945900001097
+    },
+    {
+      "type": "flow",
+      "t": 190506,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 190506,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 190506,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 190506,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 190506,
+      "id": "serving-p50",
+      "value": 92.14433300000383
+    },
+    {
+      "type": "metric",
+      "t": 190506,
+      "id": "serving-p99",
+      "value": 92.14433300000383
+    },
+    {
+      "type": "metric",
+      "t": 190869,
+      "id": "rows-synced",
+      "value": 1
+    },
+    {
+      "type": "flow",
+      "t": 190869,
+      "edge": "federated-read",
+      "count": 1
+    },
+    {
+      "type": "phase",
+      "t": 190869,
+      "phase": "score-write-back"
+    },
+    {
+      "type": "node",
+      "t": 190869,
+      "node": "databricks",
+      "status": "healthy",
+      "note": "scoring complete"
+    },
+    {
+      "type": "flow",
+      "t": 191507,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 191507,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 191507,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 191507,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 191507,
+      "id": "serving-p50",
+      "value": 92.66712500000722
+    },
+    {
+      "type": "metric",
+      "t": 191507,
+      "id": "serving-p99",
+      "value": 92.66712500000722
+    },
+    {
+      "type": "metric",
+      "t": 192276,
+      "id": "write-back-rate",
+      "value": 2111.173915742594
+    },
+    {
+      "type": "flow",
+      "t": 192276,
+      "edge": "reverse-etl",
+      "count": 1050
+    },
+    {
+      "type": "metric",
+      "t": 192276,
+      "id": "full-loop-time",
+      "value": 10.47
+    },
+    {
+      "type": "check",
+      "t": 192276,
+      "id": "loop-closed",
+      "status": "pass",
+      "observed": "10.5s"
+    },
+    {
+      "type": "check",
+      "t": 192276,
+      "id": "writes-continue-during-scoring",
+      "status": "pass",
+      "observed": "writes continued throughout"
+    },
+    {
+      "type": "phase",
+      "t": 192276,
+      "phase": "low-latency-serving"
+    },
+    {
+      "type": "flow",
+      "t": 192496,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 192496,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 192496,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 192496,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 192496,
+      "id": "serving-p50",
+      "value": 90.20670800001244
+    },
+    {
+      "type": "metric",
+      "t": 192496,
+      "id": "serving-p99",
+      "value": 90.20670800001244
+    },
+    {
+      "type": "flow",
+      "t": 193498,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 193499,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 193499,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 193499,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 193499,
+      "id": "serving-p50",
+      "value": 91.07462499997928
+    },
+    {
+      "type": "metric",
+      "t": 193499,
+      "id": "serving-p99",
+      "value": 91.07462499997928
+    },
+    {
+      "type": "flow",
+      "t": 194499,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 194499,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 194499,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 194499,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 194499,
+      "id": "serving-p50",
+      "value": 88.07979099999648
+    },
+    {
+      "type": "metric",
+      "t": 194499,
+      "id": "serving-p99",
+      "value": 88.07979099999648
+    },
+    {
+      "type": "flow",
+      "t": 195500,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 195500,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 195500,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 195500,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 195500,
+      "id": "serving-p50",
+      "value": 90.5772500000021
+    },
+    {
+      "type": "metric",
+      "t": 195500,
+      "id": "serving-p99",
+      "value": 90.5772500000021
+    },
+    {
+      "type": "flow",
+      "t": 196499,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 196499,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 196499,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 196499,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 196499,
+      "id": "serving-p50",
+      "value": 89.86041600001045
+    },
+    {
+      "type": "metric",
+      "t": 196499,
+      "id": "serving-p99",
+      "value": 89.86041600001045
+    },
+    {
+      "type": "check",
+      "t": 197042,
+      "id": "loop-closed",
+      "status": "pending"
+    },
+    {
+      "type": "check",
+      "t": 197042,
+      "id": "writes-continue-during-scoring",
+      "status": "pending"
+    },
+    {
+      "type": "phase",
+      "t": 197042,
+      "phase": "federated-read"
+    },
+    {
+      "type": "node",
+      "t": 197042,
+      "node": "databricks",
+      "status": "busy",
+      "note": "reading TiDB via Lakehouse Federation"
+    },
+    {
+      "type": "flow",
+      "t": 197502,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 197502,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 197502,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 197502,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 197502,
+      "id": "serving-p50",
+      "value": 90.41024999998626
+    },
+    {
+      "type": "metric",
+      "t": 197502,
+      "id": "serving-p99",
+      "value": 90.41024999998626
+    },
+    {
+      "type": "flow",
+      "t": 198503,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 198503,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 198503,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 198503,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 198503,
+      "id": "serving-p50",
+      "value": 90.58420799998567
+    },
+    {
+      "type": "metric",
+      "t": 198503,
+      "id": "serving-p99",
+      "value": 90.58420799998567
+    },
+    {
+      "type": "flow",
+      "t": 199507,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 199507,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 199507,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 199507,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 199507,
+      "id": "serving-p50",
+      "value": 89.76975000000675
+    },
+    {
+      "type": "metric",
+      "t": 199507,
+      "id": "serving-p99",
+      "value": 89.76975000000675
+    },
+    {
+      "type": "metric",
+      "t": 200258,
+      "id": "freshness-lag-ms",
+      "value": 935
+    },
+    {
+      "type": "flow",
+      "t": 200507,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 200507,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 200507,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 200507,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 200507,
+      "id": "serving-p50",
+      "value": 90.71954200000619
+    },
+    {
+      "type": "metric",
+      "t": 200507,
+      "id": "serving-p99",
+      "value": 90.71954200000619
+    },
+    {
+      "type": "flow",
+      "t": 201510,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 201510,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 201510,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 201510,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 201510,
+      "id": "serving-p50",
+      "value": 89.86358400000609
+    },
+    {
+      "type": "metric",
+      "t": 201510,
+      "id": "serving-p99",
+      "value": 89.86358400000609
+    },
+    {
+      "type": "flow",
+      "t": 202509,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 202509,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 202509,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 202509,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 202509,
+      "id": "serving-p50",
+      "value": 89.28295799999614
+    },
+    {
+      "type": "metric",
+      "t": 202509,
+      "id": "serving-p99",
+      "value": 89.28295799999614
+    },
+    {
+      "type": "flow",
+      "t": 203509,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 203509,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 203509,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 203509,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 203509,
+      "id": "serving-p50",
+      "value": 90.00600000002305
+    },
+    {
+      "type": "metric",
+      "t": 203509,
+      "id": "serving-p99",
+      "value": 90.00600000002305
+    },
+    {
+      "type": "metric",
+      "t": 204432,
+      "id": "rows-synced",
+      "value": 1
+    },
+    {
+      "type": "flow",
+      "t": 204432,
+      "edge": "federated-read",
+      "count": 1
+    },
+    {
+      "type": "phase",
+      "t": 204432,
+      "phase": "score-write-back"
+    },
+    {
+      "type": "node",
+      "t": 204432,
+      "node": "databricks",
+      "status": "healthy",
+      "note": "scoring complete"
+    },
+    {
+      "type": "flow",
+      "t": 204511,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 204511,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 204511,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 204511,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 204511,
+      "id": "serving-p50",
+      "value": 89.75391699999454
+    },
+    {
+      "type": "metric",
+      "t": 204511,
+      "id": "serving-p99",
+      "value": 89.75391699999454
+    },
+    {
+      "type": "flow",
+      "t": 205514,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 205515,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 205515,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 205515,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 205515,
+      "id": "serving-p50",
+      "value": 89.17904200000339
+    },
+    {
+      "type": "metric",
+      "t": 205515,
+      "id": "serving-p99",
+      "value": 89.17904200000339
+    },
+    {
+      "type": "metric",
+      "t": 205980,
+      "id": "write-back-rate",
+      "value": 2178.861953779755
+    },
+    {
+      "type": "flow",
+      "t": 205980,
+      "edge": "reverse-etl",
+      "count": 1100
+    },
+    {
+      "type": "metric",
+      "t": 205980,
+      "id": "full-loop-time",
+      "value": 9.157
+    },
+    {
+      "type": "check",
+      "t": 205980,
+      "id": "loop-closed",
+      "status": "pass",
+      "observed": "9.2s"
+    },
+    {
+      "type": "check",
+      "t": 205980,
+      "id": "writes-continue-during-scoring",
+      "status": "pass",
+      "observed": "writes continued throughout"
+    },
+    {
+      "type": "phase",
+      "t": 205980,
+      "phase": "low-latency-serving"
+    },
+    {
+      "type": "flow",
+      "t": 206521,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 206521,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 206521,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 206521,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 206521,
+      "id": "serving-p50",
+      "value": 91.28087500002584
+    },
+    {
+      "type": "metric",
+      "t": 206521,
+      "id": "serving-p99",
+      "value": 91.28087500002584
+    },
+    {
+      "type": "flow",
+      "t": 207529,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 207529,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 207529,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 207529,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 207530,
+      "id": "serving-p50",
+      "value": 91.2390000000014
+    },
+    {
+      "type": "metric",
+      "t": 207530,
+      "id": "serving-p99",
+      "value": 91.2390000000014
+    },
+    {
+      "type": "flow",
+      "t": 208526,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 208526,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 208526,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 208526,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 208526,
+      "id": "serving-p50",
+      "value": 92.5496250000142
+    },
+    {
+      "type": "metric",
+      "t": 208526,
+      "id": "serving-p99",
+      "value": 92.5496250000142
+    },
+    {
+      "type": "flow",
+      "t": 209532,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 209532,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 209532,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 209532,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 209532,
+      "id": "serving-p50",
+      "value": 92.42137500000536
+    },
+    {
+      "type": "metric",
+      "t": 209532,
+      "id": "serving-p99",
+      "value": 92.42137500000536
+    },
+    {
+      "type": "flow",
+      "t": 210529,
+      "edge": "serving-reads",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 210529,
+      "edge": "writes",
+      "count": 1
+    },
+    {
+      "type": "flow",
+      "t": 210529,
+      "edge": "replication",
+      "count": 1
+    },
+    {
+      "type": "metric",
+      "t": 210529,
+      "id": "event-write-rate",
+      "value": 1
+    },
+    {
+      "type": "metric",
+      "t": 210529,
+      "id": "serving-p50",
+      "value": 94.13866699999198
+    },
+    {
+      "type": "metric",
+      "t": 210529,
+      "id": "serving-p99",
+      "value": 94.13866699999198
+    }
+  ]
+}

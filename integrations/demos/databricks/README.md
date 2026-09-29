@@ -33,8 +33,12 @@ rationale for choosing this path over TiCDC-to-Kafka or export-to-S3.
    databricks secrets put-secret lab-tidb tidb-password
    ```
 3. In the Databricks SQL editor, run the statements in `sql/databricks-setup.sql`
-   in order: create the connection, register the foreign catalog, create the
-   `main.lab_databricks.risk_scores` table, then confirm the federated read
+   in order: create the connection, register the foreign catalog (no
+   `database` option - MySQL foreign catalogs are two-layer namespaced, the
+   TiDB database name is only supplied when a query references
+   `tidb_fed.<database>.<table>`), create the `workspace.lab_databricks.risk_scores`
+   table (Free Edition workspaces have no `main` catalog, only `workspace`;
+   swap in `main` if your workspace has one), then confirm the federated read
    reaches TiDB with the trailing `SELECT` in that file.
 4. Copy `.env.example` to `.env` and fill in the TiDB and Databricks values.
 5. `pnpm install` at the `integrations/` workspace root.

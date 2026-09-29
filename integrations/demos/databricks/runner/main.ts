@@ -128,6 +128,7 @@ const eventLoopTick = async (): Promise<void> => {
   const wroteThisTick = pendingWriteCount - writesBefore;
   if (wroteThisTick === 0 && scoringInFlight) sawZeroWritesDuringScoring = true;
   emitter.flow('writes', wroteThisTick);
+  emitter.flow('replication', wroteThisTick);
   emitter.metric('event-write-rate', wroteThisTick / (eventIntervalMs / 1000));
   const summary = summarize(servingLatencies.drain());
   if (summary) {

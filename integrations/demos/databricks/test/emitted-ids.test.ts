@@ -139,4 +139,9 @@ describe('every emitted id exists in manifest.json', () => {
     expect(ids.length).toBeGreaterThan(0);
     ids.forEach((id) => expect(manifestIdSets.node.has(id)).toBe(true));
   });
+
+  it('every manifest edge is emitted by at least one emitter.flow call', () => {
+    const emittedEdgeIds = new Set(literalIdsAtArgIndex('flow', 0));
+    manifest.edges.forEach((edge) => expect(emittedEdgeIds.has(edge.id)).toBe(true));
+  });
 });
