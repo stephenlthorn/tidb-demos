@@ -94,8 +94,14 @@ once:
 
 ```bash
 cp demos/power-bi/.env.example demos/power-bi/.env   # fill in TIDB_HOST etc.
-pnpm --filter @lab/demo-power-bi exec tsx runner/setup.ts
+cd demos/power-bi && node --env-file=.env --import tsx runner/setup.ts
 ```
+
+`runner/setup.ts` reads its TiDB connection from `process.env`, and unlike
+`pnpm lab run` it does not load `.env` itself, so `--env-file=.env` is
+required here - without it, the seed step silently connects to the local
+tiup playground defaults instead of the cluster in `.env` (found live
+while recording this demo; see the plan's Build notes).
 
 ### 2. Bring up the Windows EC2 instance
 

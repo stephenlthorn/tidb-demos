@@ -1,0 +1,9072 @@
+{
+  "schemaVersion": 1,
+  "manifest": {
+    "id": "power-bi",
+    "number": 11,
+    "title": "Live Dashboards on Operational Data: TiDB HTAP with Power BI",
+    "tagline": "One TiDB cluster feeds the order pipeline and the Power BI report at the same time, with no nightly ETL job in between.",
+    "integrations": [
+      "Power BI",
+      "TiFlash"
+    ],
+    "pattern": "Business teams that want live dashboards on operational data without a nightly ETL job into a separate warehouse.",
+    "publish": true,
+    "runner": {
+      "command": [
+        "node",
+        "--import",
+        "tsx",
+        "runner/main.ts"
+      ],
+      "cwd": "."
+    },
+    "nodes": [
+      {
+        "id": "order-workload",
+        "label": "Order workload",
+        "kind": "source",
+        "x": 10,
+        "y": 50
+      },
+      {
+        "id": "tidb",
+        "label": "TiDB (TiKV rows)",
+        "kind": "tidb",
+        "x": 45,
+        "y": 22
+      },
+      {
+        "id": "tiflash",
+        "label": "TiFlash (columnar replica)",
+        "kind": "tidb",
+        "x": 45,
+        "y": 78
+      },
+      {
+        "id": "power-bi",
+        "label": "Power BI report",
+        "kind": "client",
+        "x": 88,
+        "y": 50
+      }
+    ],
+    "edges": [
+      {
+        "id": "writes",
+        "from": "order-workload",
+        "to": "tidb",
+        "label": "order writes",
+        "unit": "rows/s"
+      },
+      {
+        "id": "replication",
+        "from": "tidb",
+        "to": "tiflash",
+        "label": "TiFlash replication",
+        "unit": "rows/s"
+      },
+      {
+        "id": "tikv-dashboard",
+        "from": "tidb",
+        "to": "power-bi",
+        "label": "dashboard queries (TiKV)",
+        "unit": "req/s"
+      },
+      {
+        "id": "tiflash-dashboard",
+        "from": "tiflash",
+        "to": "power-bi",
+        "label": "dashboard queries (TiFlash)",
+        "unit": "req/s"
+      }
+    ],
+    "metrics": [
+      {
+        "id": "dashboard-p50-tikv",
+        "label": "Dashboard query p50 (TiKV)",
+        "unit": "ms",
+        "display": "series",
+        "better": "lower",
+        "group": "dashboard-latency",
+        "howMeasured": "Once per tick, a dedicated connection runs SET SESSION tidb_isolation_read_engines='tikv', then each of the 3 queries in DASHBOARD_QUERIES is timed with timed(); summarize() over that tick's samples gives p50."
+      },
+      {
+        "id": "dashboard-p99-tikv",
+        "label": "Dashboard query p99 (TiKV)",
+        "unit": "ms",
+        "display": "series",
+        "better": "lower",
+        "group": "dashboard-latency",
+        "howMeasured": "Same measurement as dashboard-p50-tikv; this is the p99 field of the same summarize() result for the tick."
+      },
+      {
+        "id": "dashboard-p50-tiflash",
+        "label": "Dashboard query p50 (TiFlash)",
+        "unit": "ms",
+        "display": "series",
+        "better": "lower",
+        "group": "dashboard-latency",
+        "howMeasured": "Once per tick, a dedicated connection runs SET SESSION tidb_isolation_read_engines='tiflash', then each of the 3 queries in DASHBOARD_QUERIES is timed with timed(); summarize() over that tick's samples gives p50."
+      },
+      {
+        "id": "dashboard-p99-tiflash",
+        "label": "Dashboard query p99 (TiFlash)",
+        "unit": "ms",
+        "display": "series",
+        "better": "lower",
+        "group": "dashboard-latency",
+        "howMeasured": "Same measurement as dashboard-p50-tiflash; this is the p99 field of the same summarize() result for the tick."
+      },
+      {
+        "id": "write-p99",
+        "label": "Order write p99",
+        "unit": "ms",
+        "display": "series",
+        "better": "lower",
+        "group": "write-path",
+        "howMeasured": "Every order INSERT is timed with timed() and pushed into a createSampleWindow(); summarize() over that tick's drained samples gives write-p99."
+      },
+      {
+        "id": "write-p99-degradation",
+        "label": "Write p99 degradation under dashboard load",
+        "unit": "%",
+        "display": "tile",
+        "better": "lower",
+        "group": "write-path",
+        "howMeasured": "degradationPct({ baselineP99Ms, currentP99Ms }) from src/metrics.ts; baseline is the write-p99 value captured during the seed-baseline phase."
+      },
+      {
+        "id": "freshness-ms",
+        "label": "Data freshness (write to visible)",
+        "unit": "ms",
+        "display": "both",
+        "better": "lower",
+        "group": "tiflash",
+        "howMeasured": "freshnessMs({ committedAtMs, visibleAtMs }) from src/metrics.ts: committedAtMs is emitter.elapsedMs() right after a heartbeat order's INSERT commits; visibleAtMs is emitter.elapsedMs() at the first tick a TiFlash-forced probe query returns that row."
+      },
+      {
+        "id": "tiflash-replica-progress",
+        "label": "TiFlash replica sync progress",
+        "unit": "%",
+        "display": "tile",
+        "better": "higher",
+        "group": "tiflash",
+        "howMeasured": "SELECT AVAILABLE, PROGRESS FROM information_schema.tiflash_replica WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders', once per tick; PROGRESS (0.0-1.0) times 100."
+      },
+      {
+        "id": "orders-written-total",
+        "label": "Orders written",
+        "unit": "rows",
+        "display": "tile",
+        "better": "neutral",
+        "group": "throughput",
+        "howMeasured": "Cumulative count of committed INSERTs against orders since the runner started, incremented once per successful write."
+      }
+    ],
+    "phases": [
+      {
+        "id": "intro",
+        "label": "Why this demo",
+        "narration": "A business team wants a live dashboard on operational orders, not a copy that is a day old. One TiDB cluster is about to serve both the checkout writes and the report."
+      },
+      {
+        "id": "seed-baseline",
+        "label": "Baseline writes",
+        "narration": "Orders are flowing into TiDB now, no dashboard load yet. This write p99 is the baseline we compare against once the dashboard starts querying."
+      },
+      {
+        "id": "tiflash-replica",
+        "label": "Add the TiFlash replica",
+        "narration": "Adding a TiFlash replica to the orders table live: this is the columnar copy the dashboard will read from, syncing from the same rows being written right now."
+      },
+      {
+        "id": "dashboard-on-tikv",
+        "label": "Dashboard load on TiKV",
+        "narration": "Routing the dashboard's query set at TiKV, the same engine handling the writes. Watch the write p99 line: this is what a warehouse-free dashboard used to cost you."
+      },
+      {
+        "id": "dashboard-on-tiflash",
+        "label": "Dashboard load on TiFlash",
+        "narration": "Same dashboard queries, same concurrency, now routed to TiFlash. Write p99 comes back down: the analytical load is isolated on its own replica."
+      },
+      {
+        "id": "freshness-check",
+        "label": "Freshness check",
+        "narration": "A heartbeat order just committed. Watch how many milliseconds until it is visible in a TiFlash-routed dashboard query - that is the real replication lag, not a marketing number."
+      },
+      {
+        "id": "power-bi-live",
+        "label": "The real Power BI report",
+        "narration": "Cutting to a real Power BI Desktop report connected to this same cluster. Refreshing it pulls in the orders written during this run."
+      },
+      {
+        "id": "wrap-up",
+        "label": "Recap",
+        "narration": "No nightly ETL job, one cluster, a dashboard that is current to the second, and writes that never noticed the analytics running next to them."
+      }
+    ],
+    "checks": [
+      {
+        "id": "tiflash-replica-available",
+        "label": "TiFlash replica available",
+        "description": "Passes once information_schema.tiflash_replica reports AVAILABLE = 1 for the orders table."
+      },
+      {
+        "id": "snapshot-totals-match",
+        "label": "TiKV and TiFlash totals match at a snapshot",
+        "description": "Passes when SUM(amount) AS OF TIMESTAMP <snapshot> for the orders table returns the identical value whether forced to read from TiKV or TiFlash."
+      },
+      {
+        "id": "write-p99-within-threshold",
+        "label": "Write p99 stays within threshold under dashboard load",
+        "description": "Passes when the write-p99-degradation metric is at or below WRITE_P99_DEGRADATION_THRESHOLD_PCT while the dashboard is routed to TiFlash."
+      }
+    ],
+    "controls": [
+      {
+        "id": "start-dashboard-load",
+        "label": "Start dashboard load",
+        "description": "Begins the heavier concurrent replay (DASHBOARD_LOAD_CONCURRENCY workers per tick) of the dashboard query set against whichever engine is currently routed."
+      },
+      {
+        "id": "route-to-tikv",
+        "label": "Route dashboard to TiKV",
+        "description": "Points the heavier dashboard load at TiKV, the same engine serving writes."
+      },
+      {
+        "id": "route-to-tiflash",
+        "label": "Route dashboard to TiFlash",
+        "description": "Points the heavier dashboard load at the TiFlash replica, isolated from the write path."
+      },
+      {
+        "id": "write-burst",
+        "label": "Write burst",
+        "description": "Multiplies the order write rate by WRITE_BURST_FACTOR for WRITE_BURST_DURATION_MS."
+      }
+    ]
+  },
+  "recordedAt": "2026-09-29T13:15:45.064Z",
+  "environment": {
+    "tidb": "TiDB Cloud Starter (us-west-2, shared lab-shared cluster, database lab_11)",
+    "components": {
+      "powerbi": "Power BI Desktop (Windows-only, version noted at recording time)"
+    },
+    "notes": "runner executed on a laptop, connecting to TiDB Cloud Starter over TLS"
+  },
+  "durationMs": 288794,
+  "events": [
+    {
+      "type": "phase",
+      "t": 2954,
+      "phase": "intro"
+    },
+    {
+      "type": "node",
+      "t": 2954,
+      "node": "order-workload",
+      "status": "healthy"
+    },
+    {
+      "type": "node",
+      "t": 2954,
+      "node": "tidb",
+      "status": "healthy"
+    },
+    {
+      "type": "node",
+      "t": 2954,
+      "node": "tiflash",
+      "status": "idle"
+    },
+    {
+      "type": "node",
+      "t": 2954,
+      "node": "power-bi",
+      "status": "idle"
+    },
+    {
+      "type": "flow",
+      "t": 3997,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 3997,
+      "id": "write-p99",
+      "value": 423.22483299999976
+    },
+    {
+      "type": "metric",
+      "t": 3997,
+      "id": "orders-written-total",
+      "value": 5
+    },
+    {
+      "type": "flow",
+      "t": 6192,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 6192,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 6192,
+      "id": "dashboard-p50-tikv",
+      "value": 426.23412499999995
+    },
+    {
+      "type": "metric",
+      "t": 6192,
+      "id": "dashboard-p99-tikv",
+      "value": 427.9779589999998
+    },
+    {
+      "type": "metric",
+      "t": 6192,
+      "id": "dashboard-p50-tiflash",
+      "value": 399.44866600000023
+    },
+    {
+      "type": "metric",
+      "t": 6192,
+      "id": "dashboard-p99-tiflash",
+      "value": 468.9176669999997
+    },
+    {
+      "type": "metric",
+      "t": 6522,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 7572,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 7572,
+      "id": "write-p99",
+      "value": 334.07908399999997
+    },
+    {
+      "type": "metric",
+      "t": 7572,
+      "id": "orders-written-total",
+      "value": 10
+    },
+    {
+      "type": "flow",
+      "t": 8300,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 8300,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 8300,
+      "id": "dashboard-p50-tikv",
+      "value": 99.29137499999888
+    },
+    {
+      "type": "metric",
+      "t": 8300,
+      "id": "dashboard-p99-tikv",
+      "value": 344.0980419999996
+    },
+    {
+      "type": "metric",
+      "t": 8300,
+      "id": "dashboard-p50-tiflash",
+      "value": 101.29437499999949
+    },
+    {
+      "type": "metric",
+      "t": 8300,
+      "id": "dashboard-p99-tiflash",
+      "value": 343.9232920000013
+    },
+    {
+      "type": "metric",
+      "t": 8621,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 9340,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 9340,
+      "id": "write-p99",
+      "value": 332.46229100000164
+    },
+    {
+      "type": "metric",
+      "t": 9340,
+      "id": "orders-written-total",
+      "value": 15
+    },
+    {
+      "type": "flow",
+      "t": 10194,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 10194,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 10194,
+      "id": "dashboard-p50-tikv",
+      "value": 97.62345899999855
+    },
+    {
+      "type": "metric",
+      "t": 10194,
+      "id": "dashboard-p99-tikv",
+      "value": 330.17220799999996
+    },
+    {
+      "type": "metric",
+      "t": 10194,
+      "id": "dashboard-p50-tiflash",
+      "value": 101.99204099999952
+    },
+    {
+      "type": "metric",
+      "t": 10194,
+      "id": "dashboard-p99-tiflash",
+      "value": 325.7503749999996
+    },
+    {
+      "type": "metric",
+      "t": 10293,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 11242,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 11242,
+      "id": "write-p99",
+      "value": 328.25454100000024
+    },
+    {
+      "type": "metric",
+      "t": 11242,
+      "id": "orders-written-total",
+      "value": 20
+    },
+    {
+      "type": "flow",
+      "t": 11869,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 11869,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 11869,
+      "id": "dashboard-p50-tikv",
+      "value": 101.30862499999967
+    },
+    {
+      "type": "metric",
+      "t": 11869,
+      "id": "dashboard-p99-tikv",
+      "value": 330.98229100000026
+    },
+    {
+      "type": "metric",
+      "t": 11869,
+      "id": "dashboard-p50-tiflash",
+      "value": 103.61108400000012
+    },
+    {
+      "type": "metric",
+      "t": 11869,
+      "id": "dashboard-p99-tiflash",
+      "value": 325.8044580000005
+    },
+    {
+      "type": "metric",
+      "t": 11968,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 12910,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 12910,
+      "id": "write-p99",
+      "value": 334.96058300000004
+    },
+    {
+      "type": "metric",
+      "t": 12910,
+      "id": "orders-written-total",
+      "value": 25
+    },
+    {
+      "type": "flow",
+      "t": 13545,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 13545,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 13545,
+      "id": "dashboard-p50-tikv",
+      "value": 100.83579200000167
+    },
+    {
+      "type": "metric",
+      "t": 13545,
+      "id": "dashboard-p99-tikv",
+      "value": 340.6879579999986
+    },
+    {
+      "type": "metric",
+      "t": 13545,
+      "id": "dashboard-p50-tiflash",
+      "value": 101.30541600000106
+    },
+    {
+      "type": "metric",
+      "t": 13545,
+      "id": "dashboard-p99-tiflash",
+      "value": 340.9193329999998
+    },
+    {
+      "type": "metric",
+      "t": 13864,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 14581,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 14581,
+      "id": "write-p99",
+      "value": 332.24974999999904
+    },
+    {
+      "type": "metric",
+      "t": 14581,
+      "id": "orders-written-total",
+      "value": 30
+    },
+    {
+      "type": "flow",
+      "t": 15437,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 15437,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 15437,
+      "id": "dashboard-p50-tikv",
+      "value": 104.78395900000032
+    },
+    {
+      "type": "metric",
+      "t": 15437,
+      "id": "dashboard-p99-tikv",
+      "value": 323.2495830000007
+    },
+    {
+      "type": "metric",
+      "t": 15437,
+      "id": "dashboard-p50-tiflash",
+      "value": 120.222667
+    },
+    {
+      "type": "metric",
+      "t": 15437,
+      "id": "dashboard-p99-tiflash",
+      "value": 303.80270799999926
+    },
+    {
+      "type": "metric",
+      "t": 15531,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "phase",
+      "t": 15532,
+      "phase": "seed-baseline"
+    },
+    {
+      "type": "flow",
+      "t": 16486,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 16486,
+      "id": "write-p99",
+      "value": 334.69645799999853
+    },
+    {
+      "type": "metric",
+      "t": 16486,
+      "id": "orders-written-total",
+      "value": 35
+    },
+    {
+      "type": "flow",
+      "t": 17112,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 17112,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 17112,
+      "id": "dashboard-p50-tikv",
+      "value": 98.87099999999919
+    },
+    {
+      "type": "metric",
+      "t": 17112,
+      "id": "dashboard-p99-tikv",
+      "value": 335.70529100000203
+    },
+    {
+      "type": "metric",
+      "t": 17112,
+      "id": "dashboard-p50-tiflash",
+      "value": 102.02791699999943
+    },
+    {
+      "type": "metric",
+      "t": 17112,
+      "id": "dashboard-p99-tiflash",
+      "value": 332.7065419999999
+    },
+    {
+      "type": "metric",
+      "t": 17210,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 18152,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 18152,
+      "id": "write-p99",
+      "value": 325.82250000000204
+    },
+    {
+      "type": "metric",
+      "t": 18152,
+      "id": "orders-written-total",
+      "value": 40
+    },
+    {
+      "type": "flow",
+      "t": 18782,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 18782,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 18782,
+      "id": "dashboard-p50-tikv",
+      "value": 98.69125000000349
+    },
+    {
+      "type": "metric",
+      "t": 18782,
+      "id": "dashboard-p99-tikv",
+      "value": 338.93375000000015
+    },
+    {
+      "type": "metric",
+      "t": 18782,
+      "id": "dashboard-p50-tiflash",
+      "value": 101.2423340000023
+    },
+    {
+      "type": "metric",
+      "t": 18782,
+      "id": "dashboard-p99-tiflash",
+      "value": 338.960667000003
+    },
+    {
+      "type": "metric",
+      "t": 19105,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 19823,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 19823,
+      "id": "write-p99",
+      "value": 333.4435420000009
+    },
+    {
+      "type": "metric",
+      "t": 19823,
+      "id": "orders-written-total",
+      "value": 45
+    },
+    {
+      "type": "flow",
+      "t": 20679,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 20679,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 20679,
+      "id": "dashboard-p50-tikv",
+      "value": 102.93087500000183
+    },
+    {
+      "type": "metric",
+      "t": 20679,
+      "id": "dashboard-p99-tikv",
+      "value": 321.1676669999979
+    },
+    {
+      "type": "metric",
+      "t": 20679,
+      "id": "dashboard-p50-tiflash",
+      "value": 103.2544170000001
+    },
+    {
+      "type": "metric",
+      "t": 20679,
+      "id": "dashboard-p99-tiflash",
+      "value": 319.56095899999855
+    },
+    {
+      "type": "metric",
+      "t": 20775,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 21730,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "log",
+      "t": 21825,
+      "level": "info",
+      "msg": "heartbeat hb-1 committed",
+      "node": "tidb"
+    },
+    {
+      "type": "metric",
+      "t": 22352,
+      "id": "freshness-ms",
+      "value": 527
+    },
+    {
+      "type": "log",
+      "t": 22352,
+      "level": "info",
+      "msg": "heartbeat hb-1 visible in TiFlash after 527ms",
+      "node": "tiflash"
+    },
+    {
+      "type": "metric",
+      "t": 22352,
+      "id": "write-p99",
+      "value": 331.47879100000137
+    },
+    {
+      "type": "metric",
+      "t": 22352,
+      "id": "orders-written-total",
+      "value": 50
+    },
+    {
+      "type": "flow",
+      "t": 22974,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 22974,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 22974,
+      "id": "dashboard-p50-tikv",
+      "value": 98.70904099999825
+    },
+    {
+      "type": "metric",
+      "t": 22974,
+      "id": "dashboard-p99-tikv",
+      "value": 331.62270799999897
+    },
+    {
+      "type": "metric",
+      "t": 22974,
+      "id": "dashboard-p50-tiflash",
+      "value": 100.39512500000274
+    },
+    {
+      "type": "metric",
+      "t": 22974,
+      "id": "dashboard-p99-tiflash",
+      "value": 331.6010000000024
+    },
+    {
+      "type": "metric",
+      "t": 23300,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 24025,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 24025,
+      "id": "write-p99",
+      "value": 331.66195900000093
+    },
+    {
+      "type": "metric",
+      "t": 24025,
+      "id": "orders-written-total",
+      "value": 55
+    },
+    {
+      "type": "flow",
+      "t": 24872,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 24872,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 24872,
+      "id": "dashboard-p50-tikv",
+      "value": 99.69179200000144
+    },
+    {
+      "type": "metric",
+      "t": 24872,
+      "id": "dashboard-p99-tikv",
+      "value": 325.8928339999984
+    },
+    {
+      "type": "metric",
+      "t": 24872,
+      "id": "dashboard-p50-tiflash",
+      "value": 103.95454199999949
+    },
+    {
+      "type": "metric",
+      "t": 24872,
+      "id": "dashboard-p99-tiflash",
+      "value": 321.1310420000009
+    },
+    {
+      "type": "metric",
+      "t": 24968,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 25922,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 25922,
+      "id": "write-p99",
+      "value": 331.73333300000013
+    },
+    {
+      "type": "metric",
+      "t": 25922,
+      "id": "orders-written-total",
+      "value": 60
+    },
+    {
+      "type": "flow",
+      "t": 26546,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 26546,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 26546,
+      "id": "dashboard-p50-tikv",
+      "value": 97.62116700000115
+    },
+    {
+      "type": "metric",
+      "t": 26546,
+      "id": "dashboard-p99-tikv",
+      "value": 335.0721249999988
+    },
+    {
+      "type": "metric",
+      "t": 26546,
+      "id": "dashboard-p50-tiflash",
+      "value": 101.22504199999821
+    },
+    {
+      "type": "metric",
+      "t": 26546,
+      "id": "dashboard-p99-tiflash",
+      "value": 331.4577919999974
+    },
+    {
+      "type": "metric",
+      "t": 26651,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 27590,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 27590,
+      "id": "write-p99",
+      "value": 332.0819159999992
+    },
+    {
+      "type": "metric",
+      "t": 27590,
+      "id": "orders-written-total",
+      "value": 65
+    },
+    {
+      "type": "flow",
+      "t": 28227,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 28227,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 28227,
+      "id": "dashboard-p50-tikv",
+      "value": 104.12662500000079
+    },
+    {
+      "type": "metric",
+      "t": 28227,
+      "id": "dashboard-p99-tikv",
+      "value": 338.7360000000008
+    },
+    {
+      "type": "metric",
+      "t": 28227,
+      "id": "dashboard-p50-tiflash",
+      "value": 104.86875000000146
+    },
+    {
+      "type": "metric",
+      "t": 28227,
+      "id": "dashboard-p99-tiflash",
+      "value": 338.98008299999856
+    },
+    {
+      "type": "metric",
+      "t": 28544,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 29258,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 29258,
+      "id": "write-p99",
+      "value": 329.7777079999978
+    },
+    {
+      "type": "metric",
+      "t": 29258,
+      "id": "orders-written-total",
+      "value": 70
+    },
+    {
+      "type": "flow",
+      "t": 30116,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 30116,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 30116,
+      "id": "dashboard-p50-tikv",
+      "value": 99.06416700000045
+    },
+    {
+      "type": "metric",
+      "t": 30116,
+      "id": "dashboard-p99-tikv",
+      "value": 323.50529200000165
+    },
+    {
+      "type": "metric",
+      "t": 30116,
+      "id": "dashboard-p50-tiflash",
+      "value": 102.98241699999926
+    },
+    {
+      "type": "metric",
+      "t": 30116,
+      "id": "dashboard-p99-tiflash",
+      "value": 320.0305420000004
+    },
+    {
+      "type": "metric",
+      "t": 30216,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 31165,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 31165,
+      "id": "write-p99",
+      "value": 329.53004200000214
+    },
+    {
+      "type": "metric",
+      "t": 31165,
+      "id": "orders-written-total",
+      "value": 75
+    },
+    {
+      "type": "flow",
+      "t": 31794,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 31794,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 31794,
+      "id": "dashboard-p50-tikv",
+      "value": 101.06950000000143
+    },
+    {
+      "type": "metric",
+      "t": 31794,
+      "id": "dashboard-p99-tikv",
+      "value": 334.0352500000008
+    },
+    {
+      "type": "metric",
+      "t": 31794,
+      "id": "dashboard-p50-tiflash",
+      "value": 104.62912500000311
+    },
+    {
+      "type": "metric",
+      "t": 31794,
+      "id": "dashboard-p99-tiflash",
+      "value": 325.97462500000256
+    },
+    {
+      "type": "metric",
+      "t": 31893,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 32835,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 32835,
+      "id": "write-p99",
+      "value": 328.15545799999745
+    },
+    {
+      "type": "metric",
+      "t": 32835,
+      "id": "orders-written-total",
+      "value": 80
+    },
+    {
+      "type": "flow",
+      "t": 33470,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 33470,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 33470,
+      "id": "dashboard-p50-tikv",
+      "value": 102.87495800000033
+    },
+    {
+      "type": "metric",
+      "t": 33470,
+      "id": "dashboard-p99-tikv",
+      "value": 333.513082999998
+    },
+    {
+      "type": "metric",
+      "t": 33470,
+      "id": "dashboard-p50-tiflash",
+      "value": 105.49845800000185
+    },
+    {
+      "type": "metric",
+      "t": 33470,
+      "id": "dashboard-p99-tiflash",
+      "value": 335.45962499999587
+    },
+    {
+      "type": "metric",
+      "t": 33789,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 34500,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 34500,
+      "id": "write-p99",
+      "value": 322.73137499999575
+    },
+    {
+      "type": "metric",
+      "t": 34500,
+      "id": "orders-written-total",
+      "value": 85
+    },
+    {
+      "type": "flow",
+      "t": 35360,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 35360,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 35360,
+      "id": "dashboard-p50-tikv",
+      "value": 101.49445800000103
+    },
+    {
+      "type": "metric",
+      "t": 35360,
+      "id": "dashboard-p99-tikv",
+      "value": 323.14283299999806
+    },
+    {
+      "type": "metric",
+      "t": 35360,
+      "id": "dashboard-p50-tiflash",
+      "value": 107.15149999999994
+    },
+    {
+      "type": "metric",
+      "t": 35360,
+      "id": "dashboard-p99-tiflash",
+      "value": 311.7764160000006
+    },
+    {
+      "type": "metric",
+      "t": 35463,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 36406,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 36406,
+      "id": "write-p99",
+      "value": 326.01516699999775
+    },
+    {
+      "type": "metric",
+      "t": 36406,
+      "id": "orders-written-total",
+      "value": 90
+    },
+    {
+      "type": "flow",
+      "t": 37034,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 37034,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 37034,
+      "id": "dashboard-p50-tikv",
+      "value": 102.6150839999973
+    },
+    {
+      "type": "metric",
+      "t": 37034,
+      "id": "dashboard-p99-tikv",
+      "value": 332.65379199999734
+    },
+    {
+      "type": "metric",
+      "t": 37034,
+      "id": "dashboard-p50-tiflash",
+      "value": 107.53708400000323
+    },
+    {
+      "type": "metric",
+      "t": 37034,
+      "id": "dashboard-p99-tiflash",
+      "value": 327.685458999993
+    },
+    {
+      "type": "metric",
+      "t": 37131,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 38082,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 38082,
+      "id": "write-p99",
+      "value": 330.47929199999635
+    },
+    {
+      "type": "metric",
+      "t": 38082,
+      "id": "orders-written-total",
+      "value": 95
+    },
+    {
+      "type": "flow",
+      "t": 38708,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 38708,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 38708,
+      "id": "dashboard-p50-tikv",
+      "value": 101.11891699999978
+    },
+    {
+      "type": "metric",
+      "t": 38708,
+      "id": "dashboard-p99-tikv",
+      "value": 333.1935000000012
+    },
+    {
+      "type": "metric",
+      "t": 38708,
+      "id": "dashboard-p50-tiflash",
+      "value": 101.24154199999612
+    },
+    {
+      "type": "metric",
+      "t": 38708,
+      "id": "dashboard-p99-tiflash",
+      "value": 333.28241600000183
+    },
+    {
+      "type": "metric",
+      "t": 39028,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 39746,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 39746,
+      "id": "write-p99",
+      "value": 331.2663329999996
+    },
+    {
+      "type": "metric",
+      "t": 39746,
+      "id": "orders-written-total",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 40604,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 40604,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 40604,
+      "id": "dashboard-p50-tikv",
+      "value": 100.20025000000169
+    },
+    {
+      "type": "metric",
+      "t": 40604,
+      "id": "dashboard-p99-tikv",
+      "value": 325.70387499999924
+    },
+    {
+      "type": "metric",
+      "t": 40604,
+      "id": "dashboard-p50-tiflash",
+      "value": 104.26620900000125
+    },
+    {
+      "type": "metric",
+      "t": 40604,
+      "id": "dashboard-p99-tiflash",
+      "value": 322.8115839999955
+    },
+    {
+      "type": "metric",
+      "t": 40702,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 41650,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 41650,
+      "id": "write-p99",
+      "value": 330.81320800000685
+    },
+    {
+      "type": "metric",
+      "t": 41650,
+      "id": "orders-written-total",
+      "value": 105
+    },
+    {
+      "type": "flow",
+      "t": 42294,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 42294,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 42294,
+      "id": "dashboard-p50-tikv",
+      "value": 117.11516699999629
+    },
+    {
+      "type": "metric",
+      "t": 42294,
+      "id": "dashboard-p99-tikv",
+      "value": 335.8190840000025
+    },
+    {
+      "type": "metric",
+      "t": 42294,
+      "id": "dashboard-p50-tiflash",
+      "value": 118.81454200000007
+    },
+    {
+      "type": "metric",
+      "t": 42294,
+      "id": "dashboard-p99-tiflash",
+      "value": 333.4524999999994
+    },
+    {
+      "type": "metric",
+      "t": 42392,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 43320,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "log",
+      "t": 43425,
+      "level": "info",
+      "msg": "heartbeat hb-2 committed",
+      "node": "tidb"
+    },
+    {
+      "type": "metric",
+      "t": 43946,
+      "id": "freshness-ms",
+      "value": 521
+    },
+    {
+      "type": "log",
+      "t": 43946,
+      "level": "info",
+      "msg": "heartbeat hb-2 visible in TiFlash after 521ms",
+      "node": "tiflash"
+    },
+    {
+      "type": "metric",
+      "t": 43946,
+      "id": "write-p99",
+      "value": 326.93325000000186
+    },
+    {
+      "type": "metric",
+      "t": 43946,
+      "id": "orders-written-total",
+      "value": 110
+    },
+    {
+      "type": "flow",
+      "t": 44796,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 44796,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 44796,
+      "id": "dashboard-p50-tikv",
+      "value": 98.53749999999854
+    },
+    {
+      "type": "metric",
+      "t": 44796,
+      "id": "dashboard-p99-tikv",
+      "value": 325.94583299999795
+    },
+    {
+      "type": "metric",
+      "t": 44796,
+      "id": "dashboard-p50-tiflash",
+      "value": 100.37445900000603
+    },
+    {
+      "type": "metric",
+      "t": 44796,
+      "id": "dashboard-p99-tiflash",
+      "value": 323.1143749999974
+    },
+    {
+      "type": "metric",
+      "t": 44892,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 45845,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 45845,
+      "id": "write-p99",
+      "value": 332.62395800000377
+    },
+    {
+      "type": "metric",
+      "t": 45845,
+      "id": "orders-written-total",
+      "value": 115
+    },
+    {
+      "type": "flow",
+      "t": 46471,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 46471,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 46471,
+      "id": "dashboard-p50-tikv",
+      "value": 98.47300000000541
+    },
+    {
+      "type": "metric",
+      "t": 46471,
+      "id": "dashboard-p99-tikv",
+      "value": 334.45100000000093
+    },
+    {
+      "type": "metric",
+      "t": 46471,
+      "id": "dashboard-p50-tiflash",
+      "value": 106.13474999999744
+    },
+    {
+      "type": "metric",
+      "t": 46471,
+      "id": "dashboard-p99-tiflash",
+      "value": 326.4422919999997
+    },
+    {
+      "type": "metric",
+      "t": 46567,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "phase",
+      "t": 46568,
+      "phase": "tiflash-replica"
+    },
+    {
+      "type": "node",
+      "t": 46568,
+      "node": "tiflash",
+      "status": "starting"
+    },
+    {
+      "type": "flow",
+      "t": 47516,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 47516,
+      "id": "write-p99",
+      "value": 328.48391699999775
+    },
+    {
+      "type": "metric",
+      "t": 47516,
+      "id": "orders-written-total",
+      "value": 120
+    },
+    {
+      "type": "flow",
+      "t": 48146,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 48146,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 48146,
+      "id": "dashboard-p50-tikv",
+      "value": 102.08316599999671
+    },
+    {
+      "type": "metric",
+      "t": 48146,
+      "id": "dashboard-p99-tikv",
+      "value": 336.68633299999783
+    },
+    {
+      "type": "metric",
+      "t": 48146,
+      "id": "dashboard-p50-tiflash",
+      "value": 102.24579100000119
+    },
+    {
+      "type": "metric",
+      "t": 48146,
+      "id": "dashboard-p99-tiflash",
+      "value": 336.654082999994
+    },
+    {
+      "type": "metric",
+      "t": 48465,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "check",
+      "t": 48465,
+      "id": "tiflash-replica-available",
+      "status": "pending"
+    },
+    {
+      "type": "node",
+      "t": 48465,
+      "node": "tiflash",
+      "status": "healthy"
+    },
+    {
+      "type": "check",
+      "t": 48465,
+      "id": "tiflash-replica-available",
+      "status": "pass",
+      "observed": "progress=1.00 available=true"
+    },
+    {
+      "type": "flow",
+      "t": 49182,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 49182,
+      "id": "write-p99",
+      "value": 332.69758400000137
+    },
+    {
+      "type": "metric",
+      "t": 49182,
+      "id": "orders-written-total",
+      "value": 125
+    },
+    {
+      "type": "flow",
+      "t": 50040,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 50040,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 50041,
+      "id": "dashboard-p50-tikv",
+      "value": 99.22562499999913
+    },
+    {
+      "type": "metric",
+      "t": 50041,
+      "id": "dashboard-p99-tikv",
+      "value": 328.62337500000285
+    },
+    {
+      "type": "metric",
+      "t": 50041,
+      "id": "dashboard-p50-tiflash",
+      "value": 100.68908299999748
+    },
+    {
+      "type": "metric",
+      "t": 50041,
+      "id": "dashboard-p99-tiflash",
+      "value": 323.22987499999726
+    },
+    {
+      "type": "metric",
+      "t": 50139,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 51089,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 51089,
+      "id": "write-p99",
+      "value": 333.1076249999969
+    },
+    {
+      "type": "metric",
+      "t": 51089,
+      "id": "orders-written-total",
+      "value": 130
+    },
+    {
+      "type": "flow",
+      "t": 51716,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 51716,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 51716,
+      "id": "dashboard-p50-tikv",
+      "value": 99.46229199999652
+    },
+    {
+      "type": "metric",
+      "t": 51716,
+      "id": "dashboard-p99-tikv",
+      "value": 338.5497910000049
+    },
+    {
+      "type": "metric",
+      "t": 51716,
+      "id": "dashboard-p50-tiflash",
+      "value": 102.07758399999875
+    },
+    {
+      "type": "metric",
+      "t": 51716,
+      "id": "dashboard-p99-tiflash",
+      "value": 333.9484589999993
+    },
+    {
+      "type": "metric",
+      "t": 51813,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 52760,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 52760,
+      "id": "write-p99",
+      "value": 327.9089160000003
+    },
+    {
+      "type": "metric",
+      "t": 52760,
+      "id": "orders-written-total",
+      "value": 135
+    },
+    {
+      "type": "flow",
+      "t": 53386,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 53386,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 53386,
+      "id": "dashboard-p50-tikv",
+      "value": 100.34416700000293
+    },
+    {
+      "type": "metric",
+      "t": 53386,
+      "id": "dashboard-p99-tikv",
+      "value": 332.77150000000256
+    },
+    {
+      "type": "metric",
+      "t": 53386,
+      "id": "dashboard-p50-tiflash",
+      "value": 100.46674999999959
+    },
+    {
+      "type": "metric",
+      "t": 53386,
+      "id": "dashboard-p99-tiflash",
+      "value": 332.83541700000205
+    },
+    {
+      "type": "metric",
+      "t": 53711,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 54432,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 54432,
+      "id": "write-p99",
+      "value": 333.60724999999366
+    },
+    {
+      "type": "metric",
+      "t": 54432,
+      "id": "orders-written-total",
+      "value": 140
+    },
+    {
+      "type": "flow",
+      "t": 55284,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 55284,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 55284,
+      "id": "dashboard-p50-tikv",
+      "value": 99.45895900000323
+    },
+    {
+      "type": "metric",
+      "t": 55284,
+      "id": "dashboard-p99-tikv",
+      "value": 327.85495799999626
+    },
+    {
+      "type": "metric",
+      "t": 55284,
+      "id": "dashboard-p50-tiflash",
+      "value": 104.91016700000182
+    },
+    {
+      "type": "metric",
+      "t": 55284,
+      "id": "dashboard-p99-tiflash",
+      "value": 319.33124999999563
+    },
+    {
+      "type": "metric",
+      "t": 55393,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 56329,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 56329,
+      "id": "write-p99",
+      "value": 330.1419590000005
+    },
+    {
+      "type": "metric",
+      "t": 56329,
+      "id": "orders-written-total",
+      "value": 145
+    },
+    {
+      "type": "flow",
+      "t": 56956,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 56956,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 56956,
+      "id": "dashboard-p50-tikv",
+      "value": 98.43045799999527
+    },
+    {
+      "type": "metric",
+      "t": 56956,
+      "id": "dashboard-p99-tikv",
+      "value": 337.742207999996
+    },
+    {
+      "type": "metric",
+      "t": 56956,
+      "id": "dashboard-p50-tiflash",
+      "value": 102.68137500000012
+    },
+    {
+      "type": "metric",
+      "t": 56956,
+      "id": "dashboard-p99-tiflash",
+      "value": 333.15587499999674
+    },
+    {
+      "type": "metric",
+      "t": 57056,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 57996,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 57996,
+      "id": "write-p99",
+      "value": 330.2093329999989
+    },
+    {
+      "type": "metric",
+      "t": 57996,
+      "id": "orders-written-total",
+      "value": 150
+    },
+    {
+      "type": "flow",
+      "t": 58636,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 58636,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 58636,
+      "id": "dashboard-p50-tikv",
+      "value": 101.86279099999956
+    },
+    {
+      "type": "metric",
+      "t": 58636,
+      "id": "dashboard-p99-tikv",
+      "value": 340.36795799999527
+    },
+    {
+      "type": "metric",
+      "t": 58636,
+      "id": "dashboard-p50-tiflash",
+      "value": 106.97000000000116
+    },
+    {
+      "type": "metric",
+      "t": 58636,
+      "id": "dashboard-p99-tiflash",
+      "value": 341.88733300000604
+    },
+    {
+      "type": "metric",
+      "t": 58954,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 59677,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 59677,
+      "id": "write-p99",
+      "value": 325.3086669999975
+    },
+    {
+      "type": "metric",
+      "t": 59677,
+      "id": "orders-written-total",
+      "value": 155
+    },
+    {
+      "type": "flow",
+      "t": 60527,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 60527,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 60527,
+      "id": "dashboard-p50-tikv",
+      "value": 101.66895800000202
+    },
+    {
+      "type": "metric",
+      "t": 60527,
+      "id": "dashboard-p99-tikv",
+      "value": 325.3735000000015
+    },
+    {
+      "type": "metric",
+      "t": 60527,
+      "id": "dashboard-p50-tiflash",
+      "value": 102.88433299999451
+    },
+    {
+      "type": "metric",
+      "t": 60527,
+      "id": "dashboard-p99-tiflash",
+      "value": 320.5920830000032
+    },
+    {
+      "type": "metric",
+      "t": 60626,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 61573,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 61573,
+      "id": "write-p99",
+      "value": 331.3219170000011
+    },
+    {
+      "type": "metric",
+      "t": 61573,
+      "id": "orders-written-total",
+      "value": 160
+    },
+    {
+      "type": "flow",
+      "t": 62201,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 62201,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 62201,
+      "id": "dashboard-p50-tikv",
+      "value": 103.22112499999639
+    },
+    {
+      "type": "metric",
+      "t": 62201,
+      "id": "dashboard-p99-tikv",
+      "value": 332.6477920000034
+    },
+    {
+      "type": "metric",
+      "t": 62201,
+      "id": "dashboard-p50-tiflash",
+      "value": 103.3090830000001
+    },
+    {
+      "type": "metric",
+      "t": 62201,
+      "id": "dashboard-p99-tiflash",
+      "value": 330.0365829999937
+    },
+    {
+      "type": "metric",
+      "t": 62296,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 63244,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 63244,
+      "id": "write-p99",
+      "value": 330.2074999999968
+    },
+    {
+      "type": "metric",
+      "t": 63244,
+      "id": "orders-written-total",
+      "value": 165
+    },
+    {
+      "type": "flow",
+      "t": 63875,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 63875,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 63875,
+      "id": "dashboard-p50-tikv",
+      "value": 99.25983300000371
+    },
+    {
+      "type": "metric",
+      "t": 63875,
+      "id": "dashboard-p99-tikv",
+      "value": 336.3868749999965
+    },
+    {
+      "type": "metric",
+      "t": 63875,
+      "id": "dashboard-p50-tiflash",
+      "value": 102.23458299999766
+    },
+    {
+      "type": "metric",
+      "t": 63875,
+      "id": "dashboard-p99-tiflash",
+      "value": 336.73337500000343
+    },
+    {
+      "type": "metric",
+      "t": 64196,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 64912,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "log",
+      "t": 65245,
+      "level": "info",
+      "msg": "heartbeat hb-3 committed",
+      "node": "tidb"
+    },
+    {
+      "type": "metric",
+      "t": 65436,
+      "id": "freshness-ms",
+      "value": 191
+    },
+    {
+      "type": "log",
+      "t": 65436,
+      "level": "info",
+      "msg": "heartbeat hb-3 visible in TiFlash after 191ms",
+      "node": "tiflash"
+    },
+    {
+      "type": "metric",
+      "t": 65436,
+      "id": "write-p99",
+      "value": 330.42016700000386
+    },
+    {
+      "type": "metric",
+      "t": 65436,
+      "id": "orders-written-total",
+      "value": 170
+    },
+    {
+      "type": "flow",
+      "t": 66394,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 66394,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 66394,
+      "id": "dashboard-p50-tikv",
+      "value": 99.19012499999371
+    },
+    {
+      "type": "metric",
+      "t": 66394,
+      "id": "dashboard-p99-tikv",
+      "value": 326.5086670000019
+    },
+    {
+      "type": "metric",
+      "t": 66394,
+      "id": "dashboard-p50-tiflash",
+      "value": 103.39237499999581
+    },
+    {
+      "type": "metric",
+      "t": 66394,
+      "id": "dashboard-p99-tiflash",
+      "value": 419.26774999999907
+    },
+    {
+      "type": "metric",
+      "t": 66491,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 67437,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 67437,
+      "id": "write-p99",
+      "value": 328.3592920000083
+    },
+    {
+      "type": "metric",
+      "t": 67437,
+      "id": "orders-written-total",
+      "value": 175
+    },
+    {
+      "type": "flow",
+      "t": 68066,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 68066,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 68066,
+      "id": "dashboard-p50-tikv",
+      "value": 98.15158299999894
+    },
+    {
+      "type": "metric",
+      "t": 68066,
+      "id": "dashboard-p99-tikv",
+      "value": 336.5344170000026
+    },
+    {
+      "type": "metric",
+      "t": 68066,
+      "id": "dashboard-p50-tiflash",
+      "value": 101.43558299999859
+    },
+    {
+      "type": "metric",
+      "t": 68066,
+      "id": "dashboard-p99-tiflash",
+      "value": 336.8443750000006
+    },
+    {
+      "type": "metric",
+      "t": 68390,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 69110,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 69110,
+      "id": "write-p99",
+      "value": 332.7712920000049
+    },
+    {
+      "type": "metric",
+      "t": 69110,
+      "id": "orders-written-total",
+      "value": 180
+    },
+    {
+      "type": "flow",
+      "t": 69963,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 69963,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 69963,
+      "id": "dashboard-p50-tikv",
+      "value": 97.35450000000128
+    },
+    {
+      "type": "metric",
+      "t": 69963,
+      "id": "dashboard-p99-tikv",
+      "value": 331.69395899999654
+    },
+    {
+      "type": "metric",
+      "t": 69963,
+      "id": "dashboard-p50-tiflash",
+      "value": 101.25024999999732
+    },
+    {
+      "type": "metric",
+      "t": 69963,
+      "id": "dashboard-p99-tiflash",
+      "value": 324.93579200000386
+    },
+    {
+      "type": "metric",
+      "t": 70062,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 71011,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 71011,
+      "id": "write-p99",
+      "value": 331.0005000000092
+    },
+    {
+      "type": "metric",
+      "t": 71011,
+      "id": "orders-written-total",
+      "value": 185
+    },
+    {
+      "type": "flow",
+      "t": 71639,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 71639,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 71639,
+      "id": "dashboard-p50-tikv",
+      "value": 99.75004199999967
+    },
+    {
+      "type": "metric",
+      "t": 71639,
+      "id": "dashboard-p99-tikv",
+      "value": 336.2614579999936
+    },
+    {
+      "type": "metric",
+      "t": 71639,
+      "id": "dashboard-p50-tiflash",
+      "value": 103.70329199999105
+    },
+    {
+      "type": "metric",
+      "t": 71639,
+      "id": "dashboard-p99-tiflash",
+      "value": 332.13908300000185
+    },
+    {
+      "type": "metric",
+      "t": 71739,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 72684,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 72684,
+      "id": "write-p99",
+      "value": 331.9751249999972
+    },
+    {
+      "type": "metric",
+      "t": 72684,
+      "id": "orders-written-total",
+      "value": 190
+    },
+    {
+      "type": "flow",
+      "t": 73310,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 73310,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 73310,
+      "id": "dashboard-p50-tikv",
+      "value": 99.60975000000326
+    },
+    {
+      "type": "metric",
+      "t": 73310,
+      "id": "dashboard-p99-tikv",
+      "value": 334.86554199999955
+    },
+    {
+      "type": "metric",
+      "t": 73310,
+      "id": "dashboard-p50-tiflash",
+      "value": 101.88816699999734
+    },
+    {
+      "type": "metric",
+      "t": 73310,
+      "id": "dashboard-p99-tiflash",
+      "value": 335.111333000008
+    },
+    {
+      "type": "metric",
+      "t": 73633,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 74353,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 74353,
+      "id": "write-p99",
+      "value": 329.776457999993
+    },
+    {
+      "type": "metric",
+      "t": 74353,
+      "id": "orders-written-total",
+      "value": 195
+    },
+    {
+      "type": "flow",
+      "t": 75206,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 75206,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "metric",
+      "t": 75206,
+      "id": "dashboard-p50-tikv",
+      "value": 98.94279200000165
+    },
+    {
+      "type": "metric",
+      "t": 75206,
+      "id": "dashboard-p99-tikv",
+      "value": 330.1092920000083
+    },
+    {
+      "type": "metric",
+      "t": 75206,
+      "id": "dashboard-p50-tiflash",
+      "value": 102.16741599999659
+    },
+    {
+      "type": "metric",
+      "t": 75206,
+      "id": "dashboard-p99-tiflash",
+      "value": 324.02491700000246
+    },
+    {
+      "type": "metric",
+      "t": 75302,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "phase",
+      "t": 75304,
+      "phase": "dashboard-on-tikv"
+    },
+    {
+      "type": "node",
+      "t": 75304,
+      "node": "tidb",
+      "status": "busy"
+    },
+    {
+      "type": "flow",
+      "t": 76255,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 76255,
+      "id": "write-p99",
+      "value": 331.0928750000021
+    },
+    {
+      "type": "metric",
+      "t": 76255,
+      "id": "write-p99-degradation",
+      "value": -1.0766719855745976
+    },
+    {
+      "type": "metric",
+      "t": 76255,
+      "id": "orders-written-total",
+      "value": 200
+    },
+    {
+      "type": "flow",
+      "t": 76881,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 76881,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 80117,
+      "edge": "tikv-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 80117,
+      "id": "dashboard-p50-tikv",
+      "value": 99.04658400001063
+    },
+    {
+      "type": "metric",
+      "t": 80117,
+      "id": "dashboard-p99-tikv",
+      "value": 334.29700000000594
+    },
+    {
+      "type": "metric",
+      "t": 80117,
+      "id": "dashboard-p50-tiflash",
+      "value": 104.00533400000131
+    },
+    {
+      "type": "metric",
+      "t": 80117,
+      "id": "dashboard-p99-tiflash",
+      "value": 329.2933330000087
+    },
+    {
+      "type": "metric",
+      "t": 80450,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 81497,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 81497,
+      "id": "write-p99",
+      "value": 331.20187499999884
+    },
+    {
+      "type": "metric",
+      "t": 81497,
+      "id": "write-p99-degradation",
+      "value": -1.0441051634910663
+    },
+    {
+      "type": "metric",
+      "t": 81497,
+      "id": "orders-written-total",
+      "value": 205
+    },
+    {
+      "type": "flow",
+      "t": 82227,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 82227,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 83071,
+      "edge": "tikv-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 83071,
+      "id": "dashboard-p50-tikv",
+      "value": 98.4036669999914
+    },
+    {
+      "type": "metric",
+      "t": 83071,
+      "id": "dashboard-p99-tikv",
+      "value": 337.6024170000019
+    },
+    {
+      "type": "metric",
+      "t": 83071,
+      "id": "dashboard-p50-tiflash",
+      "value": 106.4492079999909
+    },
+    {
+      "type": "metric",
+      "t": 83071,
+      "id": "dashboard-p99-tiflash",
+      "value": 346.36133299999346
+    },
+    {
+      "type": "metric",
+      "t": 83173,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 84119,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 84119,
+      "id": "write-p99",
+      "value": 331.50266700000793
+    },
+    {
+      "type": "metric",
+      "t": 84119,
+      "id": "write-p99-degradation",
+      "value": -0.9542350758879591
+    },
+    {
+      "type": "metric",
+      "t": 84119,
+      "id": "orders-written-total",
+      "value": 210
+    },
+    {
+      "type": "flow",
+      "t": 84848,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 84848,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 85693,
+      "edge": "tikv-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 85693,
+      "id": "dashboard-p50-tikv",
+      "value": 101.52837499999441
+    },
+    {
+      "type": "metric",
+      "t": 85693,
+      "id": "dashboard-p99-tikv",
+      "value": 334.8597919999884
+    },
+    {
+      "type": "metric",
+      "t": 85693,
+      "id": "dashboard-p50-tiflash",
+      "value": 103.49229199999536
+    },
+    {
+      "type": "metric",
+      "t": 85693,
+      "id": "dashboard-p99-tiflash",
+      "value": 335.1882089999999
+    },
+    {
+      "type": "metric",
+      "t": 85796,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 86741,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "log",
+      "t": 86836,
+      "level": "info",
+      "msg": "heartbeat hb-4 committed",
+      "node": "tidb"
+    },
+    {
+      "type": "metric",
+      "t": 87265,
+      "id": "freshness-ms",
+      "value": 429
+    },
+    {
+      "type": "log",
+      "t": 87265,
+      "level": "info",
+      "msg": "heartbeat hb-4 visible in TiFlash after 429ms",
+      "node": "tiflash"
+    },
+    {
+      "type": "metric",
+      "t": 87265,
+      "id": "write-p99",
+      "value": 334.34850000000733
+    },
+    {
+      "type": "metric",
+      "t": 87265,
+      "id": "write-p99-degradation",
+      "value": -0.10396225943663748
+    },
+    {
+      "type": "metric",
+      "t": 87265,
+      "id": "orders-written-total",
+      "value": 215
+    },
+    {
+      "type": "flow",
+      "t": 87892,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 87892,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 88516,
+      "edge": "tikv-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 88516,
+      "id": "dashboard-p50-tikv",
+      "value": 100.27874999999767
+    },
+    {
+      "type": "metric",
+      "t": 88516,
+      "id": "dashboard-p99-tikv",
+      "value": 330.9119999999966
+    },
+    {
+      "type": "metric",
+      "t": 88516,
+      "id": "dashboard-p50-tiflash",
+      "value": 105.9618749999936
+    },
+    {
+      "type": "metric",
+      "t": 88516,
+      "id": "dashboard-p99-tiflash",
+      "value": 323.9102500000008
+    },
+    {
+      "type": "metric",
+      "t": 88836,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 89556,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 89556,
+      "id": "write-p99",
+      "value": 329.174125000005
+    },
+    {
+      "type": "metric",
+      "t": 89556,
+      "id": "write-p99-degradation",
+      "value": -1.6499526266255102
+    },
+    {
+      "type": "metric",
+      "t": 89556,
+      "id": "orders-written-total",
+      "value": 220
+    },
+    {
+      "type": "flow",
+      "t": 90411,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 90411,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 91038,
+      "edge": "tikv-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 91038,
+      "id": "dashboard-p50-tikv",
+      "value": 99.5807080000086
+    },
+    {
+      "type": "metric",
+      "t": 91038,
+      "id": "dashboard-p99-tikv",
+      "value": 329.4024999999965
+    },
+    {
+      "type": "metric",
+      "t": 91038,
+      "id": "dashboard-p50-tiflash",
+      "value": 103.09462500001246
+    },
+    {
+      "type": "metric",
+      "t": 91038,
+      "id": "dashboard-p99-tiflash",
+      "value": 323.0639999999985
+    },
+    {
+      "type": "metric",
+      "t": 91143,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 92083,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 92083,
+      "id": "write-p99",
+      "value": 330.50141700000677
+    },
+    {
+      "type": "metric",
+      "t": 92083,
+      "id": "write-p99-degradation",
+      "value": -1.253386732880149
+    },
+    {
+      "type": "metric",
+      "t": 92083,
+      "id": "orders-written-total",
+      "value": 225
+    },
+    {
+      "type": "flow",
+      "t": 92710,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 92710,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 93557,
+      "edge": "tikv-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 93557,
+      "id": "dashboard-p50-tikv",
+      "value": 99.50891700001375
+    },
+    {
+      "type": "metric",
+      "t": 93557,
+      "id": "dashboard-p99-tikv",
+      "value": 317.39412500000617
+    },
+    {
+      "type": "metric",
+      "t": 93557,
+      "id": "dashboard-p50-tiflash",
+      "value": 102.40679200000886
+    },
+    {
+      "type": "metric",
+      "t": 93557,
+      "id": "dashboard-p99-tiflash",
+      "value": 317.4125409999979
+    },
+    {
+      "type": "metric",
+      "t": 93653,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 94606,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 94606,
+      "id": "write-p99",
+      "value": 334.4284590000025
+    },
+    {
+      "type": "metric",
+      "t": 94606,
+      "id": "write-p99-degradation",
+      "value": -0.08007225460272238
+    },
+    {
+      "type": "metric",
+      "t": 94606,
+      "id": "orders-written-total",
+      "value": 230
+    },
+    {
+      "type": "flow",
+      "t": 95238,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 95238,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 95852,
+      "edge": "tikv-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 95852,
+      "id": "dashboard-p50-tikv",
+      "value": 100.79387499998847
+    },
+    {
+      "type": "metric",
+      "t": 95852,
+      "id": "dashboard-p99-tikv",
+      "value": 335.64754099999845
+    },
+    {
+      "type": "metric",
+      "t": 95852,
+      "id": "dashboard-p50-tiflash",
+      "value": 105.1187920000084
+    },
+    {
+      "type": "metric",
+      "t": 95852,
+      "id": "dashboard-p99-tiflash",
+      "value": 333.0215409999946
+    },
+    {
+      "type": "metric",
+      "t": 96176,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 96895,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 96895,
+      "id": "write-p99",
+      "value": 330.24441600000137
+    },
+    {
+      "type": "metric",
+      "t": 96895,
+      "id": "write-p99-degradation",
+      "value": -1.3301730250151567
+    },
+    {
+      "type": "metric",
+      "t": 96895,
+      "id": "orders-written-total",
+      "value": 235
+    },
+    {
+      "type": "flow",
+      "t": 97750,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 97750,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 98383,
+      "edge": "tikv-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 98383,
+      "id": "dashboard-p50-tikv",
+      "value": 99.6124589999963
+    },
+    {
+      "type": "metric",
+      "t": 98383,
+      "id": "dashboard-p99-tikv",
+      "value": 328.31375000000116
+    },
+    {
+      "type": "metric",
+      "t": 98383,
+      "id": "dashboard-p50-tiflash",
+      "value": 101.79370799999742
+    },
+    {
+      "type": "metric",
+      "t": 98383,
+      "id": "dashboard-p99-tiflash",
+      "value": 323.820624999993
+    },
+    {
+      "type": "metric",
+      "t": 98480,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 99421,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 99421,
+      "id": "write-p99",
+      "value": 330.06029199999466
+    },
+    {
+      "type": "metric",
+      "t": 99421,
+      "id": "write-p99-degradation",
+      "value": -1.385185259416127
+    },
+    {
+      "type": "metric",
+      "t": 99421,
+      "id": "orders-written-total",
+      "value": 240
+    },
+    {
+      "type": "flow",
+      "t": 100055,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 100055,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 100896,
+      "edge": "tikv-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 100896,
+      "id": "dashboard-p50-tikv",
+      "value": 100.29933399999572
+    },
+    {
+      "type": "metric",
+      "t": 100896,
+      "id": "dashboard-p99-tikv",
+      "value": 336.3912500000006
+    },
+    {
+      "type": "metric",
+      "t": 100896,
+      "id": "dashboard-p50-tiflash",
+      "value": 103.33075000000827
+    },
+    {
+      "type": "metric",
+      "t": 100897,
+      "id": "dashboard-p99-tiflash",
+      "value": 336.4285830000008
+    },
+    {
+      "type": "metric",
+      "t": 100999,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 101944,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 101944,
+      "id": "write-p99",
+      "value": 331.9641249999986
+    },
+    {
+      "type": "metric",
+      "t": 101944,
+      "id": "write-p99-degradation",
+      "value": -0.8163614925377961
+    },
+    {
+      "type": "metric",
+      "t": 101944,
+      "id": "orders-written-total",
+      "value": 245
+    },
+    {
+      "type": "flow",
+      "t": 102572,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 102572,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 103192,
+      "edge": "tikv-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 103192,
+      "id": "dashboard-p50-tikv",
+      "value": 101.42500000000291
+    },
+    {
+      "type": "metric",
+      "t": 103192,
+      "id": "dashboard-p99-tikv",
+      "value": 335.2784580000007
+    },
+    {
+      "type": "metric",
+      "t": 103192,
+      "id": "dashboard-p50-tiflash",
+      "value": 104.7602920000063
+    },
+    {
+      "type": "metric",
+      "t": 103192,
+      "id": "dashboard-p99-tiflash",
+      "value": 327.61824999999953
+    },
+    {
+      "type": "metric",
+      "t": 103518,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 104237,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 104238,
+      "id": "write-p99",
+      "value": 331.1247089999961
+    },
+    {
+      "type": "metric",
+      "t": 104238,
+      "id": "write-p99-degradation",
+      "value": -1.0671606808586158
+    },
+    {
+      "type": "metric",
+      "t": 104238,
+      "id": "orders-written-total",
+      "value": 250
+    },
+    {
+      "type": "flow",
+      "t": 105095,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 105095,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 105716,
+      "edge": "tikv-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 105716,
+      "id": "dashboard-p50-tikv",
+      "value": 102.13883399999759
+    },
+    {
+      "type": "metric",
+      "t": 105716,
+      "id": "dashboard-p99-tikv",
+      "value": 326.4577500000014
+    },
+    {
+      "type": "metric",
+      "t": 105716,
+      "id": "dashboard-p50-tiflash",
+      "value": 106.38283300001058
+    },
+    {
+      "type": "metric",
+      "t": 105716,
+      "id": "dashboard-p99-tiflash",
+      "value": 319.39599999999336
+    },
+    {
+      "type": "metric",
+      "t": 105813,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 106758,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "log",
+      "t": 106855,
+      "level": "info",
+      "msg": "heartbeat hb-5 committed",
+      "node": "tidb"
+    },
+    {
+      "type": "metric",
+      "t": 107287,
+      "id": "freshness-ms",
+      "value": 432
+    },
+    {
+      "type": "log",
+      "t": 107287,
+      "level": "info",
+      "msg": "heartbeat hb-5 visible in TiFlash after 432ms",
+      "node": "tiflash"
+    },
+    {
+      "type": "metric",
+      "t": 107287,
+      "id": "write-p99",
+      "value": 332.5205419999984
+    },
+    {
+      "type": "metric",
+      "t": 107287,
+      "id": "write-p99-degradation",
+      "value": -0.6501162315856216
+    },
+    {
+      "type": "metric",
+      "t": 107287,
+      "id": "orders-written-total",
+      "value": 255
+    },
+    {
+      "type": "flow",
+      "t": 107916,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 107916,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 108762,
+      "edge": "tikv-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 108762,
+      "id": "dashboard-p50-tikv",
+      "value": 96.87966599999345
+    },
+    {
+      "type": "metric",
+      "t": 108762,
+      "id": "dashboard-p99-tikv",
+      "value": 333.61779099999694
+    },
+    {
+      "type": "metric",
+      "t": 108762,
+      "id": "dashboard-p50-tiflash",
+      "value": 103.19324999999662
+    },
+    {
+      "type": "metric",
+      "t": 108762,
+      "id": "dashboard-p99-tiflash",
+      "value": 333.62416700000176
+    },
+    {
+      "type": "metric",
+      "t": 108855,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 109810,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 109810,
+      "id": "write-p99",
+      "value": 333.22462500000256
+    },
+    {
+      "type": "metric",
+      "t": 109810,
+      "id": "write-p99-degradation",
+      "value": -0.4397515912749738
+    },
+    {
+      "type": "metric",
+      "t": 109810,
+      "id": "orders-written-total",
+      "value": 260
+    },
+    {
+      "type": "flow",
+      "t": 110438,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 110438,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 111058,
+      "edge": "tikv-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 111058,
+      "id": "dashboard-p50-tikv",
+      "value": 106.63237500000105
+    },
+    {
+      "type": "metric",
+      "t": 111058,
+      "id": "dashboard-p99-tikv",
+      "value": 325.77212500000314
+    },
+    {
+      "type": "metric",
+      "t": 111058,
+      "id": "dashboard-p50-tiflash",
+      "value": 105.434957999998
+    },
+    {
+      "type": "metric",
+      "t": 111058,
+      "id": "dashboard-p99-tiflash",
+      "value": 324.398749999993
+    },
+    {
+      "type": "metric",
+      "t": 111383,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 112105,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 112105,
+      "id": "write-p99",
+      "value": 328.133582999988
+    },
+    {
+      "type": "metric",
+      "t": 112105,
+      "id": "write-p99-degradation",
+      "value": -1.9608438760384386
+    },
+    {
+      "type": "metric",
+      "t": 112105,
+      "id": "orders-written-total",
+      "value": 265
+    },
+    {
+      "type": "flow",
+      "t": 112954,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 112954,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 113587,
+      "edge": "tikv-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 113587,
+      "id": "dashboard-p50-tikv",
+      "value": 98.11379199998919
+    },
+    {
+      "type": "metric",
+      "t": 113587,
+      "id": "dashboard-p99-tikv",
+      "value": 326.02020900000934
+    },
+    {
+      "type": "metric",
+      "t": 113587,
+      "id": "dashboard-p50-tiflash",
+      "value": 104.68608299999323
+    },
+    {
+      "type": "metric",
+      "t": 113587,
+      "id": "dashboard-p99-tiflash",
+      "value": 315.7496669999964
+    },
+    {
+      "type": "metric",
+      "t": 113685,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 114623,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 114623,
+      "id": "write-p99",
+      "value": 326.619417000009
+    },
+    {
+      "type": "metric",
+      "t": 114623,
+      "id": "write-p99-degradation",
+      "value": -2.4132436441826894
+    },
+    {
+      "type": "metric",
+      "t": 114623,
+      "id": "orders-written-total",
+      "value": 270
+    },
+    {
+      "type": "flow",
+      "t": 115262,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 115262,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 116102,
+      "edge": "tikv-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 116102,
+      "id": "dashboard-p50-tikv",
+      "value": 99.53866700000071
+    },
+    {
+      "type": "metric",
+      "t": 116102,
+      "id": "dashboard-p99-tikv",
+      "value": 338.3611660000024
+    },
+    {
+      "type": "metric",
+      "t": 116102,
+      "id": "dashboard-p50-tiflash",
+      "value": 105.03841700000339
+    },
+    {
+      "type": "metric",
+      "t": 116102,
+      "id": "dashboard-p99-tiflash",
+      "value": 335.11737500000163
+    },
+    {
+      "type": "metric",
+      "t": 116198,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "phase",
+      "t": 116199,
+      "phase": "dashboard-on-tiflash"
+    },
+    {
+      "type": "node",
+      "t": 116199,
+      "node": "tidb",
+      "status": "healthy"
+    },
+    {
+      "type": "node",
+      "t": 116199,
+      "node": "tiflash",
+      "status": "busy"
+    },
+    {
+      "type": "flow",
+      "t": 117150,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 117150,
+      "id": "write-p99",
+      "value": 335.6117079999967
+    },
+    {
+      "type": "metric",
+      "t": 117150,
+      "id": "write-p99-degradation",
+      "value": 0.2734567331448125
+    },
+    {
+      "type": "check",
+      "t": 117150,
+      "id": "write-p99-within-threshold",
+      "status": "pass",
+      "observed": "degradation=0.3% threshold=25%"
+    },
+    {
+      "type": "metric",
+      "t": 117150,
+      "id": "orders-written-total",
+      "value": 275
+    },
+    {
+      "type": "flow",
+      "t": 117773,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 117773,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 118722,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 118722,
+      "id": "dashboard-p50-tikv",
+      "value": 98.4026659999945
+    },
+    {
+      "type": "metric",
+      "t": 118722,
+      "id": "dashboard-p99-tikv",
+      "value": 328.55929099999776
+    },
+    {
+      "type": "metric",
+      "t": 118722,
+      "id": "dashboard-p50-tiflash",
+      "value": 102.06449999999313
+    },
+    {
+      "type": "metric",
+      "t": 118722,
+      "id": "dashboard-p99-tiflash",
+      "value": 326.4619160000002
+    },
+    {
+      "type": "metric",
+      "t": 118816,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "check",
+      "t": 118816,
+      "id": "snapshot-totals-match",
+      "status": "pending"
+    },
+    {
+      "type": "check",
+      "t": 119433,
+      "id": "snapshot-totals-match",
+      "status": "pass",
+      "observed": "tikv=571133.16 tiflash=571133.16"
+    },
+    {
+      "type": "flow",
+      "t": 120480,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 120480,
+      "id": "write-p99",
+      "value": 429.11862499998824
+    },
+    {
+      "type": "metric",
+      "t": 120480,
+      "id": "write-p99-degradation",
+      "value": 28.211283610294473
+    },
+    {
+      "type": "check",
+      "t": 120480,
+      "id": "write-p99-within-threshold",
+      "status": "fail",
+      "observed": "degradation=28.2% threshold=25%"
+    },
+    {
+      "type": "metric",
+      "t": 120480,
+      "id": "orders-written-total",
+      "value": 280
+    },
+    {
+      "type": "flow",
+      "t": 121345,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 121345,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 121982,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 121982,
+      "id": "dashboard-p50-tikv",
+      "value": 95.96595800000068
+    },
+    {
+      "type": "metric",
+      "t": 121982,
+      "id": "dashboard-p99-tikv",
+      "value": 334.0226249999978
+    },
+    {
+      "type": "metric",
+      "t": 121982,
+      "id": "dashboard-p50-tiflash",
+      "value": 101.27670899999794
+    },
+    {
+      "type": "metric",
+      "t": 121982,
+      "id": "dashboard-p99-tiflash",
+      "value": 325.25333300000057
+    },
+    {
+      "type": "metric",
+      "t": 122080,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 123106,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 123106,
+      "id": "write-p99",
+      "value": 408.6763340000034
+    },
+    {
+      "type": "metric",
+      "t": 123106,
+      "id": "write-p99-degradation",
+      "value": 22.103573023173496
+    },
+    {
+      "type": "check",
+      "t": 123106,
+      "id": "write-p99-within-threshold",
+      "status": "pass",
+      "observed": "degradation=22.1% threshold=25%"
+    },
+    {
+      "type": "metric",
+      "t": 123106,
+      "id": "orders-written-total",
+      "value": 285
+    },
+    {
+      "type": "flow",
+      "t": 123966,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 123966,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 124594,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 124594,
+      "id": "dashboard-p50-tikv",
+      "value": 96.64949999999953
+    },
+    {
+      "type": "metric",
+      "t": 124594,
+      "id": "dashboard-p99-tikv",
+      "value": 331.63550000000396
+    },
+    {
+      "type": "metric",
+      "t": 124594,
+      "id": "dashboard-p50-tiflash",
+      "value": 102.48329199998989
+    },
+    {
+      "type": "metric",
+      "t": 124594,
+      "id": "dashboard-p99-tiflash",
+      "value": 322.5235410000023
+    },
+    {
+      "type": "metric",
+      "t": 124696,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 125634,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 125634,
+      "id": "write-p99",
+      "value": 330.1522499999992
+    },
+    {
+      "type": "metric",
+      "t": 125634,
+      "id": "write-p99-degradation",
+      "value": -1.3577102151464548
+    },
+    {
+      "type": "check",
+      "t": 125634,
+      "id": "write-p99-within-threshold",
+      "status": "pass",
+      "observed": "degradation=-1.4% threshold=25%"
+    },
+    {
+      "type": "metric",
+      "t": 125634,
+      "id": "orders-written-total",
+      "value": 290
+    },
+    {
+      "type": "flow",
+      "t": 126265,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 126265,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 127111,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 127111,
+      "id": "dashboard-p50-tikv",
+      "value": 100.15912499999104
+    },
+    {
+      "type": "metric",
+      "t": 127111,
+      "id": "dashboard-p99-tikv",
+      "value": 336.9992499999935
+    },
+    {
+      "type": "metric",
+      "t": 127111,
+      "id": "dashboard-p50-tiflash",
+      "value": 102.23566599999322
+    },
+    {
+      "type": "metric",
+      "t": 127111,
+      "id": "dashboard-p99-tiflash",
+      "value": 338.8365829999966
+    },
+    {
+      "type": "metric",
+      "t": 127215,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 128157,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "log",
+      "t": 128252,
+      "level": "info",
+      "msg": "heartbeat hb-6 committed",
+      "node": "tidb"
+    },
+    {
+      "type": "metric",
+      "t": 128790,
+      "id": "freshness-ms",
+      "value": 538
+    },
+    {
+      "type": "log",
+      "t": 128790,
+      "level": "info",
+      "msg": "heartbeat hb-6 visible in TiFlash after 538ms",
+      "node": "tiflash"
+    },
+    {
+      "type": "metric",
+      "t": 128790,
+      "id": "write-p99",
+      "value": 323.36479199999303
+    },
+    {
+      "type": "metric",
+      "t": 128790,
+      "id": "write-p99-degradation",
+      "value": -3.3856545921395877
+    },
+    {
+      "type": "check",
+      "t": 128791,
+      "id": "write-p99-within-threshold",
+      "status": "pass",
+      "observed": "degradation=-3.4% threshold=25%"
+    },
+    {
+      "type": "metric",
+      "t": 128791,
+      "id": "orders-written-total",
+      "value": 295
+    },
+    {
+      "type": "flow",
+      "t": 129404,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 129404,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 130259,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 130259,
+      "id": "dashboard-p50-tikv",
+      "value": 98.62116599999717
+    },
+    {
+      "type": "metric",
+      "t": 130259,
+      "id": "dashboard-p99-tikv",
+      "value": 323.4608750000043
+    },
+    {
+      "type": "metric",
+      "t": 130259,
+      "id": "dashboard-p50-tiflash",
+      "value": 98.4780410000094
+    },
+    {
+      "type": "metric",
+      "t": 130259,
+      "id": "dashboard-p99-tiflash",
+      "value": 325.7619170000107
+    },
+    {
+      "type": "metric",
+      "t": 130361,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 131317,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 131317,
+      "id": "write-p99",
+      "value": 330.0220000000263
+    },
+    {
+      "type": "metric",
+      "t": 131317,
+      "id": "write-p99-degradation",
+      "value": -1.3966260736384128
+    },
+    {
+      "type": "check",
+      "t": 131317,
+      "id": "write-p99-within-threshold",
+      "status": "pass",
+      "observed": "degradation=-1.4% threshold=25%"
+    },
+    {
+      "type": "metric",
+      "t": 131317,
+      "id": "orders-written-total",
+      "value": 300
+    },
+    {
+      "type": "flow",
+      "t": 131934,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 131934,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 132877,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 132877,
+      "id": "dashboard-p50-tikv",
+      "value": 100.49674999999115
+    },
+    {
+      "type": "metric",
+      "t": 132877,
+      "id": "dashboard-p99-tikv",
+      "value": 316.9257090000028
+    },
+    {
+      "type": "metric",
+      "t": 132877,
+      "id": "dashboard-p50-tiflash",
+      "value": 104.90720899999724
+    },
+    {
+      "type": "metric",
+      "t": 132877,
+      "id": "dashboard-p99-tiflash",
+      "value": 310.8724999999977
+    },
+    {
+      "type": "metric",
+      "t": 132971,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 133928,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 133928,
+      "id": "write-p99",
+      "value": 336.40200000000186
+    },
+    {
+      "type": "metric",
+      "t": 133928,
+      "id": "write-p99-degradation",
+      "value": 0.5095787419427489
+    },
+    {
+      "type": "check",
+      "t": 133928,
+      "id": "write-p99-within-threshold",
+      "status": "pass",
+      "observed": "degradation=0.5% threshold=25%"
+    },
+    {
+      "type": "metric",
+      "t": 133928,
+      "id": "orders-written-total",
+      "value": 305
+    },
+    {
+      "type": "flow",
+      "t": 134557,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 134557,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 135182,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 135182,
+      "id": "dashboard-p50-tikv",
+      "value": 100.5150839999842
+    },
+    {
+      "type": "metric",
+      "t": 135182,
+      "id": "dashboard-p99-tikv",
+      "value": 335.6803329999966
+    },
+    {
+      "type": "metric",
+      "t": 135182,
+      "id": "dashboard-p50-tiflash",
+      "value": 109.83266700000968
+    },
+    {
+      "type": "metric",
+      "t": 135182,
+      "id": "dashboard-p99-tiflash",
+      "value": 321.0208749999874
+    },
+    {
+      "type": "metric",
+      "t": 135499,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 136214,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 136214,
+      "id": "write-p99",
+      "value": 331.06279200001154
+    },
+    {
+      "type": "metric",
+      "t": 136214,
+      "id": "write-p99-degradation",
+      "value": -1.0856601296889148
+    },
+    {
+      "type": "check",
+      "t": 136214,
+      "id": "write-p99-within-threshold",
+      "status": "pass",
+      "observed": "degradation=-1.1% threshold=25%"
+    },
+    {
+      "type": "metric",
+      "t": 136214,
+      "id": "orders-written-total",
+      "value": 310
+    },
+    {
+      "type": "flow",
+      "t": 137073,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 137073,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 137706,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 137706,
+      "id": "dashboard-p50-tikv",
+      "value": 100.6799170000013
+    },
+    {
+      "type": "metric",
+      "t": 137706,
+      "id": "dashboard-p99-tikv",
+      "value": 323.54254100000253
+    },
+    {
+      "type": "metric",
+      "t": 137706,
+      "id": "dashboard-p50-tiflash",
+      "value": 106.72312500001863
+    },
+    {
+      "type": "metric",
+      "t": 137706,
+      "id": "dashboard-p99-tiflash",
+      "value": 313.3594579999917
+    },
+    {
+      "type": "metric",
+      "t": 137804,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 138741,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 138741,
+      "id": "write-p99",
+      "value": 327.45604099999764
+    },
+    {
+      "type": "metric",
+      "t": 138741,
+      "id": "write-p99-degradation",
+      "value": -2.163278644556472
+    },
+    {
+      "type": "check",
+      "t": 138741,
+      "id": "write-p99-within-threshold",
+      "status": "pass",
+      "observed": "degradation=-2.2% threshold=25%"
+    },
+    {
+      "type": "metric",
+      "t": 138741,
+      "id": "orders-written-total",
+      "value": 315
+    },
+    {
+      "type": "flow",
+      "t": 139372,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 139372,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 140218,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 140218,
+      "id": "dashboard-p50-tikv",
+      "value": 99.71245900000213
+    },
+    {
+      "type": "metric",
+      "t": 140218,
+      "id": "dashboard-p99-tikv",
+      "value": 336.7329579999787
+    },
+    {
+      "type": "metric",
+      "t": 140218,
+      "id": "dashboard-p50-tiflash",
+      "value": 100.805457999988
+    },
+    {
+      "type": "metric",
+      "t": 140218,
+      "id": "dashboard-p99-tiflash",
+      "value": 336.77183400001377
+    },
+    {
+      "type": "metric",
+      "t": 140314,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 141266,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 141266,
+      "id": "write-p99",
+      "value": 333.24212499998976
+    },
+    {
+      "type": "metric",
+      "t": 141266,
+      "id": "write-p99-degradation",
+      "value": -0.4345229730542233
+    },
+    {
+      "type": "check",
+      "t": 141266,
+      "id": "write-p99-within-threshold",
+      "status": "pass",
+      "observed": "degradation=-0.4% threshold=25%"
+    },
+    {
+      "type": "metric",
+      "t": 141266,
+      "id": "orders-written-total",
+      "value": 320
+    },
+    {
+      "type": "flow",
+      "t": 141893,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 141893,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 142520,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 142520,
+      "id": "dashboard-p50-tikv",
+      "value": 99.9043749999837
+    },
+    {
+      "type": "metric",
+      "t": 142520,
+      "id": "dashboard-p99-tikv",
+      "value": 330.72341700000106
+    },
+    {
+      "type": "metric",
+      "t": 142520,
+      "id": "dashboard-p50-tiflash",
+      "value": 106.61979100000462
+    },
+    {
+      "type": "metric",
+      "t": 142520,
+      "id": "dashboard-p99-tiflash",
+      "value": 323.97983400002704
+    },
+    {
+      "type": "metric",
+      "t": 142841,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 143566,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 143566,
+      "id": "write-p99",
+      "value": 332.2371249999851
+    },
+    {
+      "type": "metric",
+      "t": 143566,
+      "id": "write-p99-degradation",
+      "value": -0.7347950482384372
+    },
+    {
+      "type": "check",
+      "t": 143566,
+      "id": "write-p99-within-threshold",
+      "status": "pass",
+      "observed": "degradation=-0.7% threshold=25%"
+    },
+    {
+      "type": "metric",
+      "t": 143566,
+      "id": "orders-written-total",
+      "value": 325
+    },
+    {
+      "type": "flow",
+      "t": 144414,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 144414,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 145049,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 145049,
+      "id": "dashboard-p50-tikv",
+      "value": 99.0293750000128
+    },
+    {
+      "type": "metric",
+      "t": 145049,
+      "id": "dashboard-p99-tikv",
+      "value": 333.14737500000047
+    },
+    {
+      "type": "metric",
+      "t": 145049,
+      "id": "dashboard-p50-tiflash",
+      "value": 107.48024999999325
+    },
+    {
+      "type": "metric",
+      "t": 145049,
+      "id": "dashboard-p99-tiflash",
+      "value": 316.2753329999978
+    },
+    {
+      "type": "metric",
+      "t": 145147,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 146083,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 146083,
+      "id": "write-p99",
+      "value": 333.39837499998976
+    },
+    {
+      "type": "metric",
+      "t": 146083,
+      "id": "write-p99-degradation",
+      "value": -0.3878388817633616
+    },
+    {
+      "type": "check",
+      "t": 146083,
+      "id": "write-p99-within-threshold",
+      "status": "pass",
+      "observed": "degradation=-0.4% threshold=25%"
+    },
+    {
+      "type": "metric",
+      "t": 146083,
+      "id": "orders-written-total",
+      "value": 330
+    },
+    {
+      "type": "flow",
+      "t": 146714,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 146714,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 147558,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 147558,
+      "id": "dashboard-p50-tikv",
+      "value": 101.5857079999987
+    },
+    {
+      "type": "metric",
+      "t": 147558,
+      "id": "dashboard-p99-tikv",
+      "value": 334.6849999999977
+    },
+    {
+      "type": "metric",
+      "t": 147558,
+      "id": "dashboard-p50-tiflash",
+      "value": 101.252416000003
+    },
+    {
+      "type": "metric",
+      "t": 147558,
+      "id": "dashboard-p99-tiflash",
+      "value": 337.99291699999594
+    },
+    {
+      "type": "metric",
+      "t": 147655,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 148605,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "log",
+      "t": 148703,
+      "level": "info",
+      "msg": "heartbeat hb-7 committed",
+      "node": "tidb"
+    },
+    {
+      "type": "metric",
+      "t": 149131,
+      "id": "freshness-ms",
+      "value": 428
+    },
+    {
+      "type": "log",
+      "t": 149131,
+      "level": "info",
+      "msg": "heartbeat hb-7 visible in TiFlash after 428ms",
+      "node": "tiflash"
+    },
+    {
+      "type": "metric",
+      "t": 149131,
+      "id": "write-p99",
+      "value": 323.20066699999734
+    },
+    {
+      "type": "metric",
+      "t": 149131,
+      "id": "write-p99-degradation",
+      "value": -3.4346915616302223
+    },
+    {
+      "type": "check",
+      "t": 149131,
+      "id": "write-p99-within-threshold",
+      "status": "pass",
+      "observed": "degradation=-3.4% threshold=25%"
+    },
+    {
+      "type": "metric",
+      "t": 149131,
+      "id": "orders-written-total",
+      "value": 335
+    },
+    {
+      "type": "flow",
+      "t": 149754,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 149754,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 150391,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 150391,
+      "id": "dashboard-p50-tikv",
+      "value": 97.80858399998397
+    },
+    {
+      "type": "metric",
+      "t": 150391,
+      "id": "dashboard-p99-tikv",
+      "value": 333.7546250000014
+    },
+    {
+      "type": "metric",
+      "t": 150391,
+      "id": "dashboard-p50-tiflash",
+      "value": 102.95712500001537
+    },
+    {
+      "type": "metric",
+      "t": 150391,
+      "id": "dashboard-p99-tiflash",
+      "value": 329.9961250000051
+    },
+    {
+      "type": "metric",
+      "t": 150706,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 151423,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 151423,
+      "id": "write-p99",
+      "value": 314.9106660000107
+    },
+    {
+      "type": "metric",
+      "t": 151423,
+      "id": "write-p99-degradation",
+      "value": -5.911563007932381
+    },
+    {
+      "type": "check",
+      "t": 151423,
+      "id": "write-p99-within-threshold",
+      "status": "pass",
+      "observed": "degradation=-5.9% threshold=25%"
+    },
+    {
+      "type": "metric",
+      "t": 151423,
+      "id": "orders-written-total",
+      "value": 340
+    },
+    {
+      "type": "flow",
+      "t": 152275,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 152275,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 152909,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 152909,
+      "id": "dashboard-p50-tikv",
+      "value": 99.95420799998101
+    },
+    {
+      "type": "metric",
+      "t": 152909,
+      "id": "dashboard-p99-tikv",
+      "value": 325.11812499997905
+    },
+    {
+      "type": "metric",
+      "t": 152909,
+      "id": "dashboard-p50-tiflash",
+      "value": 106.60587500000838
+    },
+    {
+      "type": "metric",
+      "t": 152909,
+      "id": "dashboard-p99-tiflash",
+      "value": 314.89308300000266
+    },
+    {
+      "type": "metric",
+      "t": 153005,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 153947,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 153947,
+      "id": "write-p99",
+      "value": 325.7431670000078
+    },
+    {
+      "type": "metric",
+      "t": 153947,
+      "id": "write-p99-degradation",
+      "value": -2.67504802814219
+    },
+    {
+      "type": "check",
+      "t": 153947,
+      "id": "write-p99-within-threshold",
+      "status": "pass",
+      "observed": "degradation=-2.7% threshold=25%"
+    },
+    {
+      "type": "metric",
+      "t": 153947,
+      "id": "orders-written-total",
+      "value": 345
+    },
+    {
+      "type": "flow",
+      "t": 154574,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 154574,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 155423,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 155423,
+      "id": "dashboard-p50-tikv",
+      "value": 101.05525000000489
+    },
+    {
+      "type": "metric",
+      "t": 155423,
+      "id": "dashboard-p99-tikv",
+      "value": 336.82995899999514
+    },
+    {
+      "type": "metric",
+      "t": 155423,
+      "id": "dashboard-p50-tiflash",
+      "value": 101.08804099998088
+    },
+    {
+      "type": "metric",
+      "t": 155423,
+      "id": "dashboard-p99-tiflash",
+      "value": 340.1034579999978
+    },
+    {
+      "type": "metric",
+      "t": 155518,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "phase",
+      "t": 155519,
+      "phase": "freshness-check"
+    },
+    {
+      "type": "flow",
+      "t": 156472,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 156472,
+      "id": "write-p99",
+      "value": 334.25816599998507
+    },
+    {
+      "type": "metric",
+      "t": 156472,
+      "id": "write-p99-degradation",
+      "value": -0.13095208794037005
+    },
+    {
+      "type": "metric",
+      "t": 156472,
+      "id": "orders-written-total",
+      "value": 350
+    },
+    {
+      "type": "flow",
+      "t": 157099,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 157099,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 157729,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 157729,
+      "id": "dashboard-p50-tikv",
+      "value": 98.73287499998696
+    },
+    {
+      "type": "metric",
+      "t": 157730,
+      "id": "dashboard-p99-tikv",
+      "value": 334.7800419999985
+    },
+    {
+      "type": "metric",
+      "t": 157730,
+      "id": "dashboard-p50-tiflash",
+      "value": 104.14762499998324
+    },
+    {
+      "type": "metric",
+      "t": 157730,
+      "id": "dashboard-p99-tiflash",
+      "value": 328.3015000000014
+    },
+    {
+      "type": "metric",
+      "t": 158043,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 158765,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 158765,
+      "id": "write-p99",
+      "value": 324.4210830000229
+    },
+    {
+      "type": "metric",
+      "t": 158765,
+      "id": "write-p99-degradation",
+      "value": -3.0700578850988784
+    },
+    {
+      "type": "metric",
+      "t": 158765,
+      "id": "orders-written-total",
+      "value": 355
+    },
+    {
+      "type": "flow",
+      "t": 159615,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 159615,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 160248,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 160248,
+      "id": "dashboard-p50-tikv",
+      "value": 101.9945000000007
+    },
+    {
+      "type": "metric",
+      "t": 160248,
+      "id": "dashboard-p99-tikv",
+      "value": 322.40662500000326
+    },
+    {
+      "type": "metric",
+      "t": 160248,
+      "id": "dashboard-p50-tiflash",
+      "value": 108.26687500000116
+    },
+    {
+      "type": "metric",
+      "t": 160248,
+      "id": "dashboard-p99-tiflash",
+      "value": 313.3150000000023
+    },
+    {
+      "type": "metric",
+      "t": 160349,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 161285,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 161285,
+      "id": "write-p99",
+      "value": 324.0892079999903
+    },
+    {
+      "type": "metric",
+      "t": 161285,
+      "id": "write-p99-degradation",
+      "value": -3.169214895010408
+    },
+    {
+      "type": "metric",
+      "t": 161285,
+      "id": "orders-written-total",
+      "value": 360
+    },
+    {
+      "type": "flow",
+      "t": 161926,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 161926,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 162763,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 162763,
+      "id": "dashboard-p50-tikv",
+      "value": 102.9680830000143
+    },
+    {
+      "type": "metric",
+      "t": 162763,
+      "id": "dashboard-p99-tikv",
+      "value": 342.2104169999948
+    },
+    {
+      "type": "metric",
+      "t": 162763,
+      "id": "dashboard-p50-tiflash",
+      "value": 105.875
+    },
+    {
+      "type": "metric",
+      "t": 162763,
+      "id": "dashboard-p99-tiflash",
+      "value": 340.7822499999893
+    },
+    {
+      "type": "metric",
+      "t": 162868,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 163811,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 163811,
+      "id": "write-p99",
+      "value": 325.3129590000026
+    },
+    {
+      "type": "metric",
+      "t": 163811,
+      "id": "write-p99-degradation",
+      "value": -2.803584793238528
+    },
+    {
+      "type": "metric",
+      "t": 163811,
+      "id": "orders-written-total",
+      "value": 365
+    },
+    {
+      "type": "flow",
+      "t": 164439,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 164439,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 165070,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 165070,
+      "id": "dashboard-p50-tikv",
+      "value": 97.74679199999082
+    },
+    {
+      "type": "metric",
+      "t": 165070,
+      "id": "dashboard-p99-tikv",
+      "value": 337.73079099997994
+    },
+    {
+      "type": "metric",
+      "t": 165070,
+      "id": "dashboard-p50-tiflash",
+      "value": 105.83333299998776
+    },
+    {
+      "type": "metric",
+      "t": 165070,
+      "id": "dashboard-p99-tiflash",
+      "value": 326.75412499997765
+    },
+    {
+      "type": "metric",
+      "t": 165383,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 166102,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 166102,
+      "id": "write-p99",
+      "value": 332.88441699999385
+    },
+    {
+      "type": "metric",
+      "t": 166102,
+      "id": "write-p99-degradation",
+      "value": -0.5413983197888192
+    },
+    {
+      "type": "metric",
+      "t": 166102,
+      "id": "orders-written-total",
+      "value": 370
+    },
+    {
+      "type": "flow",
+      "t": 166957,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 166957,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 167588,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 167588,
+      "id": "dashboard-p50-tikv",
+      "value": 98.62654100000509
+    },
+    {
+      "type": "metric",
+      "t": 167588,
+      "id": "dashboard-p99-tikv",
+      "value": 326.44516699999804
+    },
+    {
+      "type": "metric",
+      "t": 167588,
+      "id": "dashboard-p50-tiflash",
+      "value": 111.97349999999278
+    },
+    {
+      "type": "metric",
+      "t": 167588,
+      "id": "dashboard-p99-tiflash",
+      "value": 306.4213340000133
+    },
+    {
+      "type": "metric",
+      "t": 167688,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 168627,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "log",
+      "t": 168723,
+      "level": "info",
+      "msg": "heartbeat hb-8 committed",
+      "node": "tidb"
+    },
+    {
+      "type": "metric",
+      "t": 169151,
+      "id": "freshness-ms",
+      "value": 428
+    },
+    {
+      "type": "log",
+      "t": 169151,
+      "level": "info",
+      "msg": "heartbeat hb-8 visible in TiFlash after 428ms",
+      "node": "tiflash"
+    },
+    {
+      "type": "metric",
+      "t": 169151,
+      "id": "write-p99",
+      "value": 333.2631249999977
+    },
+    {
+      "type": "metric",
+      "t": 169151,
+      "id": "write-p99-degradation",
+      "value": -0.42824863118236633
+    },
+    {
+      "type": "metric",
+      "t": 169151,
+      "id": "orders-written-total",
+      "value": 375
+    },
+    {
+      "type": "flow",
+      "t": 169799,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 169799,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 170628,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 170628,
+      "id": "dashboard-p50-tikv",
+      "value": 99.06124999999884
+    },
+    {
+      "type": "metric",
+      "t": 170628,
+      "id": "dashboard-p99-tikv",
+      "value": 339.0155419999792
+    },
+    {
+      "type": "metric",
+      "t": 170628,
+      "id": "dashboard-p50-tiflash",
+      "value": 116.53362500001094
+    },
+    {
+      "type": "metric",
+      "t": 170628,
+      "id": "dashboard-p99-tiflash",
+      "value": 333.04266700000153
+    },
+    {
+      "type": "metric",
+      "t": 170723,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 171674,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 171674,
+      "id": "write-p99",
+      "value": 332.0040839999856
+    },
+    {
+      "type": "metric",
+      "t": 171674,
+      "id": "write-p99-degradation",
+      "value": -0.8044226150767765
+    },
+    {
+      "type": "metric",
+      "t": 171674,
+      "id": "orders-written-total",
+      "value": 380
+    },
+    {
+      "type": "flow",
+      "t": 172301,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 172301,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 172938,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 172938,
+      "id": "dashboard-p50-tikv",
+      "value": 101.03416700000525
+    },
+    {
+      "type": "metric",
+      "t": 172938,
+      "id": "dashboard-p99-tikv",
+      "value": 334.9114590000245
+    },
+    {
+      "type": "metric",
+      "t": 172938,
+      "id": "dashboard-p50-tiflash",
+      "value": 106.6495419999992
+    },
+    {
+      "type": "metric",
+      "t": 172938,
+      "id": "dashboard-p99-tiflash",
+      "value": 329.2978330000187
+    },
+    {
+      "type": "metric",
+      "t": 173250,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 173971,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 173971,
+      "id": "write-p99",
+      "value": 328.0236669999722
+    },
+    {
+      "type": "metric",
+      "t": 173971,
+      "id": "write-p99-degradation",
+      "value": -1.993684378944448
+    },
+    {
+      "type": "metric",
+      "t": 173971,
+      "id": "orders-written-total",
+      "value": 385
+    },
+    {
+      "type": "flow",
+      "t": 174822,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 174822,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 175451,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 175451,
+      "id": "dashboard-p50-tikv",
+      "value": 101.78683300002012
+    },
+    {
+      "type": "metric",
+      "t": 175451,
+      "id": "dashboard-p99-tikv",
+      "value": 322.64958399999887
+    },
+    {
+      "type": "metric",
+      "t": 175451,
+      "id": "dashboard-p50-tiflash",
+      "value": 106.76612499999464
+    },
+    {
+      "type": "metric",
+      "t": 175451,
+      "id": "dashboard-p99-tiflash",
+      "value": 315.9645829999936
+    },
+    {
+      "type": "metric",
+      "t": 175550,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 176489,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 176489,
+      "id": "write-p99",
+      "value": 330.8303339999984
+    },
+    {
+      "type": "metric",
+      "t": 176489,
+      "id": "write-p99-degradation",
+      "value": -1.1551135088499036
+    },
+    {
+      "type": "metric",
+      "t": 176489,
+      "id": "orders-written-total",
+      "value": 390
+    },
+    {
+      "type": "flow",
+      "t": 177124,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 177124,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 177968,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 177968,
+      "id": "dashboard-p50-tikv",
+      "value": 100.27370900000096
+    },
+    {
+      "type": "metric",
+      "t": 177968,
+      "id": "dashboard-p99-tikv",
+      "value": 343.40012500001467
+    },
+    {
+      "type": "metric",
+      "t": 177968,
+      "id": "dashboard-p50-tiflash",
+      "value": 103.48883300001035
+    },
+    {
+      "type": "metric",
+      "t": 177968,
+      "id": "dashboard-p99-tiflash",
+      "value": 338.0476250000065
+    },
+    {
+      "type": "metric",
+      "t": 178067,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 179018,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 179018,
+      "id": "write-p99",
+      "value": 334.72637499999837
+    },
+    {
+      "type": "metric",
+      "t": 179018,
+      "id": "write-p99-degradation",
+      "value": 0.008938546938504302
+    },
+    {
+      "type": "metric",
+      "t": 179018,
+      "id": "orders-written-total",
+      "value": 395
+    },
+    {
+      "type": "flow",
+      "t": 179647,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 179647,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 180269,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 180269,
+      "id": "dashboard-p50-tikv",
+      "value": 104.07308299999568
+    },
+    {
+      "type": "metric",
+      "t": 180269,
+      "id": "dashboard-p99-tikv",
+      "value": 329.3835839999956
+    },
+    {
+      "type": "metric",
+      "t": 180269,
+      "id": "dashboard-p50-tiflash",
+      "value": 109.75887499999953
+    },
+    {
+      "type": "metric",
+      "t": 180269,
+      "id": "dashboard-p99-tiflash",
+      "value": 319.1344589999935
+    },
+    {
+      "type": "metric",
+      "t": 180589,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 181305,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 181305,
+      "id": "write-p99",
+      "value": 331.2487090000068
+    },
+    {
+      "type": "metric",
+      "t": 181305,
+      "id": "write-p99-degradation",
+      "value": -1.030112186006988
+    },
+    {
+      "type": "metric",
+      "t": 181305,
+      "id": "orders-written-total",
+      "value": 400
+    },
+    {
+      "type": "flow",
+      "t": 182163,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 182163,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 182795,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 182795,
+      "id": "dashboard-p50-tikv",
+      "value": 98.00379200000316
+    },
+    {
+      "type": "metric",
+      "t": 182795,
+      "id": "dashboard-p99-tikv",
+      "value": 331.07941700000083
+    },
+    {
+      "type": "metric",
+      "t": 182795,
+      "id": "dashboard-p50-tiflash",
+      "value": 106.49150000000373
+    },
+    {
+      "type": "metric",
+      "t": 182795,
+      "id": "dashboard-p99-tiflash",
+      "value": 315.1276669999934
+    },
+    {
+      "type": "metric",
+      "t": 182894,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 183832,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 183832,
+      "id": "write-p99",
+      "value": 330.2141249999986
+    },
+    {
+      "type": "metric",
+      "t": 183832,
+      "id": "write-p99-degradation",
+      "value": -1.3392233149954476
+    },
+    {
+      "type": "metric",
+      "t": 183832,
+      "id": "orders-written-total",
+      "value": 405
+    },
+    {
+      "type": "flow",
+      "t": 184463,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 184463,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 185309,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 185309,
+      "id": "dashboard-p50-tikv",
+      "value": 101.44191599998157
+    },
+    {
+      "type": "metric",
+      "t": 185309,
+      "id": "dashboard-p99-tikv",
+      "value": 332.3161250000121
+    },
+    {
+      "type": "metric",
+      "t": 185309,
+      "id": "dashboard-p50-tiflash",
+      "value": 103.25045900000259
+    },
+    {
+      "type": "metric",
+      "t": 185309,
+      "id": "dashboard-p99-tiflash",
+      "value": 327.9438749999972
+    },
+    {
+      "type": "metric",
+      "t": 185409,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 186357,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 186357,
+      "id": "write-p99",
+      "value": 333.88637500000186
+    },
+    {
+      "type": "metric",
+      "t": 186357,
+      "id": "write-p99-degradation",
+      "value": -0.2420351278401249
+    },
+    {
+      "type": "metric",
+      "t": 186357,
+      "id": "orders-written-total",
+      "value": 410
+    },
+    {
+      "type": "flow",
+      "t": 186984,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 186984,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 187617,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 187617,
+      "id": "dashboard-p50-tikv",
+      "value": 101.00675000000047
+    },
+    {
+      "type": "metric",
+      "t": 187617,
+      "id": "dashboard-p99-tikv",
+      "value": 332.39641700001084
+    },
+    {
+      "type": "metric",
+      "t": 187617,
+      "id": "dashboard-p50-tiflash",
+      "value": 104.98666700001922
+    },
+    {
+      "type": "metric",
+      "t": 187617,
+      "id": "dashboard-p99-tiflash",
+      "value": 325.970290999976
+    },
+    {
+      "type": "metric",
+      "t": 187949,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 188646,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "log",
+      "t": 188981,
+      "level": "info",
+      "msg": "heartbeat hb-9 committed",
+      "node": "tidb"
+    },
+    {
+      "type": "metric",
+      "t": 189171,
+      "id": "freshness-ms",
+      "value": 190
+    },
+    {
+      "type": "log",
+      "t": 189171,
+      "level": "info",
+      "msg": "heartbeat hb-9 visible in TiFlash after 190ms",
+      "node": "tiflash"
+    },
+    {
+      "type": "metric",
+      "t": 189171,
+      "id": "write-p99",
+      "value": 310.19745800000965
+    },
+    {
+      "type": "metric",
+      "t": 189171,
+      "id": "write-p99-degradation",
+      "value": -7.319766736219536
+    },
+    {
+      "type": "metric",
+      "t": 189171,
+      "id": "orders-written-total",
+      "value": 415
+    },
+    {
+      "type": "flow",
+      "t": 190028,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 190028,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 190660,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 190660,
+      "id": "dashboard-p50-tikv",
+      "value": 98.7962079999852
+    },
+    {
+      "type": "metric",
+      "t": 190660,
+      "id": "dashboard-p99-tikv",
+      "value": 331.0192500000121
+    },
+    {
+      "type": "metric",
+      "t": 190660,
+      "id": "dashboard-p50-tiflash",
+      "value": 105.15345800001523
+    },
+    {
+      "type": "metric",
+      "t": 190660,
+      "id": "dashboard-p99-tiflash",
+      "value": 319.7341670000169
+    },
+    {
+      "type": "metric",
+      "t": 190762,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 191694,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 191694,
+      "id": "write-p99",
+      "value": 326.59375
+    },
+    {
+      "type": "metric",
+      "t": 191694,
+      "id": "write-p99-degradation",
+      "value": -2.420912383840813
+    },
+    {
+      "type": "metric",
+      "t": 191694,
+      "id": "orders-written-total",
+      "value": 420
+    },
+    {
+      "type": "flow",
+      "t": 192328,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 192328,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 193172,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 193172,
+      "id": "dashboard-p50-tikv",
+      "value": 101.48050000000512
+    },
+    {
+      "type": "metric",
+      "t": 193172,
+      "id": "dashboard-p99-tikv",
+      "value": 336.8334170000162
+    },
+    {
+      "type": "metric",
+      "t": 193172,
+      "id": "dashboard-p50-tiflash",
+      "value": 102.16408300001058
+    },
+    {
+      "type": "metric",
+      "t": 193172,
+      "id": "dashboard-p99-tiflash",
+      "value": 338.1947499999951
+    },
+    {
+      "type": "metric",
+      "t": 193269,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 194219,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 194219,
+      "id": "write-p99",
+      "value": 332.1519580000022
+    },
+    {
+      "type": "metric",
+      "t": 194219,
+      "id": "write-p99-degradation",
+      "value": -0.7602410898523294
+    },
+    {
+      "type": "metric",
+      "t": 194219,
+      "id": "orders-written-total",
+      "value": 425
+    },
+    {
+      "type": "flow",
+      "t": 194846,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 194846,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 195481,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 195481,
+      "id": "dashboard-p50-tikv",
+      "value": 99.88504200000898
+    },
+    {
+      "type": "metric",
+      "t": 195481,
+      "id": "dashboard-p99-tikv",
+      "value": 337.9452919999894
+    },
+    {
+      "type": "metric",
+      "t": 195481,
+      "id": "dashboard-p50-tiflash",
+      "value": 101.6669160000165
+    },
+    {
+      "type": "metric",
+      "t": 195481,
+      "id": "dashboard-p99-tiflash",
+      "value": 333.87629200000083
+    },
+    {
+      "type": "metric",
+      "t": 195796,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "phase",
+      "t": 195797,
+      "phase": "power-bi-live"
+    },
+    {
+      "type": "node",
+      "t": 195797,
+      "node": "power-bi",
+      "status": "busy"
+    },
+    {
+      "type": "flow",
+      "t": 196511,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 196511,
+      "id": "write-p99",
+      "value": 324.1571249999979
+    },
+    {
+      "type": "metric",
+      "t": 196511,
+      "id": "write-p99-degradation",
+      "value": -3.148922777067653
+    },
+    {
+      "type": "metric",
+      "t": 196511,
+      "id": "orders-written-total",
+      "value": 430
+    },
+    {
+      "type": "flow",
+      "t": 197367,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 197367,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 197997,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 197997,
+      "id": "dashboard-p50-tikv",
+      "value": 98.48995799999102
+    },
+    {
+      "type": "metric",
+      "t": 197997,
+      "id": "dashboard-p99-tikv",
+      "value": 329.39199999999255
+    },
+    {
+      "type": "metric",
+      "t": 197997,
+      "id": "dashboard-p50-tiflash",
+      "value": 103.46924999999464
+    },
+    {
+      "type": "metric",
+      "t": 197997,
+      "id": "dashboard-p99-tiflash",
+      "value": 319.839874999976
+    },
+    {
+      "type": "metric",
+      "t": 198095,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 199039,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 199039,
+      "id": "write-p99",
+      "value": 329.8292499999807
+    },
+    {
+      "type": "metric",
+      "t": 199039,
+      "id": "write-p99-degradation",
+      "value": -1.4542155686684546
+    },
+    {
+      "type": "metric",
+      "t": 199039,
+      "id": "orders-written-total",
+      "value": 435
+    },
+    {
+      "type": "flow",
+      "t": 199670,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 199670,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 200513,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 200513,
+      "id": "dashboard-p50-tikv",
+      "value": 99.91066600001068
+    },
+    {
+      "type": "metric",
+      "t": 200513,
+      "id": "dashboard-p99-tikv",
+      "value": 334.79770799999824
+    },
+    {
+      "type": "metric",
+      "t": 200513,
+      "id": "dashboard-p50-tiflash",
+      "value": 103.24429099998088
+    },
+    {
+      "type": "metric",
+      "t": 200513,
+      "id": "dashboard-p99-tiflash",
+      "value": 334.82433299999684
+    },
+    {
+      "type": "metric",
+      "t": 200611,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 201561,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 201561,
+      "id": "write-p99",
+      "value": 328.44920900001307
+    },
+    {
+      "type": "metric",
+      "t": 201561,
+      "id": "write-p99-degradation",
+      "value": -1.866541712845221
+    },
+    {
+      "type": "metric",
+      "t": 201561,
+      "id": "orders-written-total",
+      "value": 440
+    },
+    {
+      "type": "flow",
+      "t": 202184,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 202184,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 202824,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 202824,
+      "id": "dashboard-p50-tikv",
+      "value": 96.9984579999873
+    },
+    {
+      "type": "metric",
+      "t": 202824,
+      "id": "dashboard-p99-tikv",
+      "value": 331.9265000000014
+    },
+    {
+      "type": "metric",
+      "t": 202824,
+      "id": "dashboard-p50-tiflash",
+      "value": 106.30395800000406
+    },
+    {
+      "type": "metric",
+      "t": 202824,
+      "id": "dashboard-p99-tiflash",
+      "value": 320.2153330000001
+    },
+    {
+      "type": "metric",
+      "t": 203133,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 203849,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 203849,
+      "id": "write-p99",
+      "value": 329.46891599998344
+    },
+    {
+      "type": "metric",
+      "t": 203849,
+      "id": "write-p99-degradation",
+      "value": -1.561875506915318
+    },
+    {
+      "type": "metric",
+      "t": 203849,
+      "id": "orders-written-total",
+      "value": 445
+    },
+    {
+      "type": "flow",
+      "t": 204706,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 204706,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 205345,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 205345,
+      "id": "dashboard-p50-tikv",
+      "value": 98.37720799999079
+    },
+    {
+      "type": "metric",
+      "t": 205345,
+      "id": "dashboard-p99-tikv",
+      "value": 327.5731660000165
+    },
+    {
+      "type": "metric",
+      "t": 205345,
+      "id": "dashboard-p50-tiflash",
+      "value": 102.12329099999624
+    },
+    {
+      "type": "metric",
+      "t": 205345,
+      "id": "dashboard-p99-tiflash",
+      "value": 320.94650000002
+    },
+    {
+      "type": "metric",
+      "t": 205445,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 206376,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 206376,
+      "id": "write-p99",
+      "value": 329.8695829999924
+    },
+    {
+      "type": "metric",
+      "t": 206376,
+      "id": "write-p99-degradation",
+      "value": -1.4421649481591268
+    },
+    {
+      "type": "metric",
+      "t": 206376,
+      "id": "orders-written-total",
+      "value": 450
+    },
+    {
+      "type": "flow",
+      "t": 207010,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 207010,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 207856,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 207856,
+      "id": "dashboard-p50-tikv",
+      "value": 99.94512499999837
+    },
+    {
+      "type": "metric",
+      "t": 207856,
+      "id": "dashboard-p99-tikv",
+      "value": 338.1614999999874
+    },
+    {
+      "type": "metric",
+      "t": 207856,
+      "id": "dashboard-p50-tiflash",
+      "value": 102.99337500002002
+    },
+    {
+      "type": "metric",
+      "t": 207856,
+      "id": "dashboard-p99-tiflash",
+      "value": 336.1314579999889
+    },
+    {
+      "type": "metric",
+      "t": 207952,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 208901,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "log",
+      "t": 208998,
+      "level": "info",
+      "msg": "heartbeat hb-10 committed",
+      "node": "tidb"
+    },
+    {
+      "type": "metric",
+      "t": 209423,
+      "id": "freshness-ms",
+      "value": 425
+    },
+    {
+      "type": "log",
+      "t": 209423,
+      "level": "info",
+      "msg": "heartbeat hb-10 visible in TiFlash after 425ms",
+      "node": "tiflash"
+    },
+    {
+      "type": "metric",
+      "t": 209423,
+      "id": "write-p99",
+      "value": 337.35291699998197
+    },
+    {
+      "type": "metric",
+      "t": 209423,
+      "id": "write-p99-degradation",
+      "value": 0.7936919965802129
+    },
+    {
+      "type": "metric",
+      "t": 209423,
+      "id": "orders-written-total",
+      "value": 455
+    },
+    {
+      "type": "flow",
+      "t": 210052,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 210052,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 210682,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 210682,
+      "id": "dashboard-p50-tikv",
+      "value": 99.414832999988
+    },
+    {
+      "type": "metric",
+      "t": 210682,
+      "id": "dashboard-p99-tikv",
+      "value": 334.54462500000955
+    },
+    {
+      "type": "metric",
+      "t": 210682,
+      "id": "dashboard-p50-tiflash",
+      "value": 107.20229200000176
+    },
+    {
+      "type": "metric",
+      "t": 210682,
+      "id": "dashboard-p99-tiflash",
+      "value": 326.77116699999897
+    },
+    {
+      "type": "metric",
+      "t": 210999,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 211717,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 211717,
+      "id": "write-p99",
+      "value": 327.285125000024
+    },
+    {
+      "type": "metric",
+      "t": 211717,
+      "id": "write-p99-degradation",
+      "value": -2.214344616689843
+    },
+    {
+      "type": "metric",
+      "t": 211717,
+      "id": "orders-written-total",
+      "value": 460
+    },
+    {
+      "type": "flow",
+      "t": 212573,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 212573,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 213205,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 213205,
+      "id": "dashboard-p50-tikv",
+      "value": 102.68225000001257
+    },
+    {
+      "type": "metric",
+      "t": 213205,
+      "id": "dashboard-p99-tikv",
+      "value": 325.15037499999744
+    },
+    {
+      "type": "metric",
+      "t": 213205,
+      "id": "dashboard-p50-tiflash",
+      "value": 104.74287499999627
+    },
+    {
+      "type": "metric",
+      "t": 213205,
+      "id": "dashboard-p99-tiflash",
+      "value": 319.8658749999886
+    },
+    {
+      "type": "metric",
+      "t": 213301,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 214237,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 214237,
+      "id": "write-p99",
+      "value": 329.8806250000198
+    },
+    {
+      "type": "metric",
+      "t": 214237,
+      "id": "write-p99-degradation",
+      "value": -1.4388658394403324
+    },
+    {
+      "type": "metric",
+      "t": 214237,
+      "id": "orders-written-total",
+      "value": 465
+    },
+    {
+      "type": "flow",
+      "t": 214887,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 214887,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 215716,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 215716,
+      "id": "dashboard-p50-tikv",
+      "value": 102.37958400000934
+    },
+    {
+      "type": "metric",
+      "t": 215716,
+      "id": "dashboard-p99-tikv",
+      "value": 341.95912500002305
+    },
+    {
+      "type": "metric",
+      "t": 215716,
+      "id": "dashboard-p50-tiflash",
+      "value": 113.5985829999845
+    },
+    {
+      "type": "metric",
+      "t": 215716,
+      "id": "dashboard-p99-tiflash",
+      "value": 341.7281249999942
+    },
+    {
+      "type": "metric",
+      "t": 215817,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 216766,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 216766,
+      "id": "write-p99",
+      "value": 331.95879199999035
+    },
+    {
+      "type": "metric",
+      "t": 216766,
+      "id": "write-p99-degradation",
+      "value": -0.8179548765969276
+    },
+    {
+      "type": "metric",
+      "t": 216766,
+      "id": "orders-written-total",
+      "value": 470
+    },
+    {
+      "type": "flow",
+      "t": 217398,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 217398,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 218020,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 218020,
+      "id": "dashboard-p50-tikv",
+      "value": 101.38816599998972
+    },
+    {
+      "type": "metric",
+      "t": 218020,
+      "id": "dashboard-p99-tikv",
+      "value": 332.2811670000083
+    },
+    {
+      "type": "metric",
+      "t": 218020,
+      "id": "dashboard-p50-tiflash",
+      "value": 105.50733299998683
+    },
+    {
+      "type": "metric",
+      "t": 218020,
+      "id": "dashboard-p99-tiflash",
+      "value": 332.3037919999915
+    },
+    {
+      "type": "metric",
+      "t": 218339,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 219058,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 219058,
+      "id": "write-p99",
+      "value": 328.93008299998473
+    },
+    {
+      "type": "metric",
+      "t": 219058,
+      "id": "write-p99-degradation",
+      "value": -1.7228670522751157
+    },
+    {
+      "type": "metric",
+      "t": 219058,
+      "id": "orders-written-total",
+      "value": 475
+    },
+    {
+      "type": "flow",
+      "t": 219912,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 219912,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 220543,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 220543,
+      "id": "dashboard-p50-tikv",
+      "value": 101.99512500001583
+    },
+    {
+      "type": "metric",
+      "t": 220543,
+      "id": "dashboard-p99-tikv",
+      "value": 325.390167000005
+    },
+    {
+      "type": "metric",
+      "t": 220543,
+      "id": "dashboard-p50-tiflash",
+      "value": 105.07133299999987
+    },
+    {
+      "type": "metric",
+      "t": 220543,
+      "id": "dashboard-p99-tiflash",
+      "value": 318.20712500001537
+    },
+    {
+      "type": "metric",
+      "t": 220641,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 221579,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 221579,
+      "id": "write-p99",
+      "value": 333.29649999999674
+    },
+    {
+      "type": "metric",
+      "t": 221579,
+      "id": "write-p99-degradation",
+      "value": -0.4182769092829165
+    },
+    {
+      "type": "metric",
+      "t": 221579,
+      "id": "orders-written-total",
+      "value": 480
+    },
+    {
+      "type": "flow",
+      "t": 222217,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 222217,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 223059,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 223059,
+      "id": "dashboard-p50-tikv",
+      "value": 106.71037499999511
+    },
+    {
+      "type": "metric",
+      "t": 223059,
+      "id": "dashboard-p99-tikv",
+      "value": 338.32533300001523
+    },
+    {
+      "type": "metric",
+      "t": 223059,
+      "id": "dashboard-p50-tiflash",
+      "value": 101.66333300000406
+    },
+    {
+      "type": "metric",
+      "t": 223059,
+      "id": "dashboard-p99-tiflash",
+      "value": 338.3249170000199
+    },
+    {
+      "type": "metric",
+      "t": 223160,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 224103,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 224103,
+      "id": "write-p99",
+      "value": 331.69383400000515
+    },
+    {
+      "type": "metric",
+      "t": 224103,
+      "id": "write-p99-degradation",
+      "value": -0.897118546738068
+    },
+    {
+      "type": "metric",
+      "t": 224103,
+      "id": "orders-written-total",
+      "value": 485
+    },
+    {
+      "type": "flow",
+      "t": 224734,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 224734,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 225362,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 225362,
+      "id": "dashboard-p50-tikv",
+      "value": 98.28854199999478
+    },
+    {
+      "type": "metric",
+      "t": 225362,
+      "id": "dashboard-p99-tikv",
+      "value": 336.25420799999847
+    },
+    {
+      "type": "metric",
+      "t": 225362,
+      "id": "dashboard-p50-tiflash",
+      "value": 104.7910419999971
+    },
+    {
+      "type": "metric",
+      "t": 225362,
+      "id": "dashboard-p99-tiflash",
+      "value": 330.57708399998955
+    },
+    {
+      "type": "metric",
+      "t": 225679,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "phase",
+      "t": 225681,
+      "phase": "wrap-up"
+    },
+    {
+      "type": "node",
+      "t": 225681,
+      "node": "power-bi",
+      "status": "done"
+    },
+    {
+      "type": "flow",
+      "t": 226394,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 226394,
+      "id": "write-p99",
+      "value": 331.6266250000044
+    },
+    {
+      "type": "metric",
+      "t": 226394,
+      "id": "write-p99-degradation",
+      "value": -0.9171991297243184
+    },
+    {
+      "type": "metric",
+      "t": 226394,
+      "id": "orders-written-total",
+      "value": 490
+    },
+    {
+      "type": "flow",
+      "t": 227250,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 227250,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 227883,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 227883,
+      "id": "dashboard-p50-tikv",
+      "value": 99.34241700000712
+    },
+    {
+      "type": "metric",
+      "t": 227883,
+      "id": "dashboard-p99-tikv",
+      "value": 325.04320899999584
+    },
+    {
+      "type": "metric",
+      "t": 227883,
+      "id": "dashboard-p50-tiflash",
+      "value": 102.51916700002039
+    },
+    {
+      "type": "metric",
+      "t": 227883,
+      "id": "dashboard-p99-tiflash",
+      "value": 319.73958300001686
+    },
+    {
+      "type": "metric",
+      "t": 227980,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 228924,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "log",
+      "t": 229019,
+      "level": "info",
+      "msg": "heartbeat hb-11 committed",
+      "node": "tidb"
+    },
+    {
+      "type": "metric",
+      "t": 229460,
+      "id": "freshness-ms",
+      "value": 441
+    },
+    {
+      "type": "log",
+      "t": 229460,
+      "level": "info",
+      "msg": "heartbeat hb-11 visible in TiFlash after 441ms",
+      "node": "tiflash"
+    },
+    {
+      "type": "metric",
+      "t": 229460,
+      "id": "write-p99",
+      "value": 334.3455419999955
+    },
+    {
+      "type": "metric",
+      "t": 229460,
+      "id": "write-p99-degradation",
+      "value": -0.10484604530922609
+    },
+    {
+      "type": "metric",
+      "t": 229460,
+      "id": "orders-written-total",
+      "value": 495
+    },
+    {
+      "type": "flow",
+      "t": 230075,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 230075,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 230922,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 230922,
+      "id": "dashboard-p50-tikv",
+      "value": 98.0178339999984
+    },
+    {
+      "type": "metric",
+      "t": 230922,
+      "id": "dashboard-p99-tikv",
+      "value": 320.55429100000765
+    },
+    {
+      "type": "metric",
+      "t": 230922,
+      "id": "dashboard-p50-tiflash",
+      "value": 103.0489579999994
+    },
+    {
+      "type": "metric",
+      "t": 230922,
+      "id": "dashboard-p99-tiflash",
+      "value": 320.48099999999977
+    },
+    {
+      "type": "metric",
+      "t": 231027,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 231970,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 231970,
+      "id": "write-p99",
+      "value": 329.36208300001454
+    },
+    {
+      "type": "metric",
+      "t": 231970,
+      "id": "write-p99-degradation",
+      "value": -1.593794876665237
+    },
+    {
+      "type": "metric",
+      "t": 231970,
+      "id": "orders-written-total",
+      "value": 500
+    },
+    {
+      "type": "flow",
+      "t": 232593,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 232593,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 233234,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 233234,
+      "id": "dashboard-p50-tikv",
+      "value": 99.35158399998909
+    },
+    {
+      "type": "metric",
+      "t": 233234,
+      "id": "dashboard-p99-tikv",
+      "value": 331.25062500001513
+    },
+    {
+      "type": "metric",
+      "t": 233234,
+      "id": "dashboard-p50-tiflash",
+      "value": 103.78712500000256
+    },
+    {
+      "type": "metric",
+      "t": 233234,
+      "id": "dashboard-p99-tiflash",
+      "value": 329.6379580000066
+    },
+    {
+      "type": "metric",
+      "t": 233544,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 234277,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 234277,
+      "id": "write-p99",
+      "value": 332.13770799999475
+    },
+    {
+      "type": "metric",
+      "t": 234277,
+      "id": "write-p99-degradation",
+      "value": -0.7644986789802821
+    },
+    {
+      "type": "metric",
+      "t": 234277,
+      "id": "orders-written-total",
+      "value": 505
+    },
+    {
+      "type": "flow",
+      "t": 235116,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 235116,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 235748,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 235748,
+      "id": "dashboard-p50-tikv",
+      "value": 102.21125000002212
+    },
+    {
+      "type": "metric",
+      "t": 235748,
+      "id": "dashboard-p99-tikv",
+      "value": 317.6860830000078
+    },
+    {
+      "type": "metric",
+      "t": 235748,
+      "id": "dashboard-p50-tiflash",
+      "value": 106.17112499999348
+    },
+    {
+      "type": "metric",
+      "t": 235748,
+      "id": "dashboard-p99-tiflash",
+      "value": 312.10658299998613
+    },
+    {
+      "type": "metric",
+      "t": 235842,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 236784,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 236784,
+      "id": "write-p99",
+      "value": 330.7339579999971
+    },
+    {
+      "type": "metric",
+      "t": 236784,
+      "id": "write-p99-degradation",
+      "value": -1.1839085551366881
+    },
+    {
+      "type": "metric",
+      "t": 236784,
+      "id": "orders-written-total",
+      "value": 510
+    },
+    {
+      "type": "flow",
+      "t": 237421,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 237421,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 238262,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 238262,
+      "id": "dashboard-p50-tikv",
+      "value": 98.91841700000805
+    },
+    {
+      "type": "metric",
+      "t": 238262,
+      "id": "dashboard-p99-tikv",
+      "value": 334.9894580000255
+    },
+    {
+      "type": "metric",
+      "t": 238262,
+      "id": "dashboard-p50-tiflash",
+      "value": 104.88437500002328
+    },
+    {
+      "type": "metric",
+      "t": 238262,
+      "id": "dashboard-p99-tiflash",
+      "value": 338.1886249999807
+    },
+    {
+      "type": "metric",
+      "t": 238360,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 239309,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 239309,
+      "id": "write-p99",
+      "value": 330.6168749999779
+    },
+    {
+      "type": "metric",
+      "t": 239309,
+      "id": "write-p99-degradation",
+      "value": -1.2188904012903135
+    },
+    {
+      "type": "metric",
+      "t": 239309,
+      "id": "orders-written-total",
+      "value": 515
+    },
+    {
+      "type": "flow",
+      "t": 239944,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 239944,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 240568,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 240568,
+      "id": "dashboard-p50-tikv",
+      "value": 104.67062499999884
+    },
+    {
+      "type": "metric",
+      "t": 240568,
+      "id": "dashboard-p99-tikv",
+      "value": 337.81112500000745
+    },
+    {
+      "type": "metric",
+      "t": 240568,
+      "id": "dashboard-p50-tiflash",
+      "value": 108.32920899998862
+    },
+    {
+      "type": "metric",
+      "t": 240568,
+      "id": "dashboard-p99-tiflash",
+      "value": 328.469832999981
+    },
+    {
+      "type": "metric",
+      "t": 240880,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 241600,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 241600,
+      "id": "write-p99",
+      "value": 328.23962500001653
+    },
+    {
+      "type": "metric",
+      "t": 241600,
+      "id": "write-p99-degradation",
+      "value": -1.9291608398144526
+    },
+    {
+      "type": "metric",
+      "t": 241600,
+      "id": "orders-written-total",
+      "value": 520
+    },
+    {
+      "type": "flow",
+      "t": 242455,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 242455,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 243089,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 243089,
+      "id": "dashboard-p50-tikv",
+      "value": 98.96791700000176
+    },
+    {
+      "type": "metric",
+      "t": 243089,
+      "id": "dashboard-p99-tikv",
+      "value": 326.45595900001354
+    },
+    {
+      "type": "metric",
+      "t": 243089,
+      "id": "dashboard-p50-tiflash",
+      "value": 102.92662499999278
+    },
+    {
+      "type": "metric",
+      "t": 243089,
+      "id": "dashboard-p99-tiflash",
+      "value": 320.7045410000137
+    },
+    {
+      "type": "metric",
+      "t": 243186,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 244126,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 244126,
+      "id": "write-p99",
+      "value": 321.202667000005
+    },
+    {
+      "type": "metric",
+      "t": 244126,
+      "id": "write-p99-degradation",
+      "value": -4.031650373782434
+    },
+    {
+      "type": "metric",
+      "t": 244126,
+      "id": "orders-written-total",
+      "value": 525
+    },
+    {
+      "type": "flow",
+      "t": 244759,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 244759,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 245601,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 245601,
+      "id": "dashboard-p50-tikv",
+      "value": 101.31450000000768
+    },
+    {
+      "type": "metric",
+      "t": 245601,
+      "id": "dashboard-p99-tikv",
+      "value": 333.25312500001746
+    },
+    {
+      "type": "metric",
+      "t": 245601,
+      "id": "dashboard-p50-tiflash",
+      "value": 102.74587499999325
+    },
+    {
+      "type": "metric",
+      "t": 245601,
+      "id": "dashboard-p99-tiflash",
+      "value": 337.88300000000163
+    },
+    {
+      "type": "metric",
+      "t": 245700,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 246649,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 246650,
+      "id": "write-p99",
+      "value": 330.5883749999921
+    },
+    {
+      "type": "metric",
+      "t": 246650,
+      "id": "write-p99-degradation",
+      "value": -1.2274055795375234
+    },
+    {
+      "type": "metric",
+      "t": 246650,
+      "id": "orders-written-total",
+      "value": 530
+    },
+    {
+      "type": "flow",
+      "t": 247278,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 247278,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 247916,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 247916,
+      "id": "dashboard-p50-tikv",
+      "value": 99.59529100000509
+    },
+    {
+      "type": "metric",
+      "t": 247916,
+      "id": "dashboard-p99-tikv",
+      "value": 332.0022080000199
+    },
+    {
+      "type": "metric",
+      "t": 247916,
+      "id": "dashboard-p50-tiflash",
+      "value": 105.3131670000148
+    },
+    {
+      "type": "metric",
+      "t": 247916,
+      "id": "dashboard-p99-tiflash",
+      "value": 329.2933749999793
+    },
+    {
+      "type": "metric",
+      "t": 248223,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 248944,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "log",
+      "t": 249273,
+      "level": "info",
+      "msg": "heartbeat hb-12 committed",
+      "node": "tidb"
+    },
+    {
+      "type": "metric",
+      "t": 249475,
+      "id": "freshness-ms",
+      "value": 202
+    },
+    {
+      "type": "log",
+      "t": 249475,
+      "level": "info",
+      "msg": "heartbeat hb-12 visible in TiFlash after 202ms",
+      "node": "tiflash"
+    },
+    {
+      "type": "metric",
+      "t": 249475,
+      "id": "write-p99",
+      "value": 333.18258299998706
+    },
+    {
+      "type": "metric",
+      "t": 249475,
+      "id": "write-p99-degradation",
+      "value": -0.4523128237023272
+    },
+    {
+      "type": "metric",
+      "t": 249475,
+      "id": "orders-written-total",
+      "value": 535
+    },
+    {
+      "type": "flow",
+      "t": 250321,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 250321,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 250951,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 250951,
+      "id": "dashboard-p50-tikv",
+      "value": 102.9653330000001
+    },
+    {
+      "type": "metric",
+      "t": 250951,
+      "id": "dashboard-p99-tikv",
+      "value": 324.3666670000239
+    },
+    {
+      "type": "metric",
+      "t": 250951,
+      "id": "dashboard-p50-tiflash",
+      "value": 103.0518340000126
+    },
+    {
+      "type": "metric",
+      "t": 250951,
+      "id": "dashboard-p99-tiflash",
+      "value": 319.8909589999821
+    },
+    {
+      "type": "metric",
+      "t": 251047,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 251990,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 251990,
+      "id": "write-p99",
+      "value": 331.99708299999475
+    },
+    {
+      "type": "metric",
+      "t": 251990,
+      "id": "write-p99-degradation",
+      "value": -0.8065143611420575
+    },
+    {
+      "type": "metric",
+      "t": 251990,
+      "id": "orders-written-total",
+      "value": 540
+    },
+    {
+      "type": "flow",
+      "t": 252940,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 252940,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 253577,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 253577,
+      "id": "dashboard-p50-tikv",
+      "value": 101.34487500000978
+    },
+    {
+      "type": "metric",
+      "t": 253577,
+      "id": "dashboard-p99-tikv",
+      "value": 337.0005410000158
+    },
+    {
+      "type": "metric",
+      "t": 253577,
+      "id": "dashboard-p50-tiflash",
+      "value": 285.762000000017
+    },
+    {
+      "type": "metric",
+      "t": 253577,
+      "id": "dashboard-p99-tiflash",
+      "value": 337.13570799998706
+    },
+    {
+      "type": "metric",
+      "t": 253676,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 254609,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 254609,
+      "id": "write-p99",
+      "value": 332.67908299999544
+    },
+    {
+      "type": "metric",
+      "t": 254609,
+      "id": "write-p99-degradation",
+      "value": -0.6027476394754957
+    },
+    {
+      "type": "metric",
+      "t": 254609,
+      "id": "orders-written-total",
+      "value": 545
+    },
+    {
+      "type": "flow",
+      "t": 255241,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 255241,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 256089,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 256089,
+      "id": "dashboard-p50-tikv",
+      "value": 96.82387500000186
+    },
+    {
+      "type": "metric",
+      "t": 256089,
+      "id": "dashboard-p99-tikv",
+      "value": 343.3866670000134
+    },
+    {
+      "type": "metric",
+      "t": 256089,
+      "id": "dashboard-p50-tiflash",
+      "value": 102.46183299997938
+    },
+    {
+      "type": "metric",
+      "t": 256089,
+      "id": "dashboard-p99-tiflash",
+      "value": 341.9360419999866
+    },
+    {
+      "type": "metric",
+      "t": 256189,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 257136,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 257136,
+      "id": "write-p99",
+      "value": 325.46745799999917
+    },
+    {
+      "type": "metric",
+      "t": 257136,
+      "id": "write-p99-degradation",
+      "value": -2.7574238625493313
+    },
+    {
+      "type": "metric",
+      "t": 257136,
+      "id": "orders-written-total",
+      "value": 550
+    },
+    {
+      "type": "flow",
+      "t": 257766,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 257766,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 258393,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 258393,
+      "id": "dashboard-p50-tikv",
+      "value": 106.257042000012
+    },
+    {
+      "type": "metric",
+      "t": 258393,
+      "id": "dashboard-p99-tikv",
+      "value": 335.4039580000099
+    },
+    {
+      "type": "metric",
+      "t": 258393,
+      "id": "dashboard-p50-tiflash",
+      "value": 99.59604199999012
+    },
+    {
+      "type": "metric",
+      "t": 258393,
+      "id": "dashboard-p99-tiflash",
+      "value": 337.9649159999972
+    },
+    {
+      "type": "metric",
+      "t": 258708,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 259429,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 259429,
+      "id": "write-p99",
+      "value": 332.64595800000825
+    },
+    {
+      "type": "metric",
+      "t": 259429,
+      "id": "write-p99-degradation",
+      "value": -0.6126446668253324
+    },
+    {
+      "type": "metric",
+      "t": 259429,
+      "id": "orders-written-total",
+      "value": 555
+    },
+    {
+      "type": "flow",
+      "t": 260285,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 260285,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 261334,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 261334,
+      "id": "dashboard-p50-tikv",
+      "value": 96.34625000000233
+    },
+    {
+      "type": "metric",
+      "t": 261334,
+      "id": "dashboard-p99-tikv",
+      "value": 335.48695799999405
+    },
+    {
+      "type": "metric",
+      "t": 261334,
+      "id": "dashboard-p50-tiflash",
+      "value": 97.65912500000559
+    },
+    {
+      "type": "metric",
+      "t": 261334,
+      "id": "dashboard-p99-tiflash",
+      "value": 333.52050000001327
+    },
+    {
+      "type": "metric",
+      "t": 261437,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 262384,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 262385,
+      "id": "write-p99",
+      "value": 335.1143329999759
+    },
+    {
+      "type": "metric",
+      "t": 262385,
+      "id": "write-p99-degradation",
+      "value": 0.12485193374151544
+    },
+    {
+      "type": "metric",
+      "t": 262385,
+      "id": "orders-written-total",
+      "value": 560
+    },
+    {
+      "type": "flow",
+      "t": 263002,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 263002,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 263636,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 263637,
+      "id": "dashboard-p50-tikv",
+      "value": 99.53720799996518
+    },
+    {
+      "type": "metric",
+      "t": 263637,
+      "id": "dashboard-p99-tikv",
+      "value": 327.5976249999949
+    },
+    {
+      "type": "metric",
+      "t": 263637,
+      "id": "dashboard-p50-tiflash",
+      "value": 99.19170800002757
+    },
+    {
+      "type": "metric",
+      "t": 263637,
+      "id": "dashboard-p99-tiflash",
+      "value": 329.00620900001377
+    },
+    {
+      "type": "metric",
+      "t": 263953,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 264665,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 264665,
+      "id": "write-p99",
+      "value": 328.6381249999977
+    },
+    {
+      "type": "metric",
+      "t": 264665,
+      "id": "write-p99-degradation",
+      "value": -1.8100977333918733
+    },
+    {
+      "type": "metric",
+      "t": 264665,
+      "id": "orders-written-total",
+      "value": 565
+    },
+    {
+      "type": "flow",
+      "t": 265526,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 265526,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 266155,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 266155,
+      "id": "dashboard-p50-tikv",
+      "value": 99.77791699999943
+    },
+    {
+      "type": "metric",
+      "t": 266155,
+      "id": "dashboard-p99-tikv",
+      "value": 332.75116700003855
+    },
+    {
+      "type": "metric",
+      "t": 266155,
+      "id": "dashboard-p50-tiflash",
+      "value": 105.57979200000409
+    },
+    {
+      "type": "metric",
+      "t": 266155,
+      "id": "dashboard-p99-tiflash",
+      "value": 322.8099999999977
+    },
+    {
+      "type": "metric",
+      "t": 266257,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 267193,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 267193,
+      "id": "write-p99",
+      "value": 323.7365829999908
+    },
+    {
+      "type": "metric",
+      "t": 267193,
+      "id": "write-p99-degradation",
+      "value": -3.2745715522354857
+    },
+    {
+      "type": "metric",
+      "t": 267193,
+      "id": "orders-written-total",
+      "value": 570
+    },
+    {
+      "type": "flow",
+      "t": 267822,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 267822,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 268671,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 268671,
+      "id": "dashboard-p50-tikv",
+      "value": 98.3214170000283
+    },
+    {
+      "type": "metric",
+      "t": 268671,
+      "id": "dashboard-p99-tikv",
+      "value": 336.94512499996927
+    },
+    {
+      "type": "metric",
+      "t": 268671,
+      "id": "dashboard-p50-tiflash",
+      "value": 101.21441700001014
+    },
+    {
+      "type": "metric",
+      "t": 268671,
+      "id": "dashboard-p99-tiflash",
+      "value": 337.20341699995333
+    },
+    {
+      "type": "metric",
+      "t": 268770,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 269716,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "log",
+      "t": 269813,
+      "level": "info",
+      "msg": "heartbeat hb-13 committed",
+      "node": "tidb"
+    },
+    {
+      "type": "metric",
+      "t": 270244,
+      "id": "freshness-ms",
+      "value": 431
+    },
+    {
+      "type": "log",
+      "t": 270244,
+      "level": "info",
+      "msg": "heartbeat hb-13 visible in TiFlash after 431ms",
+      "node": "tiflash"
+    },
+    {
+      "type": "metric",
+      "t": 270244,
+      "id": "write-p99",
+      "value": 330.89983399998164
+    },
+    {
+      "type": "metric",
+      "t": 270244,
+      "id": "write-p99-degradation",
+      "value": -1.134348425048737
+    },
+    {
+      "type": "metric",
+      "t": 270244,
+      "id": "orders-written-total",
+      "value": 575
+    },
+    {
+      "type": "flow",
+      "t": 270868,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 270868,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 271501,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 271501,
+      "id": "dashboard-p50-tikv",
+      "value": 101.0260840000119
+    },
+    {
+      "type": "metric",
+      "t": 271501,
+      "id": "dashboard-p99-tikv",
+      "value": 338.56958299997495
+    },
+    {
+      "type": "metric",
+      "t": 271501,
+      "id": "dashboard-p50-tiflash",
+      "value": 101.10745899996255
+    },
+    {
+      "type": "metric",
+      "t": 271501,
+      "id": "dashboard-p99-tiflash",
+      "value": 331.00579100003233
+    },
+    {
+      "type": "metric",
+      "t": 271816,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 272533,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 272533,
+      "id": "write-p99",
+      "value": 324.1676669999724
+    },
+    {
+      "type": "metric",
+      "t": 272533,
+      "id": "write-p99-degradation",
+      "value": -3.145773057456781
+    },
+    {
+      "type": "metric",
+      "t": 272533,
+      "id": "orders-written-total",
+      "value": 580
+    },
+    {
+      "type": "flow",
+      "t": 273388,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 273388,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 274013,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 274013,
+      "id": "dashboard-p50-tikv",
+      "value": 95.13212500000373
+    },
+    {
+      "type": "metric",
+      "t": 274013,
+      "id": "dashboard-p99-tikv",
+      "value": 333.57883399998536
+    },
+    {
+      "type": "metric",
+      "t": 274013,
+      "id": "dashboard-p50-tiflash",
+      "value": 100.56599999999162
+    },
+    {
+      "type": "metric",
+      "t": 274013,
+      "id": "dashboard-p99-tiflash",
+      "value": 322.51391600002535
+    },
+    {
+      "type": "metric",
+      "t": 274110,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 275057,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 275057,
+      "id": "write-p99",
+      "value": 333.2980840000091
+    },
+    {
+      "type": "metric",
+      "t": 275057,
+      "id": "write-p99-degradation",
+      "value": -0.4178036446353499
+    },
+    {
+      "type": "metric",
+      "t": 275057,
+      "id": "orders-written-total",
+      "value": 585
+    },
+    {
+      "type": "flow",
+      "t": 275697,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 275697,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 276535,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 276535,
+      "id": "dashboard-p50-tikv",
+      "value": 97.68558300001314
+    },
+    {
+      "type": "metric",
+      "t": 276535,
+      "id": "dashboard-p99-tikv",
+      "value": 337.6147910000291
+    },
+    {
+      "type": "metric",
+      "t": 276535,
+      "id": "dashboard-p50-tiflash",
+      "value": 104.89445800002431
+    },
+    {
+      "type": "metric",
+      "t": 276535,
+      "id": "dashboard-p99-tiflash",
+      "value": 339.8731670000125
+    },
+    {
+      "type": "metric",
+      "t": 276633,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 277583,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 277583,
+      "id": "write-p99",
+      "value": 333.1224589999765
+    },
+    {
+      "type": "metric",
+      "t": 277583,
+      "id": "write-p99-degradation",
+      "value": -0.4702765632560175
+    },
+    {
+      "type": "metric",
+      "t": 277583,
+      "id": "orders-written-total",
+      "value": 590
+    },
+    {
+      "type": "flow",
+      "t": 278206,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 278206,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 278841,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 278842,
+      "id": "dashboard-p50-tikv",
+      "value": 98.38462500000605
+    },
+    {
+      "type": "metric",
+      "t": 278842,
+      "id": "dashboard-p99-tikv",
+      "value": 333.7965839999961
+    },
+    {
+      "type": "metric",
+      "t": 278842,
+      "id": "dashboard-p50-tiflash",
+      "value": 96.92416699999012
+    },
+    {
+      "type": "metric",
+      "t": 278842,
+      "id": "dashboard-p99-tiflash",
+      "value": 335.5862920000218
+    },
+    {
+      "type": "metric",
+      "t": 279157,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 279878,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 279878,
+      "id": "write-p99",
+      "value": 325.8556669999962
+    },
+    {
+      "type": "metric",
+      "t": 279878,
+      "id": "write-p99-degradation",
+      "value": -2.6414354824162474
+    },
+    {
+      "type": "metric",
+      "t": 279878,
+      "id": "orders-written-total",
+      "value": 595
+    },
+    {
+      "type": "flow",
+      "t": 280730,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 280730,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 281357,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 281357,
+      "id": "dashboard-p50-tikv",
+      "value": 96.78704099997412
+    },
+    {
+      "type": "metric",
+      "t": 281357,
+      "id": "dashboard-p99-tikv",
+      "value": 331.7969999999623
+    },
+    {
+      "type": "metric",
+      "t": 281357,
+      "id": "dashboard-p50-tiflash",
+      "value": 99.45483299996704
+    },
+    {
+      "type": "metric",
+      "t": 281357,
+      "id": "dashboard-p99-tiflash",
+      "value": 326.63541699998314
+    },
+    {
+      "type": "metric",
+      "t": 281452,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 282395,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 282395,
+      "id": "write-p99",
+      "value": 329.04025000002
+    },
+    {
+      "type": "metric",
+      "t": 282395,
+      "id": "write-p99-degradation",
+      "value": -1.6899515560390335
+    },
+    {
+      "type": "metric",
+      "t": 282395,
+      "id": "orders-written-total",
+      "value": 600
+    },
+    {
+      "type": "flow",
+      "t": 283023,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 283023,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 283874,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 283874,
+      "id": "dashboard-p50-tikv",
+      "value": 100.63524999999208
+    },
+    {
+      "type": "metric",
+      "t": 283874,
+      "id": "dashboard-p99-tikv",
+      "value": 339.3141250000335
+    },
+    {
+      "type": "metric",
+      "t": 283875,
+      "id": "dashboard-p50-tiflash",
+      "value": 98.78649999998743
+    },
+    {
+      "type": "metric",
+      "t": 283875,
+      "id": "dashboard-p99-tiflash",
+      "value": 340.9836249999935
+    },
+    {
+      "type": "metric",
+      "t": 283973,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 284933,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 284933,
+      "id": "write-p99",
+      "value": 329.3772919999901
+    },
+    {
+      "type": "metric",
+      "t": 284933,
+      "id": "write-p99-degradation",
+      "value": -1.5892507592680984
+    },
+    {
+      "type": "metric",
+      "t": 284933,
+      "id": "orders-written-total",
+      "value": 605
+    },
+    {
+      "type": "flow",
+      "t": 285551,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 285551,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 286179,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 286179,
+      "id": "dashboard-p50-tikv",
+      "value": 101.88320899999235
+    },
+    {
+      "type": "metric",
+      "t": 286179,
+      "id": "dashboard-p99-tikv",
+      "value": 329.6715419999673
+    },
+    {
+      "type": "metric",
+      "t": 286179,
+      "id": "dashboard-p50-tiflash",
+      "value": 100.37141700001666
+    },
+    {
+      "type": "metric",
+      "t": 286179,
+      "id": "dashboard-p99-tiflash",
+      "value": 324.28041599999415
+    },
+    {
+      "type": "metric",
+      "t": 286497,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    },
+    {
+      "type": "flow",
+      "t": 287214,
+      "edge": "writes",
+      "count": 5
+    },
+    {
+      "type": "metric",
+      "t": 287214,
+      "id": "write-p99",
+      "value": 322.5254160000477
+    },
+    {
+      "type": "metric",
+      "t": 287214,
+      "id": "write-p99-degradation",
+      "value": -3.636441829315948
+    },
+    {
+      "type": "metric",
+      "t": 287214,
+      "id": "orders-written-total",
+      "value": 610
+    },
+    {
+      "type": "flow",
+      "t": 288069,
+      "edge": "tikv-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 288069,
+      "edge": "tiflash-dashboard",
+      "count": 3
+    },
+    {
+      "type": "flow",
+      "t": 288697,
+      "edge": "tiflash-dashboard",
+      "count": 24
+    },
+    {
+      "type": "metric",
+      "t": 288697,
+      "id": "dashboard-p50-tikv",
+      "value": 96.17483400000492
+    },
+    {
+      "type": "metric",
+      "t": 288697,
+      "id": "dashboard-p99-tikv",
+      "value": 330.6030829999945
+    },
+    {
+      "type": "metric",
+      "t": 288697,
+      "id": "dashboard-p50-tiflash",
+      "value": 98.59754200000316
+    },
+    {
+      "type": "metric",
+      "t": 288697,
+      "id": "dashboard-p99-tiflash",
+      "value": 325.5102500000503
+    },
+    {
+      "type": "metric",
+      "t": 288794,
+      "id": "tiflash-replica-progress",
+      "value": 100
+    }
+  ]
+}
