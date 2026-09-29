@@ -177,7 +177,7 @@
       }
     ]
   },
-  "recordedAt": "2026-09-29T15:01:33.475Z",
+  "recordedAt": "2026-09-29T19:58:41.988Z",
   "environment": {
     "tidb": "tiup playground v8.5.8 (local)",
     "components": {
@@ -185,5386 +185,3633 @@
     },
     "notes": "recorded against Okta Integrator Free Plan org, local tiup playground"
   },
-  "durationMs": 810503,
+  "durationMs": 534551,
   "events": [
     {
       "type": "phase",
-      "t": 1,
+      "t": 2,
       "phase": "baseline"
     },
     {
       "type": "node",
-      "t": 1,
+      "t": 2,
       "node": "okta",
       "status": "healthy",
       "note": "polling system log"
     },
     {
       "type": "node",
-      "t": 1,
+      "t": 2,
       "node": "sync",
       "status": "idle"
     },
     {
       "type": "node",
-      "t": 1,
+      "t": 2,
       "node": "tidb",
       "status": "healthy"
     },
     {
       "type": "node",
-      "t": 1,
+      "t": 2,
       "node": "app",
       "status": "idle"
     },
     {
       "type": "log",
-      "t": 1,
+      "t": 2,
       "level": "info",
       "msg": "sync loop starting"
     },
     {
       "type": "metric",
-      "t": 2444,
+      "t": 2475,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 2444,
+      "t": 2475,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 2444,
+      "t": 2475,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 3485,
+      "t": 3549,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 3485,
+      "t": 3549,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 3485,
+      "t": 3549,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 6433,
+      "t": 6494,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 6433,
+      "t": 6494,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 6433,
+      "t": 6494,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 9413,
+      "t": 10164,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 9414,
+      "t": 10164,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 9414,
+      "t": 10164,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 12566,
+      "t": 12783,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 12566,
+      "t": 12783,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 12566,
+      "t": 12783,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 15542,
+      "t": 15470,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 15542,
+      "t": 15470,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 15542,
+      "t": 15470,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 18496,
+      "t": 18544,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 18496,
+      "t": 18544,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 18496,
+      "t": 18544,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 21478,
+      "t": 21507,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 21479,
+      "t": 21507,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 21479,
+      "t": 21507,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 24456,
+      "t": 24484,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 24456,
+      "t": 24484,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 24456,
+      "t": 24484,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 27420,
+      "t": 27470,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 27420,
+      "t": 27470,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 27420,
+      "t": 27470,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 30541,
+      "t": 30493,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 30541,
+      "t": 30493,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 30541,
+      "t": 30493,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 33537,
+      "t": 33572,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 33537,
+      "t": 33572,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 33538,
+      "t": 33572,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 36518,
+      "t": 36543,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 36518,
+      "t": 36543,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 36518,
+      "t": 36543,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 39662,
+      "t": 39518,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 39663,
+      "t": 39518,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 39663,
+      "t": 39518,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 42465,
+      "t": 42487,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 42465,
+      "t": 42487,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 42465,
+      "t": 42487,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 45430,
+      "t": 45511,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 45430,
+      "t": 45511,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 45430,
+      "t": 45511,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 48571,
+      "t": 48488,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 48571,
+      "t": 48488,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 48571,
+      "t": 48488,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 51529,
+      "t": 51579,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 51529,
+      "t": 51579,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 51529,
+      "t": 51579,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 54513,
+      "t": 54538,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 54513,
+      "t": 54538,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 54513,
+      "t": 54538,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 57486,
+      "t": 57501,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 57486,
+      "t": 57501,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 57486,
+      "t": 57501,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 60451,
+      "t": 60494,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 60451,
+      "t": 60494,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 60451,
+      "t": 60494,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 63778,
+      "t": 63486,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 63778,
+      "t": 63486,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 63778,
+      "t": 63486,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 66570,
+      "t": 66478,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 66570,
+      "t": 66479,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 66570,
+      "t": 66479,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 69546,
+      "t": 69476,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 69546,
+      "t": 69476,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 69546,
+      "t": 69476,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 72503,
+      "t": 72552,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 72503,
+      "t": 72552,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 72503,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 75497,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 75497,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 75497,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 78458,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 78458,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 78458,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 81424,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 81425,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 81425,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 84552,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 84552,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 84552,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 87553,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 87553,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 87553,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 90519,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 90519,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 90519,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 93478,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 93478,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 93478,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 96480,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 96480,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 96480,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 99432,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 99432,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 99432,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 102576,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 102576,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 102576,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 105517,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 105517,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 105517,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 108518,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 108518,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 108518,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 111489,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 111489,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 111489,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 114441,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 114441,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 114441,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 117435,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 117435,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 117435,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 120570,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 120570,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 120570,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 123489,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 123489,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 123489,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 126437,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 126437,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 126437,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 129434,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 129434,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 129434,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 132402,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 132402,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 132402,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 135546,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 135546,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 135546,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 138515,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 138515,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 138515,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 141470,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 141470,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 141470,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 144457,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 144457,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 144457,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 147416,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 147416,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 147416,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 150415,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 150415,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 150415,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 153441,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 153441,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 153441,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 156408,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 156408,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 156408,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 159489,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 159489,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 159489,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 162458,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 162458,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 162458,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 165432,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 165432,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 165432,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 168421,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 168421,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 168421,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 171415,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 171415,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 171415,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 174401,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 174401,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 174401,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 177489,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 177489,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 177489,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 180469,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 180469,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 180469,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 183781,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 183781,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 183781,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 186413,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 186413,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 186413,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 189436,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 189436,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 189436,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 192494,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 192494,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 192494,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 195491,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 195491,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 195491,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 198461,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 198461,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 198461,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 201416,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 201416,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 201416,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 204408,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 204408,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 204408,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 207412,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 207412,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 207412,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 210418,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 210418,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 210418,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 213463,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 213463,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 213463,
+      "t": 72552,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "control",
-      "t": 215572,
+      "t": 74013,
       "id": "add-to-analysts"
     },
     {
       "type": "metric",
-      "t": 216465,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 216465,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 216465,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 219433,
+      "t": 75979,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 219434,
+      "t": 75979,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 219434,
+      "t": 75979,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 222433,
+      "t": 78486,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 222433,
+      "t": 78486,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 222433,
+      "t": 78486,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 226076,
+      "t": 81476,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 226076,
+      "t": 81476,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 226076,
+      "t": 81476,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 228406,
+      "t": 84482,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 228406,
+      "t": 84482,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 228406,
+      "t": 84482,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 231425,
+      "t": 87563,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 231425,
+      "t": 87563,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 231425,
+      "t": 87563,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 234424,
+      "t": 90552,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 234424,
+      "t": 90552,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 234424,
+      "t": 90552,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 237413,
+      "t": 93523,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 237413,
+      "t": 93523,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 237413,
+      "t": 93523,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 240423,
+      "t": 96516,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 240423,
+      "t": 96517,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 240423,
+      "t": 96517,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 243418,
+      "t": 99484,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 243418,
+      "t": 99484,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 243418,
+      "t": 99484,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 246424,
+      "t": 102506,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 246424,
+      "t": 102506,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 246424,
+      "t": 102506,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 249429,
+      "t": 105584,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 249429,
+      "t": 105584,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 249429,
+      "t": 105584,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 252436,
+      "t": 108535,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 252436,
+      "t": 108535,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 252436,
+      "t": 108535,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 255940,
+      "t": 111511,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 255940,
+      "t": 111511,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 255940,
+      "t": 111511,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 258418,
+      "t": 114511,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 258418,
+      "t": 114511,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 258418,
+      "t": 114511,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
-      "type": "control",
-      "t": 260487,
-      "id": "add-to-analysts"
-    },
-    {
       "type": "metric",
-      "t": 261427,
+      "t": 117499,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 261427,
+      "t": 117499,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 261427,
+      "t": 117499,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 264420,
+      "t": 120488,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 264420,
+      "t": 120488,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 264420,
+      "t": 120488,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 267422,
+      "t": 123625,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 267422,
+      "t": 123625,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 267422,
+      "t": 123625,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 270441,
+      "t": 126555,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 270441,
+      "t": 126555,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 270441,
+      "t": 126555,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 273419,
+      "t": 129493,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 273419,
+      "t": 129493,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 273419,
+      "t": 129493,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 132498,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 132498,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"analyst\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 132498,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "flow",
-      "t": 276251,
+      "t": 135318,
       "edge": "okta-to-sync",
       "count": 1
     },
     {
       "type": "metric",
-      "t": 276251,
+      "t": 135318,
       "id": "audit-events-processed",
       "value": 1
     },
     {
       "type": "metric",
-      "t": 276502,
+      "t": 135603,
       "id": "provision-latency-ms",
-      "value": 60974
+      "value": 61831
     },
     {
       "type": "node",
-      "t": 276502,
+      "t": 135603,
       "node": "sync",
       "status": "healthy",
       "note": "applied analyst for lab-demo-user"
     },
     {
       "type": "node",
-      "t": 276502,
+      "t": 135603,
       "node": "tidb",
       "status": "healthy",
       "note": "granted analyst"
     },
     {
       "type": "flow",
-      "t": 276502,
+      "t": 135603,
       "edge": "sync-to-tidb",
       "count": 1
     },
     {
       "type": "phase",
-      "t": 276502,
+      "t": 135603,
       "phase": "provision"
     },
     {
       "type": "metric",
-      "t": 276668,
+      "t": 135802,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 276668,
+      "t": 135802,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 276668,
+      "t": 135802,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 279425,
+      "t": 138799,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 279425,
+      "t": 138799,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 279425,
+      "t": 138800,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 282423,
+      "t": 141550,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 282423,
+      "t": 141550,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 282423,
+      "t": 141550,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 285432,
+      "t": 144553,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 285432,
+      "t": 144553,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 285432,
+      "t": 144553,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 288427,
+      "t": 147565,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 288427,
+      "t": 147566,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 288427,
+      "t": 147566,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 291500,
+      "t": 150493,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 291500,
+      "t": 150493,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 291500,
+      "t": 150493,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 294431,
+      "t": 153479,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 294431,
+      "t": 153479,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 294431,
+      "t": 153479,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 297419,
+      "t": 156499,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 297419,
+      "t": 156499,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 297419,
+      "t": 156499,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 300437,
+      "t": 159478,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 300437,
+      "t": 159478,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 300437,
+      "t": 159478,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 303440,
+      "t": 162534,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 303440,
+      "t": 162534,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 303440,
+      "t": 162534,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 306427,
+      "t": 165542,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 306427,
+      "t": 165542,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 306427,
+      "t": 165542,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 309415,
+      "t": 168497,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 309415,
+      "t": 168497,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 309415,
+      "t": 168497,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 312420,
+      "t": 171502,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 312420,
+      "t": 171502,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 312420,
+      "t": 171502,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 315440,
+      "t": 174485,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 315440,
+      "t": 174485,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 315440,
+      "t": 174485,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 318444,
+      "t": 177571,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 318444,
+      "t": 177571,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 318444,
+      "t": 177571,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 321428,
+      "t": 180555,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 321428,
+      "t": 180555,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 321428,
+      "t": 180555,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 324419,
+      "t": 183526,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 324419,
+      "t": 183526,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 324419,
+      "t": 183526,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 327426,
+      "t": 186511,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 327426,
+      "t": 186511,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 327426,
+      "t": 186511,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 330421,
+      "t": 189512,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 330421,
+      "t": 189512,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 330421,
+      "t": 189512,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 333442,
+      "t": 192486,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 333442,
+      "t": 192486,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 333443,
+      "t": 192486,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 336472,
+      "t": 195575,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 336472,
+      "t": 195575,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 336472,
+      "t": 195575,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 339431,
+      "t": 198559,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 339431,
+      "t": 198559,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 339431,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 342423,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 342423,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 342423,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 345449,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 345449,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 345449,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 348435,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 348435,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 348435,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 351445,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 351445,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 351445,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 354438,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 354438,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 354438,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 357434,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 357434,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 357434,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 360450,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 360450,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 360450,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 363444,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 363444,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 363444,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 366450,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 366450,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 366450,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 369436,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 369436,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 369436,
+      "t": 198559,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "control",
-      "t": 370263,
+      "t": 200303,
       "id": "move-to-engineers"
     },
     {
       "type": "metric",
-      "t": 372445,
+      "t": 201526,
       "id": "grant-drift-count",
-      "value": 1
+      "value": 0
     },
     {
       "type": "check",
-      "t": 372445,
+      "t": 201526,
       "id": "grants-match-desired",
-      "status": "fail",
-      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
+      "status": "pass",
+      "observed": "[]"
     },
     {
       "type": "check",
-      "t": 372445,
+      "t": 201527,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 375428,
+      "t": 204487,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 375428,
+      "t": 204487,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
     },
     {
       "type": "check",
-      "t": 375428,
+      "t": 204487,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 378430,
+      "t": 207496,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 378430,
+      "t": 207496,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
     },
     {
       "type": "check",
-      "t": 378430,
+      "t": 207496,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 381438,
+      "t": 210529,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 381438,
+      "t": 210529,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
     },
     {
       "type": "check",
-      "t": 381438,
+      "t": 210529,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 384441,
+      "t": 213580,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 384441,
+      "t": 213580,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
     },
     {
       "type": "check",
-      "t": 384441,
+      "t": 213580,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 387458,
+      "t": 216537,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 387458,
+      "t": 216537,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
     },
     {
       "type": "check",
-      "t": 387458,
+      "t": 216537,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 390446,
+      "t": 219520,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 390446,
+      "t": 219520,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
     },
     {
       "type": "check",
-      "t": 390446,
+      "t": 219520,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 393452,
+      "t": 222545,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 393452,
+      "t": 222545,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
     },
     {
       "type": "check",
-      "t": 393452,
+      "t": 222545,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 396432,
+      "t": 225502,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 396432,
+      "t": 225502,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
     },
     {
       "type": "check",
-      "t": 396432,
+      "t": 225502,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 399431,
+      "t": 228503,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 399431,
+      "t": 228503,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
     },
     {
       "type": "check",
-      "t": 399431,
+      "t": 228503,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 402438,
+      "t": 231578,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 402438,
+      "t": 231578,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
     },
     {
       "type": "check",
-      "t": 402438,
+      "t": 231578,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 405429,
+      "t": 234553,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 405429,
+      "t": 234553,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
     },
     {
       "type": "check",
-      "t": 405429,
+      "t": 234553,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 408484,
+      "t": 237523,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 408484,
+      "t": 237523,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
     },
     {
       "type": "check",
-      "t": 408484,
+      "t": 237523,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 411432,
+      "t": 240512,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 411432,
+      "t": 240512,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
     },
     {
       "type": "check",
-      "t": 411432,
+      "t": 240512,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 414446,
+      "t": 243495,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 414446,
+      "t": 243495,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
     },
     {
       "type": "check",
-      "t": 414446,
+      "t": 243495,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 417459,
+      "t": 246510,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 417459,
+      "t": 246510,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
     },
     {
       "type": "check",
-      "t": 417459,
+      "t": 246510,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 420436,
+      "t": 249562,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 420436,
+      "t": 249562,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
     },
     {
       "type": "check",
-      "t": 420436,
+      "t": 249562,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 423445,
+      "t": 252538,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 423445,
+      "t": 252538,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
     },
     {
       "type": "check",
-      "t": 423445,
+      "t": 252538,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 426435,
+      "t": 255531,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 426435,
+      "t": 255531,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
     },
     {
       "type": "check",
-      "t": 426435,
+      "t": 255531,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 429423,
+      "t": 258500,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 429423,
+      "t": 258500,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"wrong_role\",\"desiredRole\":\"engineer\",\"actualRole\":\"analyst\"}]"
     },
     {
       "type": "check",
-      "t": 429423,
+      "t": 258500,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "flow",
-      "t": 432298,
+      "t": 261333,
       "edge": "okta-to-sync",
       "count": 2
     },
     {
       "type": "metric",
-      "t": 432298,
+      "t": 261333,
       "id": "audit-events-processed",
       "value": 2
     },
     {
       "type": "metric",
-      "t": 432477,
+      "t": 261500,
       "id": "audit-events-processed",
       "value": 3
     },
     {
       "type": "metric",
-      "t": 432777,
+      "t": 261854,
       "id": "provision-latency-ms",
-      "value": 62411
+      "value": 61644
     },
     {
       "type": "node",
-      "t": 432777,
+      "t": 261854,
       "node": "sync",
       "status": "healthy",
       "note": "applied engineer for lab-demo-user"
     },
     {
       "type": "node",
-      "t": 432777,
+      "t": 261854,
       "node": "tidb",
       "status": "healthy",
       "note": "granted engineer"
     },
     {
       "type": "flow",
-      "t": 432777,
+      "t": 261854,
       "edge": "sync-to-tidb",
       "count": 1
     },
     {
       "type": "phase",
-      "t": 432777,
+      "t": 261854,
       "phase": "rescope"
     },
     {
       "type": "metric",
-      "t": 432952,
+      "t": 262045,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 432952,
+      "t": 262045,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 432952,
+      "t": 262045,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 435451,
+      "t": 264523,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 435451,
+      "t": 264523,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 435451,
+      "t": 264523,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 438455,
+      "t": 267588,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 438455,
+      "t": 267588,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 438455,
+      "t": 267588,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 441454,
+      "t": 270569,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 441454,
+      "t": 270569,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 441454,
+      "t": 270569,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 444445,
+      "t": 273510,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 444445,
+      "t": 273510,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 444445,
+      "t": 273510,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 447447,
+      "t": 276518,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 447447,
+      "t": 276518,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 447447,
+      "t": 276518,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 450439,
+      "t": 279513,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 450439,
+      "t": 279513,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 450439,
+      "t": 279513,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 453452,
+      "t": 282499,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 453452,
+      "t": 282499,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 453452,
+      "t": 282499,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 456454,
+      "t": 285651,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 456454,
+      "t": 285651,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 456454,
+      "t": 285651,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 459455,
+      "t": 288561,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 459455,
+      "t": 288561,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 459455,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 462451,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 462451,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 462451,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 465437,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 465437,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 465437,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 468445,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 468446,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 468446,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 471446,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 471446,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 471446,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 474453,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 474453,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 474453,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 477446,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 477446,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 477446,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 480454,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 480454,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 480454,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 483463,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 483463,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 483463,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 486472,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 486472,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 486472,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 489442,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 489442,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 489442,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 492489,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 492489,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 492489,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 495479,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 495479,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 495479,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 498458,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 498458,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 498458,
+      "t": 288561,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "control",
-      "t": 500081,
+      "t": 290470,
       "id": "deactivate-user"
     },
     {
       "type": "metric",
-      "t": 501474,
+      "t": 291515,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 501474,
+      "t": 291515,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 501474,
+      "t": 291515,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 504466,
+      "t": 294511,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 504466,
+      "t": 294511,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 504466,
+      "t": 294511,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 507455,
+      "t": 297513,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 507455,
+      "t": 297513,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 507455,
+      "t": 297513,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 510458,
+      "t": 300616,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 510458,
+      "t": 300616,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 510458,
+      "t": 300616,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 513464,
+      "t": 303578,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 513464,
+      "t": 303578,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 513464,
+      "t": 303578,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 516454,
+      "t": 306540,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 516454,
+      "t": 306540,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 516454,
+      "t": 306540,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 519453,
+      "t": 309530,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 519453,
+      "t": 309530,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 519453,
+      "t": 309530,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 522464,
+      "t": 312515,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 522464,
+      "t": 312515,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 522464,
+      "t": 312515,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 525457,
+      "t": 315496,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 525457,
+      "t": 315496,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 525457,
+      "t": 315496,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 528462,
+      "t": 318508,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 528462,
+      "t": 318508,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 528462,
+      "t": 318508,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 531471,
+      "t": 321586,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 531471,
+      "t": 321586,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 531471,
+      "t": 321586,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 534463,
+      "t": 324536,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 534463,
+      "t": 324536,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 534463,
+      "t": 324536,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 537458,
+      "t": 327527,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 537458,
+      "t": 327527,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 537458,
+      "t": 327527,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 540462,
+      "t": 330507,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 540462,
+      "t": 330507,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 540462,
+      "t": 330507,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 543468,
+      "t": 333709,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 543468,
+      "t": 333709,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 543468,
+      "t": 333709,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 546475,
+      "t": 336493,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 546476,
+      "t": 336493,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 546476,
+      "t": 336493,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 549480,
+      "t": 339647,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 549480,
+      "t": 339647,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 549480,
+      "t": 339647,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 552463,
+      "t": 342627,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 552463,
+      "t": 342627,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 552463,
+      "t": 342627,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 555475,
+      "t": 345576,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 555475,
+      "t": 345576,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 555475,
+      "t": 345576,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 558476,
+      "t": 348540,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 558476,
+      "t": 348540,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 558476,
+      "t": 348540,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "flow",
-      "t": 561308,
+      "t": 351345,
       "edge": "okta-to-sync",
       "count": 1
     },
     {
       "type": "metric",
-      "t": 561308,
+      "t": 351345,
       "id": "audit-events-processed",
       "value": 4
     },
     {
       "type": "metric",
-      "t": 561356,
+      "t": 351401,
       "id": "revoke-latency-ms",
-      "value": 61263
+      "value": 61087
     },
     {
       "type": "node",
-      "t": 561356,
+      "t": 351401,
       "node": "sync",
       "status": "healthy",
       "note": "revoked access for lab-demo-user"
     },
     {
       "type": "flow",
-      "t": 561357,
+      "t": 351402,
       "edge": "sync-to-tidb",
       "count": 1
     },
     {
       "type": "flow",
-      "t": 561359,
+      "t": 351405,
       "edge": "app-to-tidb",
       "count": 1
     },
     {
       "type": "node",
-      "t": 561359,
+      "t": 351405,
       "node": "app",
       "status": "degraded",
       "note": "query rejected"
     },
     {
       "type": "check",
-      "t": 561359,
+      "t": 351405,
       "id": "revoked-user-rejected",
       "status": "pass"
     },
     {
       "type": "log",
-      "t": 561359,
+      "t": 351405,
       "level": "warn",
       "msg": "demo user access revoked",
       "node": "tidb"
     },
     {
       "type": "phase",
-      "t": 561359,
+      "t": 351405,
       "phase": "revoke"
     },
     {
       "type": "metric",
-      "t": 561535,
+      "t": 351835,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 561535,
+      "t": 351836,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 561535,
+      "t": 351836,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 564540,
+      "t": 354685,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 564540,
+      "t": 354685,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 564540,
+      "t": 354685,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 567505,
+      "t": 357620,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 567505,
+      "t": 357620,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 567505,
+      "t": 357620,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 570469,
+      "t": 360631,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 570469,
+      "t": 360631,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 570469,
+      "t": 360631,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 573472,
+      "t": 363594,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 573472,
+      "t": 363594,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 573472,
+      "t": 363594,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 576472,
+      "t": 366544,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 576472,
+      "t": 366544,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 576472,
+      "t": 366544,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 579515,
+      "t": 369541,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 579515,
+      "t": 369541,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 579515,
+      "t": 369541,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 582462,
+      "t": 372514,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 582462,
+      "t": 372514,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 582462,
+      "t": 372514,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 585482,
+      "t": 375657,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 585482,
+      "t": 375657,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 585482,
+      "t": 375657,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 588463,
+      "t": 378623,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 588463,
+      "t": 378623,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 588463,
+      "t": 378623,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 591476,
+      "t": 381596,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 591476,
+      "t": 381596,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 591476,
+      "t": 381596,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 594465,
+      "t": 384567,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 594465,
+      "t": 384567,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 594465,
+      "t": 384567,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 597466,
+      "t": 387517,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 597466,
+      "t": 387518,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 597466,
+      "t": 387518,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 600464,
+      "t": 390654,
       "id": "grant-drift-count",
       "value": 1
     },
     {
       "type": "check",
-      "t": 600464,
+      "t": 390654,
       "id": "grants-match-desired",
       "status": "fail",
       "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
     },
     {
       "type": "check",
-      "t": 600464,
+      "t": 390654,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 393646,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 393646,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 393646,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 396629,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 396629,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 396629,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 399603,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 399603,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 399603,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 402570,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 402570,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 402570,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 405539,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 405539,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 405539,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 408507,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 408507,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 408507,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "control",
-      "t": 601921,
+      "t": 411059,
       "id": "remove-from-groups"
     },
     {
       "type": "metric",
-      "t": 603474,
+      "t": 411653,
+      "id": "grant-drift-count",
+      "value": 1
+    },
+    {
+      "type": "check",
+      "t": 411653,
+      "id": "grants-match-desired",
+      "status": "fail",
+      "observed": "[{\"username\":\"lab-demo-user\",\"kind\":\"missing_user\",\"desiredRole\":\"engineer\",\"actualRole\":null}]"
+    },
+    {
+      "type": "check",
+      "t": 411653,
+      "id": "no-orphan-users",
+      "status": "pass"
+    },
+    {
+      "type": "metric",
+      "t": 414612,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 603474,
+      "t": 414612,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 603474,
+      "t": 414612,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "phase",
-      "t": 603474,
+      "t": 414612,
       "phase": "reconcile"
     },
     {
       "type": "metric",
-      "t": 606499,
+      "t": 417598,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 606499,
+      "t": 417598,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 606499,
+      "t": 417598,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 609478,
+      "t": 420557,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 609478,
+      "t": 420557,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 609478,
+      "t": 420557,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 612487,
+      "t": 423534,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 612487,
+      "t": 423534,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 612487,
+      "t": 423534,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 615472,
+      "t": 426663,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 615472,
+      "t": 426663,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 615472,
+      "t": 426663,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 618487,
+      "t": 429653,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 618487,
+      "t": 429653,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 618487,
+      "t": 429653,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 621493,
+      "t": 432602,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 621493,
+      "t": 432602,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 621493,
+      "t": 432602,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 624483,
+      "t": 435719,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 624483,
+      "t": 435719,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 624483,
+      "t": 435719,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 627484,
+      "t": 438567,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 627484,
+      "t": 438567,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 627484,
+      "t": 438567,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 630488,
+      "t": 441523,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 630488,
+      "t": 441523,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 630488,
+      "t": 441523,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 633467,
+      "t": 444659,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 633467,
+      "t": 444659,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 633467,
+      "t": 444659,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 636503,
+      "t": 447573,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 636503,
+      "t": 447573,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 636503,
+      "t": 447573,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 639771,
+      "t": 450562,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 639771,
+      "t": 450562,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 639771,
+      "t": 450562,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 642464,
+      "t": 453504,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 642464,
+      "t": 453504,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 642464,
+      "t": 453504,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 645461,
+      "t": 456519,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 645461,
+      "t": 456519,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 645461,
+      "t": 456519,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 648463,
+      "t": 459512,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 648463,
+      "t": 459512,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 648463,
+      "t": 459512,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 651496,
+      "t": 462523,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 651496,
+      "t": 462523,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 651496,
+      "t": 462523,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 654454,
+      "t": 465597,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 654454,
+      "t": 465597,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 654454,
+      "t": 465597,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 657474,
+      "t": 468558,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 657474,
+      "t": 468558,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 657474,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 660499,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 660500,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 660500,
+      "t": 468558,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "flow",
-      "t": 663305,
+      "t": 471366,
       "edge": "okta-to-sync",
       "count": 1
     },
     {
       "type": "metric",
-      "t": 663305,
+      "t": 471366,
       "id": "audit-events-processed",
       "value": 5
     },
     {
       "type": "metric",
-      "t": 663635,
+      "t": 471700,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 663635,
+      "t": 471700,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 663635,
+      "t": 471700,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 666478,
+      "t": 474576,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 666478,
+      "t": 474576,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 666478,
+      "t": 474576,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 669473,
+      "t": 477530,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 669473,
+      "t": 477530,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 669473,
+      "t": 477530,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 672470,
+      "t": 480522,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 672470,
+      "t": 480522,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 672470,
+      "t": 480522,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 675475,
+      "t": 483599,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 675475,
+      "t": 483599,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 675475,
+      "t": 483599,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 678482,
+      "t": 486744,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 678482,
+      "t": 486744,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 678482,
+      "t": 486744,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 681488,
+      "t": 489551,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 681488,
+      "t": 489552,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 681488,
+      "t": 489552,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 684468,
+      "t": 492520,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 684468,
+      "t": 492520,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 684468,
+      "t": 492520,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 687479,
+      "t": 495537,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 687479,
+      "t": 495537,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 687479,
+      "t": 495537,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 690468,
+      "t": 498595,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 690468,
+      "t": 498595,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 690468,
+      "t": 498595,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 693501,
+      "t": 501589,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 693501,
+      "t": 501589,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 693501,
+      "t": 501589,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 696503,
+      "t": 504924,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 696503,
+      "t": 504924,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 696503,
+      "t": 504924,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 699472,
+      "t": 507907,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 699472,
+      "t": 507907,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 699472,
+      "t": 507907,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 702478,
+      "t": 510456,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 702478,
+      "t": 510456,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 702478,
+      "t": 510456,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 705538,
+      "t": 513469,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 705538,
+      "t": 513469,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 705538,
+      "t": 513469,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 708488,
+      "t": 516571,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 708488,
+      "t": 516571,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 708488,
+      "t": 516571,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 711483,
+      "t": 519515,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 711483,
+      "t": 519515,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 711483,
+      "t": 519515,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 714471,
+      "t": 522520,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 714471,
+      "t": 522520,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 714471,
+      "t": 522520,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 717477,
+      "t": 525480,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 717477,
+      "t": 525480,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 717477,
+      "t": 525480,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 720483,
+      "t": 528470,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 720483,
+      "t": 528470,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 720483,
+      "t": 528470,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 723512,
+      "t": 531468,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 723512,
+      "t": 531468,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 723512,
+      "t": 531468,
       "id": "no-orphan-users",
       "status": "pass"
     },
     {
       "type": "metric",
-      "t": 726489,
+      "t": 534551,
       "id": "grant-drift-count",
       "value": 0
     },
     {
       "type": "check",
-      "t": 726489,
+      "t": 534551,
       "id": "grants-match-desired",
       "status": "pass",
       "observed": "[]"
     },
     {
       "type": "check",
-      "t": 726489,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 729734,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 729734,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 729734,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 732508,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 732508,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 732508,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 735530,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 735530,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 735530,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 738504,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 738504,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 738504,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 741488,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 741488,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 741488,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 744493,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 744493,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 744493,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 747509,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 747509,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 747509,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 750493,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 750493,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 750493,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 753476,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 753476,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 753476,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 756485,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 756485,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 756485,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 759497,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 759497,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 759497,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 762476,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 762476,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 762476,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 765490,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 765490,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 765490,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 768485,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 768485,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 768485,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 771536,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 771536,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 771536,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 774487,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 774487,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 774487,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 777490,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 777490,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 777490,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 780496,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 780496,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 780496,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 783488,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 783488,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 783488,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 786487,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 786487,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 786487,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 789509,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 789509,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 789509,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 792500,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 792500,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 792500,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 795492,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 795492,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 795492,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 798507,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 798507,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 798507,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 801471,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 801471,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 801471,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 804493,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 804493,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 804493,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 807503,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 807503,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 807503,
-      "id": "no-orphan-users",
-      "status": "pass"
-    },
-    {
-      "type": "metric",
-      "t": 810503,
-      "id": "grant-drift-count",
-      "value": 0
-    },
-    {
-      "type": "check",
-      "t": 810503,
-      "id": "grants-match-desired",
-      "status": "pass",
-      "observed": "[]"
-    },
-    {
-      "type": "check",
-      "t": 810503,
+      "t": 534551,
       "id": "no-orphan-users",
       "status": "pass"
     }
