@@ -19,5 +19,5 @@ export const App = () => {
   const route = parseRoute(useHash());
   if (route.page === 'catalog') return <CatalogPage load={fetchCatalog} />;
   if (route.relay !== undefined && isLocalRelay(route.relay)) return <LivePage key={route.relay} relayUrl={route.relay} />;
-  return <ReplayPage key={route.id} id={route.id} load={fetchTrace} />;
+  return <ReplayPage key={route.id} id={route.id} load={fetchTrace} initialPositionMs={route.t} />;
 };

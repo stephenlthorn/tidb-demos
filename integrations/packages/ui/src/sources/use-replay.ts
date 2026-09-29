@@ -12,8 +12,8 @@ export type Replay = {
   readonly setSpeed: (speed: number) => void;
 };
 
-export const useReplay = (trace: Trace): Replay => {
-  const [player, setPlayer] = useState<PlayerState>(() => createPlayer(trace.durationMs));
+export const useReplay = (trace: Trace, initialPositionMs = 0): Replay => {
+  const [player, setPlayer] = useState<PlayerState>(() => seek(createPlayer(trace.durationMs), initialPositionMs));
   const folded = useRef<Folded | undefined>(undefined);
 
   useEffect(() => {

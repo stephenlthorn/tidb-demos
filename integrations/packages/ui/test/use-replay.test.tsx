@@ -46,4 +46,15 @@ describe('useReplay', () => {
     });
     expect(result.current.player.positionMs).toBe(3000);
   });
+
+  it('starts paused at the given initial position', () => {
+    const { result } = renderHook(() => useReplay(trace, 15000));
+    expect(result.current.player.positionMs).toBe(15000);
+    expect(result.current.player.playing).toBe(false);
+  });
+
+  it('clamps the initial position to the trace duration', () => {
+    const { result } = renderHook(() => useReplay(trace, 999999));
+    expect(result.current.player.positionMs).toBe(60000);
+  });
 });

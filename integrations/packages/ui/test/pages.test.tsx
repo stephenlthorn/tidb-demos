@@ -6,7 +6,21 @@ import { CatalogPage } from '../src/pages/CatalogPage';
 import { ReplayView } from '../src/pages/ReplayPage';
 
 const entries: readonly CatalogEntry[] = [
-  { id: 'kafka', number: 2, title: 'Kafka in and out', tagline: 'Streams both ways', integrations: ['Kafka'], hasReplay: true },
+  {
+    id: 'kafka',
+    number: 2,
+    title: 'Kafka in and out',
+    tagline: 'Streams both ways',
+    integrations: ['Kafka'],
+    hasReplay: true,
+    media: {
+      videos: [{ src: 'data/media/kafka/kafka-live.mp4', title: 'Live' }],
+      screenshots: [
+        { src: 'data/media/kafka/screenshots/01-start.jpg', caption: 'Start', group: 'console' },
+        { src: 'data/media/kafka/screenshots/02-end.jpg', caption: 'End', group: 'console' },
+      ],
+    },
+  },
   { id: 'okta', number: 5, title: 'Okta lifecycle', tagline: 'Revoke in seconds', integrations: ['Okta'], hasReplay: false },
 ];
 
@@ -30,6 +44,14 @@ describe('CatalogPage', () => {
     expect(screen.getByText('Replay ready')).toBeTruthy();
     expect(screen.getByText('Recording coming soon')).toBeTruthy();
     expect(screen.getByText('Kafka in and out').closest('a')?.getAttribute('href')).toBe('#/demo/kafka');
+  });
+
+  it('badges cards that have media', async () => {
+    render(<CatalogPage load={async () => entries} />);
+    await screen.findByText('Kafka in and out');
+    expect(screen.getByText('Video')).toBeTruthy();
+    expect(screen.getByText('2 screenshots')).toBeTruthy();
+    expect(screen.queryByText('Okta lifecycle')?.closest('a')?.textContent).not.toContain('Video');
   });
 
   it('shows an error when the catalog cannot load', async () => {

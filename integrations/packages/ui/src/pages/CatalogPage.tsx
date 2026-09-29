@@ -29,6 +29,12 @@ export const CatalogPage = ({ load }: { readonly load: () => Promise<readonly Ca
               <p>{entry.tagline}</p>
               <ul className="chips">{entry.integrations.map((name) => <li key={name}>{name}</li>)}</ul>
               <span className="card-status">{entry.hasReplay ? 'Replay ready' : 'Recording coming soon'}</span>
+              {(entry.media?.videos.length ?? 0) > 0 || (entry.media?.screenshots.length ?? 0) > 0 ? (
+                <ul className="badges">
+                  {(entry.media?.videos.length ?? 0) > 0 && <li className="badge badge-video">Video</li>}
+                  {(entry.media?.screenshots.length ?? 0) > 0 && <li className="badge badge-screenshots">{`${entry.media?.screenshots.length} screenshots`}</li>}
+                </ul>
+              ) : null}
             </a>
           </li>
         ))}

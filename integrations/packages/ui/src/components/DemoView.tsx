@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
-import type { DemoManifest } from '@lab/contract';
+import type { CatalogMedia, DemoManifest } from '@lab/contract';
 import { FlowDiagram } from '../diagram/FlowDiagram';
 import type { DemoState } from '../state/demo-state';
 import { ChecksPanel } from './ChecksPanel';
 import { LogConsole } from './LogConsole';
+import { MediaGallery } from './MediaGallery';
 import { MetricTile } from './MetricTile';
 import { PhaseTimeline } from './PhaseTimeline';
 
@@ -12,6 +13,7 @@ export const DemoView = (props: {
   readonly state: DemoState;
   readonly badge: ReactNode;
   readonly footer: ReactNode;
+  readonly media?: CatalogMedia;
 }) => (
   <div className="demo">
     <header className="demo-header">
@@ -35,5 +37,6 @@ export const DemoView = (props: {
       <LogConsole logs={props.state.logs} />
     </div>
     <footer className="demo-footer">{props.footer}</footer>
+    <MediaGallery media={props.media} />
   </div>
 );

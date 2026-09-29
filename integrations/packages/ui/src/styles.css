@@ -41,6 +41,9 @@ a { color: inherit; }
 .card h2 { margin: 6px 0; font-size: 1.1rem; }
 .card p { margin: 0 0 10px; color: var(--muted); }
 .card-status { font-size: 0.8rem; color: var(--muted); }
+.badges { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.badges .badge { font-size: 0.72rem; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.badges .badge-video { border-color: var(--accent); color: var(--accent); }
 .chips { list-style: none; padding: 0; margin: 6px 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .chips li { font-size: 0.75rem; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; }
 .back { font-size: 0.85rem; color: var(--muted); }
@@ -102,3 +105,17 @@ a { color: inherit; }
 button { font: inherit; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
 button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
+.media { margin-top: 16px; padding: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+.media h2 { margin: 0 0 12px; font-size: 1rem; }
+.media h3 { margin: 16px 0 8px; font-size: 0.85rem; color: var(--muted); font-weight: 600; }
+.media-videos { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.media-video video { width: 100%; border-radius: 10px; background: #000; }
+.media-video figcaption { margin-top: 6px; font-size: 0.8rem; color: var(--muted); }
+.media-grid { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+.media-grid li button { padding: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); }
+.media-grid img { display: block; width: 100%; height: 90px; object-fit: cover; }
+.media-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75); display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 10; }
+.media-overlay-body { position: relative; max-width: min(90vw, 960px); max-height: 90vh; overflow: auto; background: var(--panel); border-radius: 14px; padding: 16px; }
+.media-overlay-body img { display: block; max-width: 100%; max-height: 75vh; margin: 0 auto; border-radius: 8px; }
+.media-overlay-body p { margin: 10px 0 0; color: var(--muted); text-align: center; }
+.media-overlay-close { position: absolute; top: 8px; right: 8px; }

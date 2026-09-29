@@ -8,8 +8,23 @@ describe('parseRoute', () => {
   });
 
   it('parses a demo route with and without a relay', () => {
-    expect(parseRoute('#/demo/kafka')).toEqual({ page: 'demo', id: 'kafka', relay: undefined });
-    expect(parseRoute('#/demo/kafka?relay=http://localhost:7070')).toEqual({ page: 'demo', id: 'kafka', relay: 'http://localhost:7070' });
+    expect(parseRoute('#/demo/kafka')).toEqual({ page: 'demo', id: 'kafka', relay: undefined, t: undefined });
+    expect(parseRoute('#/demo/kafka?relay=http://localhost:7070')).toEqual({ page: 'demo', id: 'kafka', relay: 'http://localhost:7070', t: undefined });
+  });
+
+  it('parses a deep-link start position', () => {
+    expect(parseRoute('#/demo/kafka?t=1500')).toEqual({ page: 'demo', id: 'kafka', relay: undefined, t: 1500 });
+    expect(parseRoute('#/demo/kafka?relay=http://localhost:7070&t=2500')).toEqual({
+      page: 'demo',
+      id: 'kafka',
+      relay: 'http://localhost:7070',
+      t: 2500,
+    });
+  });
+
+  it('ignores an invalid start position', () => {
+    expect(parseRoute('#/demo/kafka?t=not-a-number')).toEqual({ page: 'demo', id: 'kafka', relay: undefined, t: undefined });
+    expect(parseRoute('#/demo/kafka?t=-500')).toEqual({ page: 'demo', id: 'kafka', relay: undefined, t: undefined });
   });
 
   it('builds demo links', () => {

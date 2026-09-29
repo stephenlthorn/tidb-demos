@@ -28,6 +28,15 @@ export const loadFeaturedTrace = async (dir: string): Promise<Trace | undefined>
   return text === undefined ? undefined : TraceSchema.parse(JSON.parse(text));
 };
 
+export const readdirOptional = async (dir: string): Promise<readonly string[]> => {
+  try {
+    return await readdir(dir);
+  } catch (error) {
+    if (isMissing(error)) return [];
+    throw error;
+  }
+};
+
 export const listDemoIds = async (root: string): Promise<readonly string[]> => {
   const entries = await readdir(join(root, 'demos'), { withFileTypes: true });
   const candidates = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
