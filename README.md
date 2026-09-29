@@ -39,6 +39,5 @@ A collection of TiDB demo repositories showcasing various use cases and applicat
 | 09 | [Datadog](integrations/demos/datadog/) | TiDB metrics, APM traces to a SQL digest, and Monitors that fire and resolve | Local + Datadog account | pending |
 | 10 | [Terraform / EKS](integrations/demos/terraform-eks/) | TiDB Cloud, EKS and an app provisioned in one `terraform apply` | AWS + TiDB Cloud | pending |
 | 11 | [Power BI](integrations/demos/power-bi/) | One TiDB cluster serves the order pipeline and a live Power BI report, with no ETL | TiDB Cloud Starter + Power BI | pending |
-| 12 | [Call copilot](integrations/demos/call-copilot/) | Live retrieval-grounded suggestions during a call, on TiDB hybrid search | TiDB Cloud Starter + LLM and speech APIs | pending |
 
 All code is built and tested. "Pending" means the demo has not been run live and recorded yet. Plans, one per demo, are in [integrations/docs/plans/](integrations/docs/plans/).

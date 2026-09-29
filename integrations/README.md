@@ -28,7 +28,6 @@ pnpm dev                           # open the printed URL
 | 09 | [Datadog](demos/datadog/) | Local + Datadog account | pending |
 | 10 | [Terraform / EKS](demos/terraform-eks/) | AWS + TiDB Cloud | pending |
 | 11 | [Power BI](demos/power-bi/) | TiDB Cloud Starter + Power BI | pending |
-| 12 | [Call copilot](demos/call-copilot/) | TiDB Cloud Starter + LLM and speech APIs | pending |
 
 Each demo folder has a README (prerequisites, run, record, teardown, cost notes) and a TALK-TRACK.md. The full plan for each demo, including what was verified against real systems, is in [docs/plans/](docs/plans/README.md).
 

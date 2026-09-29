@@ -1,6 +1,6 @@
 # TiDB Integration Lab: Roadmap
 
-**Source of the asks:** the NA Solutions Engineering team thread (2026-09-25) on which tools, demos, and PoCs would help sell more. The requests were Chalk, Kafka, Datadog, Prometheus/Grafana, Power BI, AWS DMS, Debezium, Redis, Okta, Terraform/EKS, Databricks, plus a call copilot that listens to Zoom/Teams/Meet audio and helps SEs and AEs live.
+**Source of the asks:** the NA Solutions Engineering team thread (2026-09-25) on which tools, demos, and PoCs would help sell more. The requests were Chalk, Kafka, Datadog, Prometheus/Grafana, Power BI, AWS DMS, Debezium, Redis, Okta, Terraform/EKS, Databricks. The call copilot that was also asked for is a separate tool, not part of this lab.
 
 **What every demo gets:** an animated flow diagram of the real data path, live metric tiles with sparklines (each one says exactly how it was measured), a phase timeline whose captions double as the talk track, correctness checks, and buttons that inject events (bursts, faults, revokes). Every demo runs **live** against real systems for calls, and records a **replay** that a static website plays back with play, pause, speed, and scrub.
 
@@ -22,9 +22,8 @@
 | 9 | [09-datadog.md](09-datadog.md) | Datadog: integration, APM spans with SQL, monitors | Reuses Plan 08's workload and faults | Datadog trial + local/TiDB Cloud | 2 days |
 | 10 | [10-terraform-eks.md](10-terraform-eks.md) | Terraform + EKS: provision, connect privately, scale in place | Platform teams and bring-your-own-cloud style questions; most expensive to run | AWS + TiDB Cloud | 3 days |
 | 11 | [11-power-bi.md](11-power-bi.md) | Power BI: live dashboards on TiFlash without ETL | Needs a Windows machine; lowest priority of the asks | Windows VM + TiDB | 2 days |
-| 12 | [12-call-copilot.md](12-call-copilot.md) | Call copilot: live audio to suggestions, TiDB hybrid search as memory | Separate track: an internal tool that is also a TiDB vector + full-text showcase | Local + APIs | 4-5 days |
 
-Plans 01, 02 and 12 can run in parallel after Plan 00 if more than one person builds. Plan 03 needs 02's infra; 09 needs 08's workload generator.
+Plans 01 and 02 can run in parallel after Plan 00 if more than one person builds. Plan 03 needs 02's infra; 09 needs 08's workload generator.
 
 ## Architecture at a glance
 

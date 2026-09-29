@@ -5071,7 +5071,7 @@ See `docs/plans/README.md` for the full roadmap and one plan per demo.
 - Every metric says how it was measured; every replay says where it was recorded.
 ````
 
-Root `README.md`: add under a new `## Integration Lab` heading one line linking `integrations/` with the sentence "Animated, measured demos of TiDB with Kafka, AWS DMS, Debezium, Redis, Okta, Databricks, Chalk, Prometheus/Grafana, Datadog, Terraform/EKS, Power BI, and a live call copilot."
+Root `README.md`: add under a new `## Integration Lab` heading one line linking `integrations/` with the sentence "Animated, measured demos of TiDB with Kafka, AWS DMS, Debezium, Redis, Okta, Databricks, Chalk, Prometheus/Grafana, Datadog, Terraform/EKS, and Power BI."
 
 - [ ] **Step 5: Commit and push**
 
