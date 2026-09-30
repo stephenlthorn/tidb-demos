@@ -4,6 +4,8 @@ Demos of TiDB working with the tools customers already run. Each demo shows the 
 
 ## Quick start
 
+**Live site (no install):** https://stephenlthorn.github.io/tidb-demos/ plays every replay and shows the console video and screenshots.
+
 ### Watch the recorded replays (no database or cloud account needed)
 
 Requirements: Node.js 22+ and pnpm 10+ (`npm install -g pnpm`).
@@ -63,3 +65,7 @@ A replay is one real run. It is never edited by hand, and it carries the environ
 
 - No customer names or internal links anywhere (`pnpm lab check-public` enforces it).
 - Every metric says how it was measured; every replay says where it was recorded.
+
+## Publishing the site
+
+`pnpm build:site` builds the static site into `packages/ui/dist`. It is published by pushing that folder to the `gh-pages` branch (served at https://stephenlthorn.github.io/tidb-demos/).

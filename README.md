@@ -41,6 +41,8 @@ A collection of TiDB demo repositories showcasing various use cases and applicat
 
 Every demo has been run live and recorded; each replay carries the environment it was recorded in.
 
+**Watch it in your browser, no install:** https://stephenlthorn.github.io/tidb-demos/
+
 To watch the replays on your machine (Node.js 22+ and pnpm 10+, no database needed):
 
 ```bash
