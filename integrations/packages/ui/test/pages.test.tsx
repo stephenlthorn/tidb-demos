@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { CatalogEntry, Trace } from '@lab/contract';
 import { aManifest } from '@lab/contract/testing';
+import { AppBar } from '../src/components/AppBar';
 import { CatalogPage } from '../src/pages/CatalogPage';
 import { ReplayView } from '../src/pages/ReplayPage';
 
@@ -46,6 +47,16 @@ describe('CatalogPage', () => {
     expect(screen.getByText('Kafka in and out').closest('a')?.getAttribute('href')).toBe('#/demo/kafka');
   });
 
+  it('opens with a hero and presents each demo as a story card', async () => {
+    render(<CatalogPage load={async () => entries} />);
+    expect(await screen.findByRole('heading', { level: 1, name: 'TiDB, working with the tools you already run.' })).toBeTruthy();
+    expect(screen.getByText('Integration Lab', { selector: '.eyebrow' })).toBeTruthy();
+    const kafka = screen.getByText('Kafka in and out').closest('a');
+    expect(kafka?.querySelector('.card-tag')?.textContent).toBe('Kafka');
+    expect(kafka?.textContent).toContain('Watch replay →');
+    expect(screen.getByText('Okta lifecycle').closest('a')?.textContent).not.toContain('Watch replay');
+  });
+
   it('badges cards that have media', async () => {
     render(<CatalogPage load={async () => entries} />);
     await screen.findByText('Kafka in and out');
@@ -57,6 +68,17 @@ describe('CatalogPage', () => {
   it('shows an error when the catalog cannot load', async () => {
     render(<CatalogPage load={async () => { throw new Error('offline'); }} />);
     expect(await screen.findByText('Could not load demos: offline')).toBeTruthy();
+  });
+});
+
+describe('AppBar', () => {
+  it('links the wordmark home and offers an all-demos pill away from the catalog', () => {
+    const { rerender } = render(<AppBar showHome={false} />);
+    expect(screen.getByRole('link', { name: /^TiDB Integration Lab/ }).getAttribute('href')).toBe('#/');
+    expect(screen.getByText('Integration Lab')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'All demos' })).toBeNull();
+    rerender(<AppBar showHome />);
+    expect(screen.getByRole('link', { name: 'All demos' }).getAttribute('href')).toBe('#/');
   });
 });
 

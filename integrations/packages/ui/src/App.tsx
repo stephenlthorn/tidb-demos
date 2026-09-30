@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { AppBar } from './components/AppBar';
 import { fetchCatalog, fetchTrace } from './data';
 import { CatalogPage } from './pages/CatalogPage';
 import { LivePage } from './pages/LivePage';
@@ -15,9 +16,18 @@ const useHash = (): string => {
   return hash;
 };
 
-export const App = () => {
-  const route = parseRoute(useHash());
+const Page = ({ route }: { readonly route: ReturnType<typeof parseRoute> }) => {
   if (route.page === 'catalog') return <CatalogPage load={fetchCatalog} />;
   if (route.relay !== undefined && isLocalRelay(route.relay)) return <LivePage key={route.relay} relayUrl={route.relay} />;
   return <ReplayPage key={route.id} id={route.id} load={fetchTrace} initialPositionMs={route.t} />;
+};
+
+export const App = () => {
+  const route = parseRoute(useHash());
+  return (
+    <>
+      <AppBar showHome={route.page !== 'catalog'} />
+      <Page route={route} />
+    </>
+  );
 };

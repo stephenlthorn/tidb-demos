@@ -28,11 +28,14 @@ describe('MetricTile', () => {
 });
 
 describe('PhaseTimeline', () => {
-  it('marks the current phase and shows its narration', () => {
+  it('is a numbered step rail that marks the current phase and the ones already done', () => {
     render(<PhaseTimeline phases={manifest.phases} current="burst" />);
-    expect(screen.getByText('Ten times the load.')).toBeTruthy();
-    expect(screen.getByText('2. Burst').getAttribute('aria-current')).toBe('step');
-    expect(screen.getByText('1. Warm up').getAttribute('data-done')).toBe('true');
+    const burst = screen.getByText('Burst').closest('li');
+    const warmup = screen.getByText('Warm up').closest('li');
+    expect(burst?.getAttribute('aria-current')).toBe('step');
+    expect(burst?.querySelector('.marker')?.textContent).toBe('2');
+    expect(warmup?.getAttribute('data-done')).toBe('true');
+    expect(screen.getByRole('progressbar', { name: 'Phase progress' }).getAttribute('aria-valuenow')).toBe('2');
   });
 });
 
@@ -40,7 +43,7 @@ describe('ChecksPanel', () => {
   it('shows status and observed value', () => {
     const state = foldEvents(manifest, [{ type: 'check', t: 0, id: 'counts-match', status: 'fail', observed: '99 != 100' }]);
     render(<ChecksPanel manifest={manifest} state={state} />);
-    expect(screen.getByText('FAIL')).toBeTruthy();
+    expect(screen.getByText('FAIL').closest('.pill')?.getAttribute('data-tone')).toBe('warn');
     expect(screen.getByText('99 != 100')).toBeTruthy();
   });
 });
@@ -74,5 +77,14 @@ describe('DemoView', () => {
     expect(screen.getByRole('img', { name: 'Example data flow' })).toBeTruthy();
     expect(screen.getByText('We start the pipeline.')).toBeTruthy();
     expect(screen.getByText('Counts match')).toBeTruthy();
+  });
+
+  it('leads with the integrations as an eyebrow and names the phase in sequence', () => {
+    const state = foldEvents(manifest, [{ type: 'phase', t: 0, phase: 'burst' }]);
+    render(<DemoView manifest={manifest} state={state} footer={null} badge={null} />);
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(manifest.title);
+    expect(screen.getByText(manifest.integrations.join(' · '), { selector: '.eyebrow' })).toBeTruthy();
+    expect(screen.getByText('Phase 2 of 2 · Burst')).toBeTruthy();
+    expect(screen.getByText('Ten times the load.')).toBeTruthy();
   });
 });

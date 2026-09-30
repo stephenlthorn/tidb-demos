@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { downsample, seriesPath } from '../src/charts/path';
-import { CANVAS, NODE_SIZE, edgeCurve, edgePath, laneBends, midpoint, particleSpec, toCanvas } from '../src/diagram/geometry';
+import { CANVAS, NODE_SIZE, edgeCurve, edgePath, fitViewBox, laneBends, midpoint, particleSpec, toCanvas } from '../src/diagram/geometry';
 
 describe('diagram geometry', () => {
   it('maps percentage coordinates onto the canvas', () => {
@@ -47,6 +47,26 @@ describe('diagram geometry', () => {
     expect(fast.count).toBeGreaterThan(slow.count);
     expect(fast.durationS).toBeLessThan(slow.durationS);
     expect(particleSpec(1e12).count).toBe(12);
+  });
+});
+
+describe('fitViewBox', () => {
+  it('crops empty vertical space around a single row of nodes but keeps the full width', () => {
+    const box = fitViewBox({ points: [{ x: 100, y: 450 }, { x: 900, y: 450 }], maxBend: 0 });
+    expect(box.x).toBe(0);
+    expect(box.width).toBe(CANVAS.width);
+    expect(box.y).toBeGreaterThan(300);
+    expect(box.y).toBeLessThan(450 - NODE_SIZE.height / 2);
+    expect(box.y + box.height).toBeGreaterThan(450 + NODE_SIZE.height / 2);
+    expect(box.height).toBeLessThan(CANVAS.height / 2);
+  });
+
+  it('leaves room for bent lanes and never grows past the canvas', () => {
+    const flat = fitViewBox({ points: [{ x: 100, y: 280 }], maxBend: 0 });
+    const bent = fitViewBox({ points: [{ x: 100, y: 280 }], maxBend: 60 });
+    expect(bent.height).toBeGreaterThan(flat.height);
+    const spread = fitViewBox({ points: [{ x: 100, y: 32 }, { x: 100, y: 528 }], maxBend: 120 });
+    expect(spread).toEqual({ x: 0, y: 0, width: CANVAS.width, height: CANVAS.height });
   });
 });
 

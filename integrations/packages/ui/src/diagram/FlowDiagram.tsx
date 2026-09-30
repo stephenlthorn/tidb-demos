@@ -2,7 +2,7 @@ import type { DemoManifest, ManifestEdge, ManifestNode, NodeStatus } from '@lab/
 import { formatRate } from '../format';
 import type { DemoState } from '../state/demo-state';
 import { edgeRate } from '../state/selectors';
-import { CANVAS, NODE_SIZE, edgeCurve, laneBends, particleSpec, toCanvas, type Point } from './geometry';
+import { NODE_SIZE, edgeCurve, fitViewBox, laneBends, particleSpec, toCanvas, type Point } from './geometry';
 
 const FlowEdge = ({ edge, from, to, bend, rate }: { readonly edge: ManifestEdge; readonly from: Point; readonly to: Point; readonly bend: number; readonly rate: number }) => {
   const { d, mid } = edgeCurve(from, to, bend);
@@ -33,8 +33,9 @@ const FlowNode = ({ node, at, status, note }: { readonly node: ManifestNode; rea
 export const FlowDiagram = ({ manifest, state }: { readonly manifest: DemoManifest; readonly state: DemoState }) => {
   const positions = new Map(manifest.nodes.map((node) => [node.id, toCanvas(node)]));
   const bends = laneBends(manifest.edges);
+  const box = fitViewBox({ points: [...positions.values()], maxBend: Math.max(0, ...[...bends.values()].map(Math.abs)) });
   return (
-    <svg className="flow" viewBox={`0 0 ${CANVAS.width} ${CANVAS.height}`} role="img" aria-label={`${manifest.title} data flow`}>
+    <svg className="flow" viewBox={`${box.x} ${box.y} ${box.width} ${box.height}`} role="img" aria-label={`${manifest.title} data flow`}>
       {manifest.edges.map((edge) => {
         const from = positions.get(edge.from);
         const to = positions.get(edge.to);

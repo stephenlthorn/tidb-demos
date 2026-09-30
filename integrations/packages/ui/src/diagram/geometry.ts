@@ -15,6 +15,18 @@ export const toCanvas = (node: ManifestNode): Point => ({
   y: clamp((node.y / 100) * CANVAS.height, NODE_SIZE.height / 2, CANVAS.height - NODE_SIZE.height / 2),
 });
 
+const VIEW_PAD = { top: 44, bottom: 40 } as const;
+
+export type ViewBox = { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+
+export const fitViewBox = ({ points, maxBend }: { readonly points: readonly Point[]; readonly maxBend: number }): ViewBox => {
+  if (points.length === 0) return { x: 0, y: 0, width: CANVAS.width, height: CANVAS.height };
+  const ys = points.map((point) => point.y);
+  const top = Math.max(0, Math.min(...ys) - NODE_SIZE.height / 2 - VIEW_PAD.top - maxBend);
+  const bottom = Math.min(CANVAS.height, Math.max(...ys) + NODE_SIZE.height / 2 + VIEW_PAD.bottom + maxBend);
+  return { x: 0, y: top, width: CANVAS.width, height: bottom - top };
+};
+
 export const edgePath = (from: Point, to: Point): string => {
   const dx = (to.x - from.x) / 2;
   return `M ${from.x} ${from.y} C ${from.x + dx} ${from.y}, ${to.x - dx} ${to.y}, ${to.x} ${to.y}`;
