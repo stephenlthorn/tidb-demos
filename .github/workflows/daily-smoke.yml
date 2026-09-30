@@ -15,6 +15,9 @@ jobs:
   smoke-test:
     name: Smoke test (automated)
     runs-on: ubuntu-latest
+    env:
+      SKIP_URL_CHECK: ${{ secrets.SKIP_URL_CHECK }}
+      HAS_TIDB_SECRETS: ${{ secrets.TIDB_HOST != '' }}
 
     steps:
       - name: Checkout
@@ -40,7 +43,7 @@ jobs:
       # Set SKIP_URL_CHECK secret to 'true' to disable temporarily (flaky DNS, etc.)
       - name: URL reachability (labs.tidb.io + public docs)
         working-directory: tidb-tutor
-        if: ${{ secrets.SKIP_URL_CHECK != 'true' }}
+        if: ${{ env.SKIP_URL_CHECK != 'true' }}
         run: python test_suite.py
         # Note: test_suite.py --quick skips URLs; running without --quick checks them.
         # This step may warn on 403s from HEAD-blocked servers — that is expected.
@@ -52,7 +55,7 @@ jobs:
       # production or shared SE environment.
       - name: Cluster connectivity + RU collector
         working-directory: tidb-tutor
-        if: ${{ secrets.TIDB_HOST != '' }}
+        if: ${{ env.HAS_TIDB_SECRETS == 'true' }}
         env:
           TIDB_HOST:     ${{ secrets.TIDB_HOST }}
           TIDB_PORT:     '4000'
