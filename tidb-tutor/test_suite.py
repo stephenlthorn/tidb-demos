@@ -73,9 +73,11 @@ def check_url(url: str, timeout: int = 8) -> tuple[bool, str]:
         with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:
             return True, f"HTTP {r.status}"
     except urllib.error.HTTPError as e:
-        # 403/405 still means the server answered — URL is live
-        if e.code in (403, 405):
-            return True, f"HTTP {e.code} (server answered)"
+        # 401/403/405 still means the server answered; the URL is live.
+        # 401 is how labs.tidb.io answers every /exam/<id> page until you sign in.
+        if e.code in (401, 403, 405):
+            label = "sign-in required" if e.code == 401 else "server answered"
+            return True, f"HTTP {e.code} ({label})"
         return False, f"HTTP {e.code}"
     except Exception as e:
         return False, str(e)[:80]
