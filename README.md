@@ -41,6 +41,23 @@ A collection of TiDB demo repositories showcasing various use cases and applicat
 
 Every demo has been run live and recorded; each replay carries the environment it was recorded in.
 
+### Next up: the TiDB Cloud agent stack (planned, not built yet)
+
+AI agents need three kinds of data, and TiDB Cloud now has a product for each:
+
+- **TiDB Cloud Filesystem** holds an agent's **files**: a persistent workspace that outlives any sandbox, with copy-on-write layers, checkpoints and forks, plus an append-only journal for auditing.
+- **TiDB X**, the architecture behind TiDB Cloud Starter, Essential and Premium, holds the agent's **live state**: a database per agent or per task, copy-on-write branches taken at a point in time, and vector, full-text and hybrid search in plain SQL for agent memory.
+- **TiDB Cloud Lake** holds the **history**: a cloud data warehouse where every run, decision and outcome lands for analytics and evaluation.
+
+Two new demos show all three working together. Each one will be built like the demos above: it runs live against the real products, a run is recorded, and the site replays it with the animated diagram, metrics, captions and checks.
+
+| # | Demo | The story | What it proves |
+|---|---|---|---|
+| 12 | [Coding-agent platform](integrations/docs/plans/12-agent-coding-platform.md) | A fictional company, Kiteline, sells an AI coding agent. One ticket fans out into three attempts at the fix. | Each attempt gets its own Filesystem layer and its own Starter database branch, both starting from the same point. A failed attempt is rebuilt exactly as it stood at the failing step, and the same tests fail again. Run events reach Lake within about a minute for evaluation, and the lesson learned goes back into the agent's memory. |
+| 13 | [Anti-money-laundering agent](integrations/docs/plans/13-agent-aml.md) | A fictional bank, Harbor Mutual, runs an agent that investigates suspicious transactions. Synthetic data only. | Every alert gets a case workspace in the Filesystem and an investigation branch, so a rule change can be tested without touching production. Past cases are recalled with hybrid search. Lake measures the precision of each rule version, and an improved skill reaches the shared workspace only when a person promotes it. |
+
+Both demos use a scripted agent rather than a language model, so the replay measures the data infrastructure, not model quality. Filesystem, branching and Lake are in public preview, and the plans list every product fact still to be confirmed against a live account before building.
+
 **Watch it in your browser, no install:** https://stephenlthorn.github.io/tidb-demos/
 
 To watch the replays on your machine (Node.js 22+ and pnpm 10+, no database needed):
