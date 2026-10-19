@@ -1,0 +1,445 @@
+{
+  "id": "agent-aml",
+  "number": 13,
+  "title": "TiDB Cloud agent stack: anti-money-laundering agent (Filesystem + TiDB X + Lake)",
+  "tagline": "A scripted AML investigator opens a case layer and a database branch per alert, remembers past cases, and learns a better rule in Lake, all on synthetic data.",
+  "integrations": [
+    "TiDB Cloud Filesystem",
+    "TiDB Cloud Starter",
+    "TiDB Cloud Lake",
+    "Amazon S3"
+  ],
+  "pattern": "Financial services teams asking how an investigation agent can keep case evidence isolated, test rule changes safely, remember past cases and improve over time without touching production data.",
+  "publish": true,
+  "runner": {
+    "command": [
+      "node",
+      "--import",
+      "tsx",
+      "runner/main.ts"
+    ],
+    "cwd": "."
+  },
+  "nodes": [
+    {
+      "id": "txn-generator",
+      "label": "Synthetic Transaction Generator",
+      "kind": "source",
+      "x": 6,
+      "y": 15
+    },
+    {
+      "id": "harbor-core",
+      "label": "harbor-core (TiDB Cloud Starter)",
+      "kind": "tidb",
+      "x": 28,
+      "y": 15
+    },
+    {
+      "id": "episodic-memory",
+      "label": "Episodic Memory (hybrid search)",
+      "kind": "tidb",
+      "x": 52,
+      "y": 15
+    },
+    {
+      "id": "rule-engine",
+      "label": "Rule Engine and Alerts",
+      "kind": "service",
+      "x": 28,
+      "y": 45
+    },
+    {
+      "id": "agent-harness",
+      "label": "Scripted Agent Harness",
+      "kind": "service",
+      "x": 52,
+      "y": 45
+    },
+    {
+      "id": "case-layers",
+      "label": "Case File System (layers)",
+      "kind": "cloud",
+      "x": 82,
+      "y": 22
+    },
+    {
+      "id": "case-journal",
+      "label": "Case Journal (hash chain)",
+      "kind": "cloud",
+      "x": 82,
+      "y": 42
+    },
+    {
+      "id": "vault",
+      "label": "Vault (delegated grant)",
+      "kind": "identity",
+      "x": 82,
+      "y": 60
+    },
+    {
+      "id": "skills-base",
+      "label": "Skills (base file system)",
+      "kind": "cloud",
+      "x": 82,
+      "y": 80
+    },
+    {
+      "id": "investigation-branch",
+      "label": "Investigation Branch (Starter)",
+      "kind": "tidb",
+      "x": 28,
+      "y": 72
+    },
+    {
+      "id": "s3-bucket",
+      "label": "S3 Bucket",
+      "kind": "sink",
+      "x": 52,
+      "y": 76
+    },
+    {
+      "id": "lake",
+      "label": "TiDB Cloud Lake (history and eval)",
+      "kind": "sink",
+      "x": 52,
+      "y": 94
+    }
+  ],
+  "edges": [
+    {
+      "id": "txn-writes",
+      "from": "txn-generator",
+      "to": "harbor-core",
+      "label": "transactions written",
+      "unit": "rows"
+    },
+    {
+      "id": "window-scans",
+      "from": "harbor-core",
+      "to": "rule-engine",
+      "label": "rule windows read",
+      "unit": "rows"
+    },
+    {
+      "id": "alerts-written",
+      "from": "rule-engine",
+      "to": "harbor-core",
+      "label": "alerts stored",
+      "unit": "alerts"
+    },
+    {
+      "id": "alerts-to-agent",
+      "from": "rule-engine",
+      "to": "agent-harness",
+      "label": "alerts handed to the agent",
+      "unit": "alerts"
+    },
+    {
+      "id": "recall-queries",
+      "from": "agent-harness",
+      "to": "episodic-memory",
+      "label": "hybrid recall",
+      "unit": "queries"
+    },
+    {
+      "id": "lesson-written",
+      "from": "agent-harness",
+      "to": "episodic-memory",
+      "label": "lesson stored",
+      "unit": "rows"
+    },
+    {
+      "id": "evidence-writes",
+      "from": "agent-harness",
+      "to": "case-layers",
+      "label": "evidence written to a layer",
+      "unit": "files"
+    },
+    {
+      "id": "what-if-queries",
+      "from": "agent-harness",
+      "to": "investigation-branch",
+      "label": "rule what-if SQL",
+      "unit": "queries"
+    },
+    {
+      "id": "audit-entries",
+      "from": "agent-harness",
+      "to": "case-journal",
+      "label": "audit entries appended",
+      "unit": "entries"
+    },
+    {
+      "id": "vault-grants",
+      "from": "agent-harness",
+      "to": "vault",
+      "label": "ten minute read grant",
+      "unit": "grants"
+    },
+    {
+      "id": "branch-create",
+      "from": "harbor-core",
+      "to": "investigation-branch",
+      "label": "copy-on-write branch",
+      "unit": "branches"
+    },
+    {
+      "id": "parquet-export",
+      "from": "harbor-core",
+      "to": "s3-bucket",
+      "label": "Parquet export",
+      "unit": "files"
+    },
+    {
+      "id": "run-events",
+      "from": "agent-harness",
+      "to": "s3-bucket",
+      "label": "flags and run events (NDJSON)",
+      "unit": "rows"
+    },
+    {
+      "id": "lake-load",
+      "from": "s3-bucket",
+      "to": "lake",
+      "label": "COPY INTO task",
+      "unit": "rows"
+    },
+    {
+      "id": "lookback-queries",
+      "from": "lake",
+      "to": "agent-harness",
+      "label": "history lookback and eval",
+      "unit": "queries"
+    },
+    {
+      "id": "skill-commits",
+      "from": "agent-harness",
+      "to": "skills-base",
+      "label": "skill layer committed",
+      "unit": "files"
+    }
+  ],
+  "metrics": [
+    {
+      "id": "alerts-per-minute",
+      "label": "Alerts per Minute (accelerated clock)",
+      "unit": "count",
+      "display": "both",
+      "better": "neutral",
+      "group": "traffic",
+      "howMeasured": "New alert rows inserted by one rule-engine tick (affectedRows of the INSERT IGNORE into alerts), scaled by 60000 / AML_TICK_MS. One tick simulates one day of transactions, so this is alerts per wall-clock minute on an accelerated clock, not a production alert rate."
+    },
+    {
+      "id": "planted-recall",
+      "label": "Planted-Pattern Recall",
+      "unit": "%",
+      "display": "both",
+      "better": "higher",
+      "group": "correctness",
+      "target": 100,
+      "howMeasured": "plantedCoverage over all production alerts and the ground_truth table: planted accounts that have an alert from their own pattern's rule, divided by all planted accounts, times 100. Ground truth is known because the generator planted it."
+    },
+    {
+      "id": "false-positives-per-1000",
+      "label": "False Positives per 1,000 Non-Planted Transactions",
+      "unit": "count",
+      "display": "both",
+      "better": "lower",
+      "group": "correctness",
+      "howMeasured": "Sum over active production rules of false-positive alerts (alert account not planted for that rule's pattern) times 1000, divided by SELECT COUNT(*) FROM transactions WHERE account_id NOT IN (SELECT account_id FROM ground_truth). Measured against planted ground truth, not analyst opinion."
+    },
+    {
+      "id": "layer-open-seconds",
+      "label": "Case Layer and Journal Open Time",
+      "unit": "s",
+      "display": "tile",
+      "better": "lower",
+      "group": "investigation",
+      "howMeasured": "Seconds from the open-investigation control to the case layer, journal and vault grant all existing (openCaseWorkspace in runner/src/live/filesystem.ts), by Date.now() deltas around those calls."
+    },
+    {
+      "id": "branch-create-seconds",
+      "label": "Investigation Branch Create Time",
+      "unit": "s",
+      "display": "tile",
+      "better": "lower",
+      "group": "investigation",
+      "howMeasured": "Seconds from calling branches.create to branches.waitActive resolving. Branch creation is documented to take a few minutes, so this overlaps the layer and recall work instead of blocking it."
+    },
+    {
+      "id": "investigation-open-time",
+      "label": "Investigation Open Time (layer plus branch)",
+      "unit": "s",
+      "display": "tile",
+      "better": "lower",
+      "group": "investigation",
+      "howMeasured": "Seconds from the open-investigation control until the layer, journal, grant, recall, evidence files and the active branch all exist. Dominated by branch creation."
+    },
+    {
+      "id": "hybrid-recall-ms",
+      "label": "Hybrid Recall Latency",
+      "unit": "ms",
+      "display": "both",
+      "better": "lower",
+      "group": "memory",
+      "howMeasured": "timed() around the single hybrid SQL statement from buildHybridRecallSql: a vector CTE and an fts_match_word CTE fused with reciprocal rank fusion, constant 60, top 3, over the episodic_memory table."
+    },
+    {
+      "id": "lake-lookback-ms",
+      "label": "Lake Lookback Latency (months of history)",
+      "unit": "ms",
+      "display": "both",
+      "better": "lower",
+      "group": "lake",
+      "howMeasured": "timed() around the Lake band-peers (or account lookback) query over AML_LOOKBACK_MONTHS months of synthetic transaction history in harbor.txn_history, through the kit's Lake client, including network time."
+    },
+    {
+      "id": "lake-load-seconds",
+      "label": "Starter Export to Lake Visible",
+      "unit": "s",
+      "display": "tile",
+      "better": "lower",
+      "group": "lake",
+      "howMeasured": "Seconds from kicking the Lake load task (EXECUTE TASK) until SELECT COUNT(*) FROM harbor.txn_history WHERE txn_id <= cutoff reaches the Starter row count for the same cutoff, polled every 5 seconds. Excludes the export job time, which is logged separately."
+    },
+    {
+      "id": "rule-change-alert-delta",
+      "label": "Rule Change Alert Volume Delta (measured on the branch)",
+      "unit": "count",
+      "display": "tile",
+      "better": "neutral",
+      "group": "learning",
+      "howMeasured": "On the investigation branch: COUNT of v2 structuring alerts minus COUNT of v1 structuring alerts from SELECT rule_version, COUNT(*) FROM alerts WHERE rule_id = 'structuring' GROUP BY rule_version, after the candidate rule v2 and its replayed alerts are written to the branch only. Negative means quieter."
+    },
+    {
+      "id": "precision-v1-simulated",
+      "label": "Rule v1 Precision (simulated analyst verdicts)",
+      "unit": "%",
+      "display": "tile",
+      "better": "higher",
+      "group": "learning",
+      "howMeasured": "Lake query over harbor.flag_log, production scope, structuring v1: confirmed flags divided by all flags, times 100. Verdicts are simulated: a flag is confirmed when its account is planted ground truth for that rule."
+    },
+    {
+      "id": "precision-v2-simulated",
+      "label": "Rule v2 Precision (simulated analyst verdicts)",
+      "unit": "%",
+      "display": "tile",
+      "better": "higher",
+      "group": "learning",
+      "howMeasured": "Same Lake query for scope branch-shadow, structuring v2, the flags the candidate rule would have raised on the branch. Verdicts are simulated from ground truth."
+    }
+  ],
+  "phases": [
+    {
+      "id": "setup",
+      "label": "Setup",
+      "narration": "Harbor Mutual is a fictional bank. We seed synthetic customers, a synthetic watchlist and months of transactions into a TiDB Cloud Starter instance, then export the history to Lake through S3."
+    },
+    {
+      "id": "baseline-traffic",
+      "label": "Baseline Traffic",
+      "narration": "Ordinary traffic keeps flowing and the v1 rules keep raising alerts. Notice how many are false positives against the ground truth we planted."
+    },
+    {
+      "id": "inject-pattern",
+      "label": "Inject a Pattern",
+      "narration": "Now we plant a structuring ring, or a name that is close to a new watchlist entry. We know the answer because we planted it."
+    },
+    {
+      "id": "alert",
+      "label": "Alert",
+      "narration": "The rule engine flags it. Every planted case must be flagged, and the demo checks that."
+    },
+    {
+      "id": "open-investigation",
+      "label": "Open an Investigation",
+      "narration": "Each alert gets its own file system layer, a journal, a ten minute vault grant and a copy-on-write database branch. Branch creation takes minutes, so the agent keeps working while it finishes."
+    },
+    {
+      "id": "recall-similar-cases",
+      "label": "Recall Similar Cases",
+      "narration": "The agent recalls similar past cases with one hybrid query, vector plus full text, and looks back through months of history in Lake. Then it writes evidence and a draft into the case layer. Nothing is filed; a human decides."
+    },
+    {
+      "id": "test-rule-on-branch",
+      "label": "Test a Rule on the Branch",
+      "narration": "The agent tries a tighter candidate rule on the branch. Production rules and alerts are untouched, and the demo proves it."
+    },
+    {
+      "id": "analyst-verdict",
+      "label": "Analyst Verdict (simulated)",
+      "narration": "Verdicts here are simulated from the planted ground truth and labeled that way. They stand in for a human analyst."
+    },
+    {
+      "id": "lake-eval",
+      "label": "Lake Evaluation",
+      "narration": "Flags, verdicts and history land in Lake. One query gives precision per rule version, and recall on planted cases."
+    },
+    {
+      "id": "distill-commit-skill",
+      "label": "Distill and Commit a Skill",
+      "narration": "The agent writes what it learned into a skill file inside a layer. A human presses promote, and only then does the layer commit to the shared skills folder."
+    },
+    {
+      "id": "lesson-to-memory",
+      "label": "Lesson to Memory",
+      "narration": "The lesson goes into episodic memory, so the next similar case recalls it. The journal hash chain then verifies the whole investigation."
+    }
+  ],
+  "checks": [
+    {
+      "id": "every-planted-case-flagged",
+      "label": "Every Planted Case Flagged",
+      "description": "Every account in ground_truth has at least one production alert from the rule for its own pattern."
+    },
+    {
+      "id": "investigation-branch-isolated",
+      "label": "Branch Isolated from Production",
+      "description": "The candidate rule and its alerts exist on the investigation branch and are absent from the production rules and alerts tables."
+    },
+    {
+      "id": "journal-verifies",
+      "label": "Case Journal Verifies",
+      "description": "ti fs-journal verify-journal passes on the case journal after every investigation step was appended."
+    },
+    {
+      "id": "skill-commit-lands-on-base",
+      "label": "Skill Commit Lands on the Base",
+      "description": "After commit-layer, reading the skill from the base file system returns exactly the staged text."
+    },
+    {
+      "id": "lake-history-matches-export",
+      "label": "Lake History Matches the Export",
+      "description": "Rows in harbor.txn_history up to the export cutoff txn_id equal the Starter row count for the same cutoff."
+    }
+  ],
+  "controls": [
+    {
+      "id": "inject-structuring-ring",
+      "label": "Inject structuring ring",
+      "description": "Plants a three-account ring of near-threshold cash deposits across branches, with ground truth."
+    },
+    {
+      "id": "inject-watchlist-near-match",
+      "label": "Inject watchlist near-match",
+      "description": "Adds a synthetic watchlist entry whose name is close to an existing customer and rescreens by full-text search."
+    },
+    {
+      "id": "open-investigation",
+      "label": "Open investigation",
+      "description": "Opens a layer, journal, grant and branch for the top open alert and runs the playbook steps."
+    },
+    {
+      "id": "test-rule-on-branch",
+      "label": "Test rule on branch",
+      "description": "Writes candidate rule v2 to the branch only, compares alert volume and recall, then records simulated verdicts and runs the Lake evaluation."
+    },
+    {
+      "id": "promote-skill",
+      "label": "Promote skill",
+      "description": "Human approval step: commits the staged skill layer to the base file system and writes the lesson to episodic memory."
+    }
+  ]
+}
