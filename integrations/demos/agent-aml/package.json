@@ -1,0 +1,25 @@
+{
+  "name": "@lab/demo-agent-aml",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "smoke": "node --env-file=.env --import tsx runner/smoke.ts",
+    "teardown": "node --env-file=.env --import tsx runner/teardown.ts"
+  },
+  "dependencies": {
+    "@lab/agent-stack-kit": "workspace:*",
+    "@lab/contract": "workspace:*",
+    "@lab/runner-kit": "workspace:*",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "mysql2": "^3.11.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}
