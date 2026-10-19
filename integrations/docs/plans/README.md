@@ -21,8 +21,10 @@
 | 9 | [09-datadog.md](09-datadog.md) | Datadog: integration, APM spans with SQL, monitors | Reuses Plan 08's workload and faults | Datadog trial + local/TiDB Cloud | 2 days |
 | 10 | [10-terraform-eks.md](10-terraform-eks.md) | Terraform + EKS: provision, connect privately, scale in place | Platform teams and bring-your-own-cloud style questions; most expensive to run | AWS + TiDB Cloud | 3 days |
 | 11 | [11-power-bi.md](11-power-bi.md) | Power BI: live dashboards on TiFlash without ETL | Needs a Windows machine; lowest priority of the asks | Windows VM + TiDB | 2 days |
+| 12 | [12-agent-coding-platform.md](12-agent-coding-platform.md) | TiDB Cloud agent stack: a coding-agent platform on Filesystem layers, Starter branches and Lake eval | Shows the three agent-stack products together; builds `@lab/agent-stack-kit` that Plan 13 reuses | TiDB Cloud Filesystem + Starter + Lake, one S3 bucket | 3 days |
+| 13 | [13-agent-aml.md](13-agent-aml.md) | TiDB Cloud agent stack: an anti-money-laundering agent with case layers, investigation branches and continual learning in Lake | Same three products for a financial-services audience, on synthetic data only | TiDB Cloud Filesystem + Starter + Lake, one S3 bucket | 3 days |
 
-Plans 01 and 02 can run in parallel after Plan 00 if more than one person builds. Plan 03 needs 02's infra; 09 needs 08's workload generator.
+Plans 01 and 02 can run in parallel after Plan 00 if more than one person builds. Plan 03 needs 02's infra; 09 needs 08's workload generator; 13 needs 12's `@lab/agent-stack-kit`.
 
 ## Architecture at a glance
 
@@ -59,6 +61,6 @@ Each plan's section 4 lists the facts it could not confirm while writing, each m
 ## Backlog (asked for earlier, not in this round)
 
 - Port the earlier single-feature demos (HTAP, write scaling, PITR, resource-control noisy neighbor, elastic autoscaling with cost guardrails, CDC exactly-once) into the lab shell so they get the same diagram and replay treatment.
-- An agent-memory demo (vector + full-text) beyond what Plan 12 covers.
+- An LLM-driven mode for Plans 12 and 13 (`LAB_AGENT=llm`); both plans use a deterministic scripted agent so the replay measures the data infrastructure, not model quality.
 - A bring-your-own-cloud deployment walkthrough, extending Plan 10's appendix.
 - A heterogeneous migration story for Oracle and SQL Server sources, alongside Plan 01.
