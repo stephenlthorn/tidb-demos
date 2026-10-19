@@ -1,0 +1,5 @@
+{
+  "structuring": ["load-working-set", "recall-similar-cases", "lake-lookback", "write-evidence", "test-rule-on-branch"],
+  "rapid-in-out": ["load-working-set", "recall-similar-cases", "lake-lookback", "write-evidence"],
+  "watchlist-near-match": ["load-working-set", "recall-similar-cases", "lake-lookback", "write-evidence"]
+}

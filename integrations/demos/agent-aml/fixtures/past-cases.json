@@ -1,0 +1,74 @@
+[
+  {
+    "caseId": "PAST-001",
+    "pattern": "structuring",
+    "outcome": "confirmed",
+    "summary": "Repeated cash deposits just under the reporting threshold across several branches by three linked retail accounts, all wiring funds to one shared counterparty within a day. Escalated by the analyst. Synthetic."
+  },
+  {
+    "caseId": "PAST-002",
+    "pattern": "structuring",
+    "outcome": "false-positive",
+    "summary": "Cash deposits just under the reporting threshold every other day at a single branch by a cash-intensive business account. Takings pattern, no linked accounts, closed as a false positive. Synthetic."
+  },
+  {
+    "caseId": "PAST-003",
+    "pattern": "structuring",
+    "outcome": "confirmed",
+    "summary": "Six near-threshold cash deposits in five days spread over three branches, then an outgoing wire of most of the total. Two other accounts used the same counterparty. Escalated by the analyst. Synthetic."
+  },
+  {
+    "caseId": "PAST-004",
+    "pattern": "structuring",
+    "outcome": "false-positive",
+    "summary": "Weekly near-threshold cash deposits at the home branch by a laundromat style business. Stable cadence for months of history, closed as a false positive. Synthetic."
+  },
+  {
+    "caseId": "PAST-005",
+    "pattern": "rapid-in-out",
+    "outcome": "confirmed",
+    "summary": "Wire in followed by a near-full wire out within two hours, repeated three times in a day by a holding company account. Pass-through pattern, escalated by the analyst. Synthetic."
+  },
+  {
+    "caseId": "PAST-006",
+    "pattern": "rapid-in-out",
+    "outcome": "false-positive",
+    "summary": "A single large wire in and wire out of the same amount within hours by a property business completing a sale. One pair only, closed as a false positive. Synthetic."
+  },
+  {
+    "caseId": "PAST-007",
+    "pattern": "rapid-in-out",
+    "outcome": "confirmed",
+    "summary": "Two pass-through pairs in one day with about three percent retained, new business account with no prior history. Escalated by the analyst. Synthetic."
+  },
+  {
+    "caseId": "PAST-008",
+    "pattern": "watchlist-near-match",
+    "outcome": "false-positive",
+    "summary": "Account holder name close to a watchlist entry after a list update. Different date of birth and country on file, common surname, closed as a false positive. Synthetic."
+  },
+  {
+    "caseId": "PAST-009",
+    "pattern": "watchlist-near-match",
+    "outcome": "confirmed",
+    "summary": "Account holder name with the given and family names swapped and one letter changed compared with a watchlist entry, matching address details. Escalated by the analyst. Synthetic."
+  },
+  {
+    "caseId": "PAST-010",
+    "pattern": "watchlist-near-match",
+    "outcome": "false-positive",
+    "summary": "Fuzzy name match against a watchlist entry on one shared token only. Customer for many years with ordinary activity, closed as a false positive. Synthetic."
+  },
+  {
+    "caseId": "PAST-011",
+    "pattern": "structuring",
+    "outcome": "lesson",
+    "summary": "Lesson: check how many distinct branches the near-threshold cash deposits touch. Single branch repeating deposits were mostly cash-intensive businesses. Synthetic."
+  },
+  {
+    "caseId": "PAST-012",
+    "pattern": "rapid-in-out",
+    "outcome": "lesson",
+    "summary": "Lesson: count the in and out wire pairs before escalating. One pair is usually a completed sale, two or more in a day deserve a closer look. Synthetic."
+  }
+]
