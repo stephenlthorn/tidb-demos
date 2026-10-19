@@ -1,0 +1,73 @@
+{
+  "id": "agent-coding",
+  "number": 12,
+  "title": "TiDB Cloud agent stack: coding-agent platform (Filesystem + TiDB X + Lake)",
+  "tagline": "Three scripted agent attempts, each with its own copy-on-write workspace and database branch, replayed from a checkpoint and judged in a lake.",
+  "integrations": ["TiDB Cloud Filesystem", "TiDB Cloud Starter", "TiDB Cloud Lake", "Amazon S3"],
+  "pattern": "Teams building a coding-agent platform that need an isolated workspace and database per attempt, replayable failures, durable org memory and an analytical store for eval.",
+  "publish": true,
+  "runner": {
+    "command": ["node", "--import", "tsx", "runner/main.ts"],
+    "cwd": "."
+  },
+  "nodes": [
+    { "id": "fixture-repo", "label": "Fixture repo (payments-api)", "kind": "source", "x": 6, "y": 14 },
+    { "id": "harness", "label": "Scripted agent harness", "kind": "client", "x": 6, "y": 55 },
+    { "id": "filesystem", "label": "Filesystem: base, task layer, attempt layers", "kind": "tidb", "x": 38, "y": 12 },
+    { "id": "fixture-db", "label": "Starter fixture instance + attempt branches", "kind": "tidb", "x": 40, "y": 38 },
+    { "id": "org-memory", "label": "Starter org memory (hybrid search)", "kind": "tidb", "x": 40, "y": 62 },
+    { "id": "ledger", "label": "Starter step ledger", "kind": "tidb", "x": 40, "y": 86 },
+    { "id": "s3-events", "label": "S3 events and ledger export", "kind": "sink", "x": 68, "y": 78 },
+    { "id": "lake", "label": "TiDB Cloud Lake", "kind": "tidb", "x": 86, "y": 52 },
+    { "id": "eval", "label": "Eval queries", "kind": "service", "x": 88, "y": 18 }
+  ],
+  "edges": [
+    { "id": "seed-repo", "from": "fixture-repo", "to": "filesystem", "label": "repo files seeded", "unit": "files" },
+    { "id": "layer-io", "from": "harness", "to": "filesystem", "label": "fork, drain, checkpoint", "unit": "ops" },
+    { "id": "branch-reads", "from": "harness", "to": "fixture-db", "label": "branch clock and checksum reads", "unit": "queries" },
+    { "id": "recall", "from": "harness", "to": "org-memory", "label": "hybrid memory recall", "unit": "memories" },
+    { "id": "step-ledger", "from": "harness", "to": "ledger", "label": "step records", "unit": "rows" },
+    { "id": "events-out", "from": "harness", "to": "s3-events", "label": "run events as NDJSON", "unit": "events" },
+    { "id": "ledger-export", "from": "ledger", "to": "s3-events", "label": "ledger export as Parquet", "unit": "rows" },
+    { "id": "lake-load", "from": "s3-events", "to": "lake", "label": "COPY INTO from stage", "unit": "rows" },
+    { "id": "eval-queries", "from": "lake", "to": "eval", "label": "eval queries", "unit": "queries" },
+    { "id": "lesson-write", "from": "eval", "to": "org-memory", "label": "lesson written back", "unit": "rows" }
+  ],
+  "metrics": [
+    { "id": "fork-layer-ms", "label": "Layer Fork Latency", "unit": "ms", "display": "both", "better": "lower", "group": "filesystem", "howMeasured": "Wall-clock milliseconds from timed() around one `ti fs fork-layer` CLI call (process start to exit, so it includes the CLI's network round trip). One sample per fork: three attempt forks from the seed checkpoint and one replay fork from a step checkpoint." },
+    { "id": "checkpoint-ms", "label": "Drain plus Checkpoint Latency", "unit": "ms", "display": "both", "better": "lower", "group": "filesystem", "howMeasured": "Milliseconds for `ti fs drain-file-system` plus `ti fs create-layer-checkpoint`, each timed with performance.now() inside tiFs.checkpoint and summed. One sample per checkpoint: the seed checkpoint and one per attempt step." },
+    { "id": "branch-create-s", "label": "Branch Create to ACTIVE", "unit": "s", "display": "tile", "better": "lower", "group": "branches", "howMeasured": "Seconds from the runner calling `ticloud serverless branch create` to the first `ticloud serverless branch list -o json` poll that reports that branch ACTIVE. Resolution is the poll interval BRANCH_POLL_MS. One sample per branch: three attempt branches and one replay branch. The vendor documents completion in a few minutes, so expect minutes, not milliseconds." },
+    { "id": "hybrid-search-ms", "label": "Hybrid Recall Latency", "unit": "ms", "display": "both", "better": "lower", "group": "memory", "howMeasured": "timed() around the single reciprocal-rank-fusion query (VEC_EMBED_COSINE_DISTANCE vector list plus fts_match_word list, constant 60, top 3) on the org Starter instance. Sampled once at intake and on every poll of the lesson recall." },
+    { "id": "lake-freshness-s", "label": "Lake Freshness Lag", "unit": "s", "display": "both", "better": "lower", "group": "lake", "howMeasured": "Seconds from the runner writing a marker NDJSON object to S3 until a poll (every 3 s) of SELECT COUNT(*) for that marker id in Lake first returns 1. It includes the Lake task schedule (one minute by default), so it is bounded below by the schedule rather than by S3 or the network." },
+    { "id": "lake-rows-per-min", "label": "Lake Rows Loaded per Minute", "unit": "count", "display": "both", "better": "higher", "group": "lake", "howMeasured": "Live run events visible in Lake (SELECT COUNT(*) FROM run_events WHERE run_id = this run AND source = 'live') divided by the minutes elapsed since the first event object of the run was written to S3. Synthetic history rows are excluded." },
+    { "id": "events-emitted", "label": "Run Events Emitted", "unit": "count", "display": "tile", "better": "neutral", "group": "lake", "howMeasured": "Cumulative count of NDJSON event lines the runner wrote to S3 for this run: one per attempt step, one per attempt finish and one freshness marker." },
+    { "id": "lake-events-visible", "label": "Run Events Visible in Lake", "unit": "count", "display": "both", "better": "higher", "group": "lake", "howMeasured": "Result of SELECT COUNT(*) FROM run_events WHERE run_id = this run AND source = 'live' in Lake, polled every 3 s until it equals events-emitted or LAKE_FRESHNESS_TIMEOUT_MS passes." },
+    { "id": "eval-query-ms", "label": "Lake Eval Query Latency", "unit": "ms", "display": "tile", "better": "lower", "group": "lake", "howMeasured": "timed() around each of the three eval queries (MATCH on ECONNRESET, merged attempts per dollar by model, COSINE_DISTANCE failure similarity) through the Node driver. Each query opens a new connection, so connection setup is included. Merged per dollar uses synthetic history and fixture model labels, so that result is modeled, not measured." }
+  ],
+  "phases": [
+    { "id": "setup", "label": "Setup", "narration": "Three branches of a read-only fixture database start copying now. Branches take minutes, so we ask for them first and overlap everything else." },
+    { "id": "intake-memory-recall", "label": "Intake memory recall", "narration": "Ticket KIT-8812 arrives: fix the double charge on retried payments. Before touching code the agent asks org memory one question that mixes meaning and exact words." },
+    { "id": "seed-checkpoint", "label": "Seed checkpoint", "narration": "The fixture repo lands in a task layer and we checkpoint it as seed. Every attempt starts from exactly this state." },
+    { "id": "fan-out", "label": "Fan out 3 attempts", "narration": "Three attempts fan out. Each gets a copy-on-write layer forked from seed and its own database branch. Nothing is copied by hand and all three databases start identical." },
+    { "id": "work-loop", "label": "Work loop", "narration": "Every step is drained, checkpointed, stamped with the branch's own clock and written to the ledger, one second apart so each step lands on a distinct second." },
+    { "id": "winner-pr", "label": "Winner PR", "narration": "The attempt whose tests pass with the smallest change wins and pushes a git branch. Its layer is never committed to the base." },
+    { "id": "replay-failed-step", "label": "Replay the failed step", "narration": "Attempt 2 failed at step 7. We fork a layer from its step-07 checkpoint, branch its database at that step's timestamp and rerun the step. Same failing tests." },
+    { "id": "lake-eval", "label": "Lake eval", "narration": "Run events and the ledger land in Lake through S3. Now we can search failures, price merged work per model and find failures like this one." },
+    { "id": "write-lesson", "label": "Write the lesson", "narration": "The lesson goes back into org memory. The next ticket that mentions a retry loop recalls it in the first three results." }
+  ],
+  "checks": [
+    { "id": "layer-isolation", "label": "Layer isolation", "description": "Every file that only one attempt wrote appears in that attempt's layer diff and in no other attempt's layer diff." },
+    { "id": "fork-branches-identical", "label": "Fork branches identical", "description": "The three attempt branches return the same row count and the same row checksum before any step runs." },
+    { "id": "replay-reproduces", "label": "Replay reproduces the failure", "description": "The replayed step fails the same tests with the same signature, and the replay layer tree and replay branch checksum equal the ledger record of that step." },
+    { "id": "journal-verified", "label": "Journal verifies", "description": "ti fs-journal verify-journal reports the run journal's hash chain intact." },
+    { "id": "lake-count-matches", "label": "Lake count matches emitted events", "description": "After the load lag, the count of this run's live events in Lake equals the number of event lines the runner wrote to S3." },
+    { "id": "lesson-recalled", "label": "Lesson recalled", "description": "A hybrid search for a new retry-loop task returns the freshly written lesson in its top three results." }
+  ],
+  "controls": [
+    { "id": "fan-out", "label": "Fan out", "description": "Forks three attempt layers, waits for the attempt branches, runs the work loop and opens the winner's pull request." },
+    { "id": "inject-flaky-dependency", "label": "Inject flaky dependency", "description": "Before the fan-out: makes attempt 1 hit a gateway connection reset at its first verification so a different attempt wins." },
+    { "id": "replay-failed-step", "label": "Replay failed step", "description": "Forks a layer from the failed step's checkpoint, branches the database at that step's timestamp and reruns the step." },
+    { "id": "run-eval", "label": "Run eval", "description": "Exports the ledger, waits for events to appear in Lake and runs the three eval queries." },
+    { "id": "write-lesson", "label": "Write lesson", "description": "Writes the lesson to org memory and checks that hybrid recall returns it." }
+  ]
+}
