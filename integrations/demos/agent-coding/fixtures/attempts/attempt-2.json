@@ -1,0 +1,14 @@
+{
+  "attemptId": "attempt-2",
+  "model": "fixture-model-b",
+  "stepCostUsd": 0.03,
+  "steps": [
+    { "step": 1, "kind": "read", "note": "Read src/charge.js and the failing test" },
+    { "step": 2, "kind": "baseline", "note": "Run the suite and capture the failing tests" },
+    { "step": 3, "kind": "write", "path": "src/charge.js", "from": "attempt-2/charge.js", "note": "Look up an existing charge inline" },
+    { "step": 4, "kind": "write", "path": "src/gateway.js", "from": "attempt-2/gateway.js", "note": "Add a retrying gateway call" },
+    { "step": 5, "kind": "verify", "note": "Run the suite" },
+    { "step": 6, "kind": "write", "path": "src/charge.js", "from": "attempt-2/charge-with-retry.js", "note": "Use the retrying gateway call" },
+    { "step": 7, "kind": "verify", "fault": "econnreset", "note": "Run the suite against the retrying gateway call" }
+  ]
+}

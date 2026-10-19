@@ -1,0 +1,16 @@
+{
+  "attemptId": "attempt-3",
+  "model": "fixture-model-a",
+  "stepCostUsd": 0.05,
+  "steps": [
+    { "step": 1, "kind": "read", "note": "Read src/charge.js and the failing test" },
+    { "step": 2, "kind": "baseline", "note": "Run the suite and capture the failing tests" },
+    { "step": 3, "kind": "write", "path": "src/ledger.js", "from": "attempt-3/ledger.js", "note": "Add findByKey to the ledger" },
+    { "step": 4, "kind": "write", "path": "src/retry.js", "from": "attempt-3/retry.js", "note": "Add a generic retry helper" },
+    { "step": 5, "kind": "write", "path": "src/charge.js", "from": "attempt-3/charge.js", "note": "Use findByKey and retry the gateway call" },
+    { "step": 6, "kind": "write", "path": "README.md", "from": "attempt-3/README.md", "note": "Document the idempotency behaviour" },
+    { "step": 7, "kind": "verify", "note": "Run the suite" },
+    { "step": 8, "kind": "read", "note": "Review the change before opening a pull request" },
+    { "step": 9, "kind": "verify", "note": "Final full run of the suite" }
+  ]
+}

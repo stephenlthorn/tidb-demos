@@ -1,0 +1,14 @@
+{
+  "attemptId": "attempt-1",
+  "model": "fixture-model-a",
+  "stepCostUsd": 0.05,
+  "steps": [
+    { "step": 1, "kind": "read", "note": "Read src/charge.js and the failing test" },
+    { "step": 2, "kind": "baseline", "note": "Run the suite and capture the failing tests" },
+    { "step": 3, "kind": "write", "path": "src/idempotency.js", "from": "attempt-1/idempotency.js", "note": "Add a helper that finds an existing charge by idempotency key" },
+    { "step": 4, "kind": "write", "path": "src/charge.js", "from": "attempt-1/charge.js", "note": "Return the existing charge when a request is retried" },
+    { "step": 5, "kind": "verify", "note": "Run the suite" },
+    { "step": 6, "kind": "read", "note": "Review the change before opening a pull request" },
+    { "step": 7, "kind": "verify", "note": "Final full run of the suite" }
+  ]
+}
